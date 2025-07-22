@@ -4,10 +4,11 @@ import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { securityLoader } from '@digitalcredentials/security-document-loader'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
 import { DataIntegrityProof } from '@digitalbazaar/data-integrity'
+import { documentLoader } from './documentLoader'
 import { cryptosuite as ecdsaRdfc2019Cryptosuite } from '@digitalbazaar/ecdsa-rdfc-2019-cryptosuite'
 import { cryptosuite as eddsaRdfc2022Cryptosuite } from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite'
-
-const documentLoader = securityLoader().build()
+import { preparePresentation } from './verifiablePresentation'
+import { suites as verificationSuite } from './suites'
 
 let key: Ed25519VerificationKey2020
 let suite: Ed25519Signature2020
@@ -40,13 +41,6 @@ export const getSignedDIDAuth = async (
   })
 }
 
-// TODO add ecdsa-rdfc-2019 support, and support Ed25519 via multikey
-const verificationSuite = [
-  new Ed25519Signature2020(),
-  new DataIntegrityProof({ cryptosuite: ecdsaRdfc2019Cryptosuite }),
-  new DataIntegrityProof({ cryptosuite: eddsaRdfc2022Cryptosuite })
-]
-
 export const verifyDIDAuth = async ({
   presentation,
   challenge
@@ -54,8 +48,10 @@ export const verifyDIDAuth = async ({
   presentation: unknown
   challenge: string
 }) => {
+  const refinedPresentation = preparePresentation(presentation)
+
   const result = await verify({
-    presentation,
+    presentation: refinedPresentation,
     challenge,
     suite: verificationSuite,
     documentLoader

@@ -1,6 +1,6 @@
 import { documentLoader } from '../documentLoader.js'
 import { preparePresentation } from '../verifiablePresentation.js'
-import { saveExchange } from '../exchanges.js'
+import { saveExchange } from '../transactionManager.js'
 import { suites as verificationSuite } from '../suites.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 // @ts-ignore // There are no type definitions for this library
@@ -155,11 +155,14 @@ export const participateInVerifyExchange = async ({
   config: App.Config
 }) => {
   const presentation = preparePresentation(data)
-  console.log(JSON.stringify(presentation, null, 2))
   const result = await verify({
     presentation,
     challenge: exchange.variables.challenge,
     suite: verificationSuite,
     documentLoader
+  })
+  await saveExchange({
+    ...exchange,
+    variables: { ...exchange.variables, result }
   })
 }

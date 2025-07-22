@@ -102,14 +102,14 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
     : [
         // VCDM V1 credential query
         getCredentialQuery({
-          vprContext: [CONTEXT_URL_V1, specificContexts],
+          vprContext: [CONTEXT_URL_V1, ...specificContexts],
           vprCredentialType,
           trustedIssuers,
           vprClaims
         }),
         // VCDM V2 credential query
         getCredentialQuery({
-          vprContext: [CONTEXT_URL_V2, specificContexts],
+          vprContext: [CONTEXT_URL_V2, ...specificContexts],
           vprCredentialType,
           trustedIssuers,
           vprClaims

@@ -217,6 +217,7 @@ export const app = new Hono()
     validator('json', validateJson),
     addWorkflowByParam,
     async (c) => {
+      console.log(c.req.valid('json'))
       const exchange = await getExchangeData(
         c.req.param('exchangeId')!,
         c.var.workflow.id

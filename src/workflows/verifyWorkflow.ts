@@ -1,10 +1,15 @@
-import { z } from 'zod'
+import { documentLoader } from '../documentLoader.js'
+import { preparePresentation } from '../verifiablePresentation.js'
+import { saveExchange } from '../exchanges.js'
+import { suites as verificationSuite } from '../suites.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
-
+// @ts-ignore // There are no type definitions for this library
+import { verify } from '@digitalbazaar/vc'
+import { z } from 'zod'
 import {
   CONTEXT_URL_V1,
   CONTEXT_URL as CONTEXT_URL_V2
-  // @ts-ignore // There are no type definitions for this library
+  // @ts-ignore
 } from 'credentials-context'
 
 export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
@@ -47,7 +52,8 @@ export const createExchangeVerify = ({
       challenge: crypto.randomUUID(),
       vprContext: data.variables.vprContext,
       vprCredentialType: data.variables.vprCredentialType,
-      vprClaims: data.variables.vprClaims
+      trustedIssuers: data.variables.trustedIssuers ?? [],
+      vprClaims: data.variables.vprClaims?.filter((c) => c !== undefined) ?? []
     },
     expires:
       data.expires ??
@@ -82,6 +88,7 @@ const getCredentialQuery = ({
 export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
   const { vprContext, vprCredentialType, trustedIssuers, vprClaims } =
     exchange.variables
+  const serviceEndpoint = `${exchange.variables.exchangeHost}/workflows/${exchange.workflowId}/exchanges/${exchange.exchangeId}`
 
   const specificContexts = vprContext.filter(
     (c) => ![CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c)
@@ -119,7 +126,40 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
     query: {
       type: 'QueryByExample',
       credentialQuery
+    },
+    interact: {
+      service: [
+        {
+          type: 'VerifiableCredentialApiExchangeService',
+          serviceEndpoint
+        },
+        {
+          type: 'UnmediatedPresentationService2021',
+          serviceEndpoint
+        }
+      ]
     }
   }
   return vpr
+}
+
+export const participateInVerifyExchange = async ({
+  data,
+  exchange,
+  workflow,
+  config
+}: {
+  data: any
+  exchange: App.ExchangeDetailVerify
+  workflow: App.Workflow
+  config: App.Config
+}) => {
+  const presentation = preparePresentation(data)
+  console.log(JSON.stringify(presentation, null, 2))
+  const result = await verify({
+    presentation,
+    challenge: exchange.variables.challenge,
+    suite: verificationSuite,
+    documentLoader
+  })
 }

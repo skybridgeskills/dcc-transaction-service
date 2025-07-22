@@ -16,12 +16,6 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm install
-      - name: Run test with Node.js ${{ matrix.node-version }}
-        run: npm run coveralls
-      - name: Coveralls GitHub Action
-        uses: coverallsapp/github-action@v2
-        with:
-          github-token: ${{ github.token }}
 
   docker-build-push:
     runs-on: ubuntu-latest

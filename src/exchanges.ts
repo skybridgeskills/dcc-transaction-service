@@ -186,7 +186,6 @@ export const participateInExchange = async ({
 }) => {
   if (!data || !Object.keys(data).length) {
     // If there is no body, this is the initial step of the exchange.
-    console.log('participateWithEmptyBody')
     return participateWithEmptyBody({ config, workflow, exchange })
   }
   if (workflow.id === 'didAuth') {

@@ -78,6 +78,7 @@ declare global {
       exchangeHost: string
       metadata?: Record<string, unknown>
       challenge: string // Used to authenticate presentations
+      result?: any
     }
 
     interface ExchangeDetailBase {
@@ -116,6 +117,7 @@ declare global {
         vprCredentialType: string[]
         trustedIssuers: string[]
         vprClaims: DcqlClaim[]
+        result?: any
       }
     }
 

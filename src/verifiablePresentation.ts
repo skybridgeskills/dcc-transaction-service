@@ -1,4 +1,4 @@
-import { arrayOf } from './utils'
+import { arrayOf } from './utils.js'
 
 /**
  * Do some pre-processing of presentations before submitting them for verification.

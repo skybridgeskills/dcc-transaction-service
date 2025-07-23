@@ -1,7 +1,7 @@
-import * as config from '../config'
+import * as config from '../config.js'
 import { expect, test, describe, beforeAll, afterAll, vi } from 'vitest'
-import { getWorkflow } from '../workflows'
-import { createExchangeVerify, validateExchangeVerify } from './verifyWorkflow'
+import { getWorkflow } from '../workflows.js'
+import { createExchangeVerify, validateExchangeVerify } from './verifyWorkflow.js'
 
 const testData = {
   workflowId: 'verify',

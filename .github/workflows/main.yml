@@ -36,4 +36,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: skybridgeskills/dcc-transaction-service:${{ github.sha }}
+          tags: skybridgeskills/dcc-transaction-service:${{ github.sha }},skybridgeskills/dcc-transaction-service:latest

@@ -1,9 +1,9 @@
 /*!
  * Copyright (c) 2023 Digital Credentials Consortium. All rights reserved.
  */
+import KeyvRedis from '@keyv/redis'
 import { HTTPException } from 'hono/http-exception'
 import Keyv from 'keyv'
-import KeyvRedis from '@keyv/redis'
 import { KeyvFile } from 'keyv-file'
 import { getConfig } from './config.js'
 

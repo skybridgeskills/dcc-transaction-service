@@ -2,7 +2,6 @@ let CONFIG: App.Config
 
 const defaultPort = 4004
 const defaultExchangeHost = 'http://localhost:4004'
-const defaultStatusService = 'http://localhost:4008'
 const defaultSigningService = 'http://localhost:4006'
 const defaultWorkflow = 'didAuth'
 const defaultTenantName = 'default'
@@ -33,11 +32,7 @@ const parseConfig = (): App.Config => {
     port: parseInt(process.env.PORT ?? '0') || defaultPort,
     defaultExchangeHost: process.env.EXCHANGE_HOST ?? defaultExchangeHost,
     exchangeTtl: parseInt(process.env.EXCHANGE_TTL ?? '0') || defaultTtlSeconds,
-    // status service is optional, set STATUS_SERVICE="" (empty string) to disable.
-    statusService:
-      process.env.STATUS_SERVICE !== undefined
-        ? process.env.STATUS_SERVICE
-        : defaultStatusService,
+    statusService: process.env.STATUS_SERVICE ?? '',
     signingService: process.env.SIGNING_SERVICE ?? defaultSigningService,
 
     defaultWorkflow: process.env.DEFAULT_WORKFLOW ?? defaultWorkflow,

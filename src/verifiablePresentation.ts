@@ -6,7 +6,10 @@ import { arrayOf } from './utils.js'
  * @returns
  */
 export const preparePresentation = (presentation: Record<string, unknown>) => {
-  const _presentation = { ...presentation }
+  const _presentation =
+    !presentation?.['@context'] && presentation.verifiablePresentation
+      ? { ...presentation.verifiablePresentation }
+      : { ...presentation }
   const proof = presentation?.proof as {
     type: string | string[]
     '@context': string | string[] | undefined

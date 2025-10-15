@@ -101,6 +101,7 @@ export const baseVariablesSchema = z.object({
   vprContext: z.array(z.string()).optional(),
   vprCredentialType: z.array(z.string()).optional(),
   trustedIssuers: z.array(z.string()).optional(),
+  trustedRegistries: z.array(z.string()).optional(),
   vprClaims: z
     .array(
       z.object({

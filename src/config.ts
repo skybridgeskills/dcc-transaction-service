@@ -46,7 +46,12 @@ const parseConfig = (): App.Config => {
     redisUri: process.env.REDIS_URI ?? undefined,
     keyvWriteDelayMs: parseInt(process.env.KEYV_WRITE_DELAY ?? '0') || 100, // 100ms
     keyvExpiredCheckDelayMs:
-      parseInt(process.env.KEYV_EXPIRED_CHECK_DELAY ?? '0') || 4 * 3600 * 1000 // 4 hours
+      parseInt(process.env.KEYV_EXPIRED_CHECK_DELAY ?? '0') || 4 * 3600 * 1000, // 4 hours
+
+    // Verification workflow configuration
+    defaultTrustedRegistries: process.env.DEFAULT_TRUSTED_REGISTRIES
+      ? process.env.DEFAULT_TRUSTED_REGISTRIES.split(',').map((r) => r.trim())
+      : ['DCC Sandbox Registry', 'DCC Issuer Registry']
   }
 
   // Only if no tenants are configured, use the default tenant

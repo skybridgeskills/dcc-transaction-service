@@ -20,6 +20,7 @@ declare global {
       keyvExpiredCheckDelayMs: number
       tenants: Record<string, Tenant>
       tenantAuthenticationEnabled: boolean
+      defaultTrustedRegistries: string[]
     }
 
     interface ErrorResponseBody {
@@ -70,7 +71,7 @@ declare global {
     }
 
     type SupportedWorkflowIds = 'didAuth' | 'claim' | 'verify' | 'healthz'
-    type ExchangeState = 'pending' | 'active' | 'completed' | 'invalid'
+    type ExchangeState = 'pending' | 'active' | 'complete' | 'invalid'
 
     interface BaseVariables {
       redirectUrl?: string
@@ -110,14 +111,61 @@ declare global {
       workflowId: 'didAuth'
     }
 
+    interface VerificationStepResult {
+      id: string
+      valid: boolean
+      error?: {
+        name: string
+        message: string
+        stackTrace?: any
+      }
+      foundInRegistries?: string[]
+      registriesNotLoaded?: string[]
+    }
+
+    interface VerificationResult {
+      presentationResult: {
+        signature: 'VALID' | 'INVALID' | 'UNSIGNED'
+        errors?: Array<{
+          name: string
+          message: string
+          stackTrace?: any
+        }>
+      }
+      credentialResults: Array<{
+        credential: any
+        log: VerificationStepResult[]
+        errors?: Array<{
+          name: string
+          message: string
+          stackTrace?: any
+        }>
+      }>
+      overallOutcome: 'complete' | 'invalid'
+      matchedCredentials: any[]
+      claimsValidation?: {
+        extractedClaims: Record<string, any>
+        requiredClaims: DcqlClaim[]
+        matched: boolean
+        missingClaims?: string[]
+      }
+      issuerValidation?: {
+        trustedIssuers?: string[]
+        trustedRegistries?: string[]
+        issuerFound: boolean
+        registryMatch: boolean
+      }
+    }
+
     interface ExchangeDetailVerify extends ExchangeDetailBase {
       workflowId: 'verify'
       variables: BaseVariables & {
         vprContext: string[]
         vprCredentialType: string[]
         trustedIssuers: string[]
+        trustedRegistries?: string[]
         vprClaims: DcqlClaim[]
-        result?: any
+        verificationResult?: VerificationResult
       }
     }
 

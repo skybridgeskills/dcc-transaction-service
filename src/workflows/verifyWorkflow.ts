@@ -4,10 +4,15 @@ import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyPresentation } from '@digitalcredentials/verifier-core'
 import { z } from 'zod'
 import {
-  CONTEXT_URL_V1,
-  CONTEXT_URL as CONTEXT_URL_V2
+  named
   // @ts-ignore
-} from 'credentials-context'
+} from '@digitalbazaar/credentials-context'
+
+// Extract context URLs from the named Map using short names
+const CONTEXT_URL_V1 =
+  named.get('v1')?.id || 'https://www.w3.org/2018/credentials/v1'
+const CONTEXT_URL_V2 =
+  named.get('v2')?.id || 'https://www.w3.org/ns/credentials/v2'
 import { verifiablePresentationSchema } from '../verifiableCredentialSchema.js'
 
 export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
@@ -95,7 +100,7 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
   )
 
   // If no VC context is specified, we will generate a query for each major VC version.
-  const credentialQuery = vprContext.some((c) =>
+  const credentialQueries = vprContext.some((c) =>
     [CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c)
   )
     ? [
@@ -122,11 +127,14 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
           vprClaims
         })
       ]
+
   const vpr = {
-    query: {
-      type: 'QueryByExample',
-      credentialQuery
-    },
+    query: [
+      {
+        type: 'QueryByExample',
+        credentialQuery: credentialQueries
+      }
+    ],
     interact: {
       service: [
         {

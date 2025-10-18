@@ -1,7 +1,7 @@
 export const getLcwProtocol = (exchange: App.ExchangeDetailBase) => {
   const serviceEndpoint = `${exchange.variables.exchangeHost}/workflows/${exchange.workflowId}/exchanges/${exchange.exchangeId}`
   if (exchange.workflowId == 'verify') {
-    return `https://lcw.app/request.html?request=${encodeURIComponent(
+    return `https://lcw.app/request?request=${encodeURIComponent(
       JSON.stringify({
         credentialRequestOrigin: exchange.variables.exchangeHost,
         protocols: {

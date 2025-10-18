@@ -5,7 +5,8 @@ import {
   createExchangeVerify,
   validateExchangeVerify,
   applyVerificationResults,
-  participateInVerifyExchange
+  participateInVerifyExchange,
+  getVerifyVPR
 } from './verifyWorkflow.js'
 import {
   createMockExchange,
@@ -15,6 +16,8 @@ import {
   createMockExpiredCredential,
   createMockRevokedCredential
 } from '../test-fixtures/testData.js'
+import { getLcwProtocol } from '../protocols/lcw.js'
+import { participateInExchange } from '../exchanges.js'
 
 const testData = {
   workflowId: 'verify',
@@ -252,6 +255,136 @@ describe('applyVerificationResults', function () {
   })
 })
 
-// Note: Integration tests for participateInVerifyExchange would require more complex mocking
-// For now, we'll focus on testing the core logic through applyVerificationResults
-// which is the main business logic that can be tested in isolation
+describe('participateInExchange - Empty Body Handling', function () {
+  test('handles empty body (undefined) correctly for verify workflow', async function () {
+    const exchange = createMockExchange()
+    const workflow = getWorkflow('verify')
+
+    const result = await participateInExchange({
+      data: undefined,
+      exchange,
+      workflow,
+      config: config.getConfig()
+    })
+
+    // Should return a VPR (Verifiable Presentation Request)
+    expect(result).toHaveProperty('verifiablePresentationRequest')
+    expect(result.verifiablePresentationRequest).toHaveProperty('query')
+    expect(result.verifiablePresentationRequest).toHaveProperty('interact')
+    expect(result.verifiablePresentationRequest.query[0].type).toBe(
+      'QueryByExample'
+    )
+  })
+
+  test('handles empty object body ({}) correctly for verify workflow', async function () {
+    const exchange = createMockExchange()
+    const workflow = getWorkflow('verify')
+
+    const result = await participateInExchange({
+      data: {},
+      exchange,
+      workflow,
+      config: config.getConfig()
+    })
+
+    // Should return a VPR (Verifiable Presentation Request)
+    expect(result).toHaveProperty('verifiablePresentationRequest')
+    expect(result.verifiablePresentationRequest).toHaveProperty('query')
+    expect(result.verifiablePresentationRequest).toHaveProperty('interact')
+    expect(result.verifiablePresentationRequest.query[0].type).toBe(
+      'QueryByExample'
+    )
+  })
+
+  test('handles null body correctly for verify workflow', async function () {
+    const exchange = createMockExchange()
+    const workflow = getWorkflow('verify')
+
+    const result = await participateInExchange({
+      data: null,
+      exchange,
+      workflow,
+      config: config.getConfig()
+    })
+
+    // Should return a VPR (Verifiable Presentation Request)
+    expect(result).toHaveProperty('verifiablePresentationRequest')
+    expect(result.verifiablePresentationRequest).toHaveProperty('query')
+    expect(result.verifiablePresentationRequest).toHaveProperty('interact')
+    expect(result.verifiablePresentationRequest.query[0].type).toBe(
+      'QueryByExample'
+    )
+  })
+})
+
+describe('LCW Protocol URL Generation', function () {
+  test('generates correct LCW protocol URL format for verify workflow', function () {
+    const exchange = createMockExchange({
+      exchangeId: 'ae2b438a-8471-4b00-82ec-a688d1857245',
+      variables: {
+        ...createMockExchange().variables,
+        exchangeHost: 'https://verifierplus.org'
+      }
+    })
+
+    const lcwUrl = getLcwProtocol(exchange)
+
+    // Should use /request (not /request.html)
+    expect(lcwUrl).toMatch(/^https:\/\/lcw\.app\/request\?request=/)
+
+    // Extract and decode the request parameter
+    const url = new URL(lcwUrl)
+    const requestParam = url.searchParams.get('request')
+    expect(requestParam).toBeDefined()
+
+    const decodedRequest = JSON.parse(decodeURIComponent(requestParam!))
+
+    // Should have the correct structure
+    expect(decodedRequest).toEqual({
+      credentialRequestOrigin: 'https://verifierplus.org',
+      protocols: {
+        vcapi:
+          'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
+      }
+    })
+  })
+
+  test('generates correct VPR structure for verify workflow', function () {
+    const exchange = createMockExchange({
+      exchangeId: 'ae2b438a-8471-4b00-82ec-a688d1857245',
+      variables: {
+        ...createMockExchange().variables,
+        exchangeHost: 'https://verifierplus.org',
+        vprContext: ['https://www.w3.org/2018/credentials/v1'],
+        vprCredentialType: ['VerifiableCredential']
+      }
+    })
+
+    const vpr = getVerifyVPR(exchange)
+
+    expect(vpr).toHaveProperty('query')
+    expect(vpr).toHaveProperty('interact')
+
+    expect(vpr.query).toEqual([
+      {
+        type: 'QueryByExample',
+        credentialQuery: expect.any(Array)
+      }
+    ])
+
+    expect(vpr.interact).toEqual({
+      service: [
+        {
+          type: 'VerifiableCredentialApiExchangeService',
+          serviceEndpoint:
+            'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
+        },
+        {
+          type: 'UnmediatedPresentationService2021',
+          serviceEndpoint:
+            'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
+        }
+      ]
+    })
+  })
+})

@@ -164,7 +164,7 @@ const participateWithEmptyBody = async ({
   }
   if (workflow.id === 'verify') {
     const vpr = await getVerifyVPR(exchange as App.ExchangeDetailVerify)
-    return { verifiablePresentationRequest: vpr, ...vpr }
+    return { verifiablePresentationRequest: vpr }
   }
 
   // healthz/catchall

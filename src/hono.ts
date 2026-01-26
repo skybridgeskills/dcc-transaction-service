@@ -6,6 +6,7 @@ import {
   createExchangeBatch,
   createExchangeVcapi,
   getInteractionsForExchange,
+  getInteractionsForExchangeById,
   participateInExchange
 } from './exchanges.js'
 import { authenticateTenantMiddleware } from './auth.js'
@@ -16,8 +17,8 @@ import { validator } from 'hono/validator'
 import z from 'zod'
 import { JSONObject } from 'hono/utils/types'
 import { getWorkflow } from './workflows.js'
-import { getConfig } from './config.js'
-import { getExchangeData } from './transactionManager.js'
+import { getConfig } from './lib/config/config.js'
+import { getExchangeData } from './lib/exchanges/exchange-manager.js'
 
 /**
  * Wraps a Hono handler with error handling
@@ -90,7 +91,8 @@ const routes = {
   legacyExchangeDetail: '/exchange/:exchangeId', // This might not be used anymore if it is not referenced by the exchange creation
   exchangeCreate: '/workflows/:workflowId/exchanges',
   exchangeDetail: '/workflows/:workflowId/exchanges/:exchangeId',
-  protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols'
+  protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols',
+  interactions: '/interactions/:exchangeId' // Canonical interactions endpoint per VCALM spec
 }
 
 export const app = new Hono()
@@ -261,5 +263,12 @@ export const app = new Hono()
   VC-API 0.7 as of 2025-06-08: https://w3c-ccg.github.io/vc-api/#interaction-url-format
   */
   .get(routes.protocols, getInteractionsForExchange)
+
+  /* Canonical interactions endpoint per VCALM spec.
+  VCALM 0.9: https://w3c-ccg.github.io/vc-api/#interaction-url-format
+  This endpoint returns the same protocols information but without requiring workflowId in the URL.
+  The iuv=1 query parameter indicates interaction URL version 1.
+  */
+  .get(routes.interactions, getInteractionsForExchangeById)
 
 export type AppType = typeof app

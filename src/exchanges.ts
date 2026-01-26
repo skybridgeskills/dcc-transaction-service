@@ -1,4 +1,4 @@
-import { saveExchange, getExchangeData } from './transactionManager.js'
+import { saveExchange, getExchangeData, getExchangeById } from './lib/exchanges/exchange-manager.js'
 import {
   createExchangeClaim,
   participateInClaimExchange,
@@ -222,8 +222,10 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
       : getDIDAuthVPR(exchange)
   const serviceEndpoint =
     verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
+  // Use the canonical interactions endpoint per VCALM spec
+  const interactionsUrl = `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}?iuv=1`
   const protocols = {
-    iu: `${serviceEndpoint}/protocols?iuv=1`,
+    iu: interactionsUrl,
     vcapi: serviceEndpoint,
     lcw: getLcwProtocol(exchange),
     verifiablePresentationRequest
@@ -245,6 +247,17 @@ export const getInteractionsForExchange = async (c: Context) => {
       message: 'Exchange not found'
     })
   }
+  const protocols = getProtocols(exchangeData)
+  return c.json({ protocols })
+}
+
+/**
+ * Canonical interactions endpoint handler per VCALM spec.
+ * Returns protocols for an exchange without requiring workflowId in the URL.
+ * Endpoint: GET /interactions/:exchangeId?iuv=1
+ */
+export const getInteractionsForExchangeById = async (c: Context) => {
+  const exchangeData = await getExchangeById(c.req.param('exchangeId'))
   const protocols = getProtocols(exchangeData)
   return c.json({ protocols })
 }

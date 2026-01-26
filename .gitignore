@@ -112,6 +112,7 @@ test-fixtures/.env.testing
 *~
 *.sw[nop]
 /.vscode
+/.cursor
 
 # Output
 dist

@@ -4,15 +4,19 @@
   "version": "0.3.1",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "node -r dotenv/config dist/server.js",
-    "dev": "nodemon -r dotenv/config --exec tsx src/server.ts",
+    "build": "vite build",
+    "build:tsc": "tsc",
+    "start": "node -r dotenv/config build/index.js",
+    "dev": "vite dev",
+    "dev:old": "nodemon -r dotenv/config --exec tsx src/server.ts",
     "dev-noenv": "nodemon --exec tsx src/server.ts",
+    "preview": "vite preview",
     "test": "dotenvx run -f src/test-fixtures/.env.testing -- vitest run",
     "coverage": "dotenvx run -f src/test-fixtures/.env.testing -- vitest run --coverage",
     "prepare": "husky",
     "lint": "eslint",
-    "lint-fix": "eslint --fix"
+    "lint-fix": "eslint --fix",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
     "@digitalbazaar/data-integrity": "^2.5.0",
@@ -45,6 +49,9 @@
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.44.1",
     "@eslint/js": "^9.3.0",
+    "@sveltejs/adapter-node": "^5.2.0",
+    "@sveltejs/kit": "^2.49.1",
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@types/chai": "^5.2.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
@@ -62,8 +69,10 @@
     "nock": "^13.5.4",
     "nodemon": "^2.0.21",
     "prettier": "3.2.5",
+    "svelte": "^5.45.6",
     "supertest": "^6.3.3",
     "typescript": "^5.8.3",
+    "vite": "^7.2.6",
     "vitest": "^3.2.3"
   },
   "keywords": [

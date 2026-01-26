@@ -1,5 +1,14 @@
+import type { AppContext } from './lib/app/app-types.js';
+
 declare global {
   namespace App {
+    // SvelteKit types
+    interface Locals {
+      ctx?: AppContext;
+      authTenant?: Tenant;
+    }
+
+    interface Platform {}
     interface Tenant {
       tenantName: string
       tenantToken: string

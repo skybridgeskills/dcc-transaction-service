@@ -1,5 +1,5 @@
-import { getConfig } from './config.js'
-import { getExchangeData, saveExchange } from './transactionManager.js'
+import { getConfig } from './lib/config/config.js'
+import { getExchangeData, saveExchange } from './lib/exchanges/exchange-manager.js'
 import type { Context } from 'hono'
 
 export const healthCheck = async (c: Context) => {

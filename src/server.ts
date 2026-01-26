@@ -1,7 +1,7 @@
 import { app } from './hono.js'
-import { getConfig } from './config.js'
+import { getConfig } from './lib/config/config.js'
 import { serve } from '@hono/node-server'
-import { initializeTransactionManager } from './transactionManager.js'
+import { initializeTransactionManager } from './lib/exchanges/exchange-manager.js'
 
 const run = async () => {
   const config = getConfig()

@@ -1,5 +1,5 @@
 import { preparePresentation } from '../verifiablePresentation.js'
-import { saveExchange } from '../transactionManager.js'
+import { saveExchange } from '../lib/exchanges/exchange-manager.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyPresentation } from '@digitalcredentials/verifier-core'
 import { z } from 'zod'

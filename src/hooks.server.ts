@@ -3,7 +3,7 @@ import { sequence } from '@sveltejs/kit/hooks'
 import { error } from '@sveltejs/kit'
 import { runInAppContext } from './lib/app/app-context.js'
 import { provideAppContext } from './lib/app/app-providers.js'
-import { authenticateTenant } from './lib/auth/auth.js'
+import { getApp } from './lib/app/app-context.js'
 
 /**
  * Sets up app context for each request
@@ -22,7 +22,6 @@ const setupAppContext: Handle = async ({ event, resolve }) => {
 
 /**
  * Authentication middleware
- * Migrated from Hono middleware
  */
 const authenticate: Handle = async ({ event, resolve }) => {
   const config = event.locals.ctx?.configService.getConfig()
@@ -43,7 +42,11 @@ const authenticate: Handle = async ({ event, resolve }) => {
     }
 
     const tenantToken = parts[1]
-    const tenant = await authenticateTenant(tenantToken)
+    const app = getApp()
+    if (!app.authService) {
+      throw error(500, { message: 'AuthService not available' })
+    }
+    const tenant = await app.authService.authenticateTenant(tenantToken)
 
     if (!tenant) {
       throw error(401, { message: 'Unauthorized' })

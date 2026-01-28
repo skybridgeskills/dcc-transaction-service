@@ -5,16 +5,13 @@
 
 import type { AppContext } from './app-types.js'
 import { DefaultConfigService } from '../services/default-config-service.js'
-import type { ConfigService } from '../services/config-service.js'
-import type { IssuerService } from '../services/issuer-service.js'
 import { FakeIssuerService } from '../services/fake-issuer-service.js'
 import { VcApiIssuerService } from '../services/vc-api-issuer-service.js'
-import type { KeyValueStoreService } from '../services/key-value-store-service.js'
 import { MemoryKeyValueStoreService } from '../services/memory-key-value-store-service.js'
 import { RedisKeyValueStoreService } from '../services/redis-key-value-store-service.js'
 import { FileKeyValueStoreService } from '../services/file-key-value-store-service.js'
-import type { ExchangeService } from '../services/exchange-service.js'
-import { ExchangeServiceImpl } from '../exchanges/exchange-service.js'
+import { RealExchangeService } from '../services/exchange-service.js'
+import { RealAuthService } from '../services/auth-service.js'
 
 /**
  * Provider function type
@@ -36,6 +33,11 @@ export function provideAppContext(
   const ctx: AppContext = {
     ...initialCtx,
     configService
+  }
+
+  // Provide auth service (depends on configService)
+  if (!ctx.authService) {
+    ctx.authService = new RealAuthService()
   }
 
   // Select issuer service based on configuration
@@ -64,10 +66,10 @@ export function provideAppContext(
     }
   }
 
-  // Provide exchange service (always use the implementation)
+  // Provide exchange service (depends on keyValueStore)
   // If exchangeService is already provided (e.g., in tests), use it
   if (!ctx.exchangeService) {
-    ctx.exchangeService = new ExchangeServiceImpl()
+    ctx.exchangeService = new RealExchangeService()
   }
 
   return ctx

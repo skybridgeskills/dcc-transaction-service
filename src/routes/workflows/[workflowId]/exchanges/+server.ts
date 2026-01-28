@@ -1,6 +1,5 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { createExchangeVcapi } from '../../../../exchanges.js'
 import { getWorkflow } from '../../../../workflows.js'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
@@ -40,13 +39,18 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
     }
   }
 
-  // Create exchange (workflow-specific validation happens inside createExchangeVcapi)
+  // Create exchange
+  if (!locals.ctx.exchangeService) {
+    error(500, { message: 'ExchangeService not available' })
+  }
+
   try {
-    const protocols = await createExchangeVcapi({
-      data: inputData as App.ExchangeCreateInput,
+    const exchange = await locals.ctx.exchangeService.createExchange(
+      inputData as App.ExchangeCreateInput,
       config,
       workflow
-    })
+    )
+    const protocols = locals.ctx.exchangeService.getExchangeProtocols(exchange)
     return json(protocols)
   } catch (e) {
     // Handle ZodError from workflow-specific validation

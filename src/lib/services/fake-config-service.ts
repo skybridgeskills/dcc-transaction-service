@@ -1,5 +1,4 @@
 import type { ConfigService } from './config-service.js'
-import type { App } from '../../app.d.js'
 
 /**
  * FakeConfigService - provides config for testing

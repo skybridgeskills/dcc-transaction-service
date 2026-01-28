@@ -1,5 +1,6 @@
 import { preparePresentation } from '../verifiablePresentation.js'
-import { saveExchange } from '../lib/exchanges/exchange-manager.js'
+import { getApp } from '../lib/app/app-context.js'
+import { HTTPException } from 'hono/http-exception'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyPresentation } from '@digitalcredentials/verifier-core'
 import { z } from 'zod'
@@ -461,8 +462,14 @@ export const participateInVerifyExchange = async ({
   // Apply verification results to exchange
   const updatedExchange = await applyVerificationResults({ exchange, result })
 
-  // Save updated exchange
-  await saveExchange(updatedExchange)
+  // Save updated exchange using exchange service
+  const app = getApp()
+  if (!app.exchangeService) {
+    throw new HTTPException(500, {
+      message: 'ExchangeService not available in app context'
+    })
+  }
+  await app.exchangeService.saveExchange(updatedExchange)
 
   // Return appropriate response
   return buildVerificationResponse(updatedExchange)

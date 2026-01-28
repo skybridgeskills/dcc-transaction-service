@@ -1,6 +1,5 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { getProtocols } from '../../../exchanges.js'
 import { HTTPException } from 'hono/http-exception'
 
 /**
@@ -11,10 +10,14 @@ import { HTTPException } from 'hono/http-exception'
 export const GET: RequestHandler = async ({ locals, params }) => {
   const exchangeId = params.exchangeId
 
+  if (!locals.ctx.exchangeService) {
+    error(500, { message: 'ExchangeService not available' })
+  }
+
   // Get exchange data by ID only (no workflowId validation)
   let exchangeData: App.ExchangeDetailBase
   try {
-    exchangeData = await locals.ctx.exchangeService!.getExchangeById(exchangeId)
+    exchangeData = await locals.ctx.exchangeService.getExchangeById(exchangeId)
   } catch (e) {
     if (e instanceof HTTPException) {
       error(e.status, { message: e.message })
@@ -22,6 +25,6 @@ export const GET: RequestHandler = async ({ locals, params }) => {
     error(404, { message: 'Exchange not found' })
   }
 
-  const protocols = getProtocols(exchangeData)
+  const protocols = locals.ctx.exchangeService.getExchangeProtocols(exchangeData)
   return json({ protocols })
 }

@@ -1,11 +1,11 @@
-import { expect, test, describe, vi } from 'vitest'
+import { expect, test, describe } from 'vitest'
 import { GET } from './+server.js'
 import {
   createRequestEvent,
   callEndpoint
 } from '../../../../../../test-fixtures/sveltekit-test-helpers.js'
-import { createTestAppContext, createFakeExchangeService } from '../../../../../../test-fixtures/test-app-context.js'
-import { HTTPException } from 'hono/http-exception'
+import { createTestAppContext, populateExchanges } from '../../../../../../test-fixtures/test-app-context.js'
+import { MemoryKeyValueStoreService } from '../../../../../../lib/services/memory-key-value-store-service.js'
 import { createMockDidAuthExchange } from '../../../../../../test-fixtures/testData.js'
 
 describe('GET /workflows/:workflowId/exchanges/:exchangeId/protocols', function () {
@@ -13,6 +13,7 @@ describe('GET /workflows/:workflowId/exchanges/:exchangeId/protocols', function 
     const mockExchangeData = createMockDidAuthExchange({
       tenantName: 'test',
       exchangeId: 'test-exchange-123',
+      workflowId: 'didAuth',
       variables: {
         tenantName: 'test',
         exchangeHost: 'http://localhost:4005',
@@ -20,8 +21,10 @@ describe('GET /workflows/:workflowId/exchanges/:exchangeId/protocols', function 
       }
     })
 
-    const mockExchangeService = createFakeExchangeService({
-      getExchangeData: vi.fn().mockResolvedValue(mockExchangeData)
+    // Create key-value store and pre-populate with exchange
+    const keyValueStore = new MemoryKeyValueStoreService()
+    await populateExchanges(keyValueStore, {
+      'test-exchange-123': mockExchangeData
     })
 
     const event = createRequestEvent({
@@ -29,7 +32,7 @@ describe('GET /workflows/:workflowId/exchanges/:exchangeId/protocols', function 
       method: 'GET',
       params: { workflowId: 'didAuth', exchangeId: 'test-exchange-123' },
       ctx: createTestAppContext({
-        exchangeService: mockExchangeService
+        keyValueStore
       })
     })
 
@@ -40,20 +43,15 @@ describe('GET /workflows/:workflowId/exchanges/:exchangeId/protocols', function 
   })
 
   test('returns 404 for invalid exchange', async function () {
-    const mockExchangeService = createFakeExchangeService({
-      getExchangeData: vi
-        .fn()
-        .mockRejectedValue(
-          new HTTPException(404, { message: 'Exchange not found' })
-        )
-    })
+    // Create empty key-value store (no exchanges pre-populated)
+    const keyValueStore = new MemoryKeyValueStoreService()
 
     const event = createRequestEvent({
       url: '/workflows/didAuth/exchanges/NO-SUCH-EXCHANGE/protocols',
       method: 'GET',
       params: { workflowId: 'didAuth', exchangeId: 'NO-SUCH-EXCHANGE' },
       ctx: createTestAppContext({
-        exchangeService: mockExchangeService
+        keyValueStore
       })
     })
 

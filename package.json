@@ -1,6 +1,6 @@
 {
   "name": "@digitalcredentials/transaction-service",
-  "description": "A hono app for managing DID Auth and VC-API exchanges.",
+  "description": "A web app for managing DID Auth and other VC-API exchanges.",
   "version": "0.3.1",
   "type": "module",
   "scripts": {

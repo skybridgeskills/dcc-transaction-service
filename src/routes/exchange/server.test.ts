@@ -10,7 +10,7 @@ import { getDataForExchangeSetupPost } from '../../test-fixtures/testData.js'
 import type { KeyValueStoreService } from '../../lib/services/key-value-store-service.js'
 
 describe('POST /exchange', function () {
-  // Mock services that will be used by createExchangeBatch
+  // Mock services that will be used by createExchangeBatchHelper (which calls createExchange for each item)
   const mockKeyValueStore: KeyValueStoreService = {
     get: vi.fn(),
     set: vi.fn().mockResolvedValue(true),

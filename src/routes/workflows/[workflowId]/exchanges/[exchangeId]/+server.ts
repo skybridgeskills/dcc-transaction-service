@@ -1,6 +1,5 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { participateInExchange } from '../../../../../exchanges.js'
 import { getWorkflow } from '../../../../../workflows.js'
 import { HTTPException } from 'hono/http-exception'
 
@@ -19,10 +18,14 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
     error(404, { message: 'Workflow not found' })
   }
 
+  if (!locals.ctx.exchangeService) {
+    error(500, { message: 'ExchangeService not available' })
+  }
+
   // Get exchange data
   let exchange: App.ExchangeDetailBase
   try {
-    exchange = await locals.ctx.exchangeService!.getExchangeData(
+    exchange = await locals.ctx.exchangeService.getExchangeData(
       exchangeId,
       workflowId
     )
@@ -67,12 +70,12 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 
   // Participate in exchange
   try {
-    const result = await participateInExchange({
+    const result = await locals.ctx.exchangeService.participateInExchange(
       data,
-      config,
+      exchange,
       workflow,
-      exchange
-    })
+      config
+    )
     return json(result)
   } catch (e) {
     if (e instanceof HTTPException) {
@@ -98,10 +101,14 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     error(404, { message: 'Workflow not found' })
   }
 
+  if (!locals.ctx.exchangeService) {
+    error(500, { message: 'ExchangeService not available' })
+  }
+
   // Get exchange data
   let exchange: App.ExchangeDetailBase
   try {
-    exchange = await locals.ctx.exchangeService!.getExchangeData(
+    exchange = await locals.ctx.exchangeService.getExchangeState(
       exchangeId,
       workflowId
     )

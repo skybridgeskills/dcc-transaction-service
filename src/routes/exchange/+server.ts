@@ -1,16 +1,17 @@
 import { json, error } from '@sveltejs/kit'
-import type { RequestHandler } from './$types'
-import { createExchangeBatch } from '../../exchanges.js'
+import { createExchangeBatchHelper } from './exchange-helpers.js'
 import { getWorkflow } from '../../workflows.js'
 import { exchangeBatchSchema } from '../../schema.js'
 import { HTTPException } from 'hono/http-exception'
+import { z } from 'zod'
+import { zodErrorToProblemDetails } from '../../utils.js'
 
 /**
  * POST /exchange
  * Creates a batch of exchanges for the specified workflow
  * Returns an array of wallet queries
  */
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST = async ({ request, locals }) => {
   const config = locals.ctx.configService.getConfig()
 
   // Parse and validate request body
@@ -26,32 +27,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   try {
     data = exchangeBatchSchema.parse(inputData)
   } catch (e) {
-    if (e instanceof Error && 'errors' in e) {
-      // Zod validation error
-      const zodError = e as {
-        errors: Array<{ message: string; path: string[] }>
-      }
+    // Handle ZodError from validation
+    if (e instanceof z.ZodError) {
+      const problemDetails = zodErrorToProblemDetails(e)
       error(400, {
-        message: zodError.errors.map((err) => err.message).join(', '),
-        details: zodError.errors
+        message: e.errors.map((err) => err.message).join(', '),
+        errors: problemDetails
       })
     }
     error(400, { message: 'Validation failed' })
   }
 
-  // Check tenant authentication if enabled
-  const authEnabled = config.tenantAuthenticationEnabled
-  const authHeader = request.headers.get('authorization')
-
-  if (authEnabled) {
-    // If Authorization header is present but authTenant is not set, authentication failed
-    if (authHeader && !locals.authTenant) {
-      error(401, { message: 'Unauthorized' })
-    }
-    // If authTenant is set but doesn't match the tenant in the request body
-    if (locals.authTenant && locals.authTenant.tenantName !== data.tenantName) {
-      error(401, { message: 'Unauthorized' })
-    }
+  if (config.tenantAuthenticationEnabled && !locals.authTenant) {
+    error(401, { message: 'Unauthorized' })
+  }
+  // If authTenant is set but doesn't match the tenant in the request body
+  if (locals.authTenant && locals.authTenant.tenantName !== data.tenantName) {
+    error(401, { message: 'Unauthorized' })
   }
 
   // Get workflow - defaults to 'didAuth' if not specified
@@ -63,11 +55,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   }
 
   // Create batch of exchanges
+  if (!locals.ctx.exchangeService) {
+    error(500, { message: 'ExchangeService not available' })
+  }
+
   try {
-    const walletQueries = await createExchangeBatch({
+    const walletQueries = await createExchangeBatchHelper({
       data,
       config,
-      workflow
+      workflow,
+      exchangeService: locals.ctx.exchangeService
     })
     return json(walletQueries)
   } catch (e) {

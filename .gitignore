@@ -115,7 +115,9 @@ test-fixtures/.env.testing
 /.cursor
 
 # Output
+.svelte-kit
 dist
+build
 
 # MacOS
 .DS_Store

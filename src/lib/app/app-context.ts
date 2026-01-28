@@ -1,11 +1,11 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { AppContext, InitialAppContext } from './app-types.js';
-import { getConfig } from '../config/config.js';
+import { AsyncLocalStorage } from 'node:async_hooks'
+import type { AppContext, InitialAppContext } from './app-types.js'
+import { provideAppContext } from './app-providers.js'
 
 /**
  * AsyncLocalStorage instance for storing app context per request
  */
-const appContextStore = new AsyncLocalStorage<AppContext>();
+const appContextStore = new AsyncLocalStorage<AppContext>()
 
 /**
  * Gets the current app context from async local storage
@@ -13,19 +13,13 @@ const appContextStore = new AsyncLocalStorage<AppContext>();
  * @returns The current app context
  */
 export function getApp(initialCtx?: InitialAppContext): AppContext {
-	const current = appContextStore.getStore();
-	if (current) {
-		return current;
-	}
+  const current = appContextStore.getStore()
+  if (current) {
+    return current
+  }
 
-	// If no context exists and initialCtx is provided, create a new context
-	// Otherwise, return a default context (this shouldn't happen in normal operation)
-	const defaultContext: AppContext = {
-		config: getConfig()
-		// Services will be added here via provider pattern
-	};
-
-	return defaultContext;
+  // If no context exists, create a default context using provider pattern
+  return provideAppContext(initialCtx)
 }
 
 /**
@@ -36,7 +30,7 @@ export function getApp(initialCtx?: InitialAppContext): AppContext {
  * @returns The result of the function
  */
 export function runInAppContext<T>(context: AppContext, fn: () => T): T {
-	return appContextStore.run(context, fn);
+  return appContextStore.run(context, fn)
 }
 
 /**
@@ -44,5 +38,5 @@ export function runInAppContext<T>(context: AppContext, fn: () => T): T {
  * @returns The AsyncLocalStorage instance
  */
 export function getAppContextStore(): AsyncLocalStorage<AppContext> {
-	return appContextStore;
+  return appContextStore
 }

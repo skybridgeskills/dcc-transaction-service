@@ -5,19 +5,16 @@ import {
   createExchangeVerify,
   validateExchangeVerify,
   applyVerificationResults,
-  participateInVerifyExchange,
   getVerifyVPR
 } from './verifyWorkflow.js'
 import {
   createMockExchange,
   createMockCredential,
-  createMockPresentation,
   createMockVerifierCoreResult,
-  createMockExpiredCredential,
-  createMockRevokedCredential
 } from '../test-fixtures/testData.js'
 import { getLcwProtocol } from '../protocols/lcw.js'
 import { participateInExchange } from '../exchanges.js'
+import { verifyCredential } from '@digitalcredentials/verifier-core'
 
 const testData = {
   workflowId: 'verify',

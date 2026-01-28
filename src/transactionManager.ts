@@ -3,6 +3,5 @@ export {
   getExchangeById,
   getExchangeData,
   saveExchange,
-  clearKeyv,
-  initializeTransactionManager
+  clearKeyv
 } from './lib/exchanges/exchange-manager.js'

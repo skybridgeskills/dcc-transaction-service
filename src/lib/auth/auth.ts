@@ -1,6 +1,7 @@
 import { createMiddleware } from 'hono/factory'
 import { getConfig } from '../config/config.js'
 import { HTTPException } from 'hono/http-exception'
+import { getApp } from '../app/app-context.js'
 
 export const getTenant = async ({
   tenantName,
@@ -9,7 +10,8 @@ export const getTenant = async ({
   tenantName?: string
   tenantToken?: string
 }): Promise<App.Tenant | undefined> => {
-  const config = getConfig()
+  const app = getApp()
+  const config = app.configService.getConfig()
   if (!config.tenantAuthenticationEnabled) {
     return undefined
   }
@@ -35,7 +37,8 @@ export const getTenant = async ({
 export const authenticateTenant = async (
   tenantToken: string
 ): Promise<App.Tenant | undefined> => {
-  const config = getConfig()
+  const app = getApp()
+  const config = app.configService.getConfig()
   if (!config.tenantAuthenticationEnabled) {
     return
   }

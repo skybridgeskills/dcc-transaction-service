@@ -4,5 +4,5 @@
 
 <div>
 	<h1>Transaction Service</h1>
-	<p>API endpoints are available at their respective routes.</p>
+	<p>This website is used to interact with digital wallets to exchange credentials.</p>
 </div>

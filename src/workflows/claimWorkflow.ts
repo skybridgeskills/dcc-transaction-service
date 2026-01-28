@@ -7,6 +7,7 @@ import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyDIDAuth } from '../didAuth.js'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
+import { getApp } from '../lib/app/app-context.js'
 
 export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -116,9 +117,18 @@ export const participateInClaimExchange = async ({
       credential
     )
   }
-  const signedCredential = await callService(
-    `${config.signingService}/instance/${exchange.tenantName}/credentials/sign`,
-    credential
+  
+  // Use IssuerService from app context
+  const app = getApp()
+  if (!app.issuerService) {
+    throw new HTTPException(500, {
+      message: 'IssuerService not available in app context'
+    })
+  }
+  
+  const signedCredential = await app.issuerService.signCredential(
+    credential,
+    exchange.tenantName
   )
   // generate VP to return VCs
   const verifiablePresentation = createPresentation()

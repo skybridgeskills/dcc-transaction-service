@@ -43,7 +43,7 @@ export const optionalFutureDate = (d: string | undefined) => {
   }
   try {
     const date = new Date(d)
-    return date < new Date()
+    return date > new Date()
   } catch (error) {
     return false
   }

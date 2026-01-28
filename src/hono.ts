@@ -19,6 +19,8 @@ import { JSONObject } from 'hono/utils/types'
 import { getWorkflow } from './workflows.js'
 import { getConfig } from './lib/config/config.js'
 import { getExchangeData } from './lib/exchanges/exchange-manager.js'
+import { provideAppContext } from './lib/app/app-providers.js'
+import { runInAppContext } from './lib/app/app-context.js'
 
 /**
  * Wraps a Hono handler with error handling
@@ -83,6 +85,14 @@ const setConfigContext = createMiddleware<{
   await next()
 })
 
+// Set up app context for Hono routes (so getApp() works)
+const setupAppContext = createMiddleware(async (c, next) => {
+  const appContext = provideAppContext({ config: c.var.config })
+  return runInAppContext(appContext, async () => {
+    await next()
+  })
+})
+
 /** A listing of all application routes */
 const routes = {
   index: '/',
@@ -105,6 +115,7 @@ export const app = new Hono()
   .use(logger())
   .use(cors())
   .use(setConfigContext)
+  .use(setupAppContext)
 
   // Config Handler adds config to the context
   .use(async (c, next) => {

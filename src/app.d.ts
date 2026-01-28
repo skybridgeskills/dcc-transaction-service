@@ -1,11 +1,23 @@
-import type { AppContext } from './lib/app/app-types.js';
+import type { AppContext } from './lib/app/app-types.js'
 
 declare global {
   namespace App {
     // SvelteKit types
     interface Locals {
-      ctx?: AppContext;
-      authTenant?: Tenant;
+      ctx: AppContext
+      authTenant?: Tenant
+    }
+
+    // VCALM interface for an error instance
+    interface ProblemDetails {
+      type?: string // URL string like https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR but these are not yet solidly defined
+      title: string
+      detail?: string // Longer description of the error
+    }
+
+    interface Error {
+      message: string
+      errors?: Array<ProblemDetails>
     }
 
     interface Platform {}
@@ -30,16 +42,6 @@ declare global {
       tenants: Record<string, Tenant>
       tenantAuthenticationEnabled: boolean
       defaultTrustedRegistries: string[]
-    }
-
-    interface ErrorResponseBody {
-      code: number
-      message: string
-      details?: Array<{
-        code: string
-        message: string
-        path: Array<string>
-      }>
     }
 
     interface Credential extends Record<string, unknown> {
@@ -89,6 +91,7 @@ declare global {
       metadata?: Record<string, unknown>
       challenge: string // Used to authenticate presentations
       result?: any
+      tenantName?: string // Might be mandatory?
     }
 
     interface ExchangeDetailBase {

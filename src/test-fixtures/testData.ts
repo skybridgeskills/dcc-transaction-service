@@ -1,5 +1,18 @@
 import testVC from './testVC.js'
 
+/**
+ * Generates test data for batch exchange creation (POST /exchange)
+ *
+ * @param tenantName - The tenant name for the exchange
+ * @param exchangeHost - The exchange host URL (default: 'http://localhost:4005')
+ * @param workflowId - The workflow ID ('didAuth' or 'claim', default: 'didAuth')
+ * @returns Test data matching the exchangeBatchSchema format
+ *
+ * @remarks
+ * - For 'claim' workflow, includes `vc` (test credential) in the data array
+ * - For 'didAuth' workflow, includes `vc` for compatibility
+ * - All entries include a `retrievalId` for tracking
+ */
 const getDataForExchangeSetupPost = (
   tenantName: string,
   exchangeHost = 'http://localhost:4005',
@@ -7,14 +20,135 @@ const getDataForExchangeSetupPost = (
 ) => {
   const fakeData = {
     tenantName,
-    workflowId,
     exchangeHost,
+    workflowId,
     data: [
       { vc: JSON.stringify(testVC), retrievalId: 'someId' },
       { vc: JSON.stringify(testVC), retrievalId: 'blah' }
-    ]
+    ],
+    expires: new Date(Date.now() + 600000).toISOString() // 10 minutes from now
   }
   return fakeData
+}
+
+/**
+ * Generates test data for VCALM exchange creation (POST /workflows/:workflowId/exchanges)
+ *
+ * @param tenantName - The tenant name for the exchange
+ * @param exchangeHost - The exchange host URL (default: 'http://localhost:4005')
+ * @param workflowId - The workflow ID ('didAuth' or 'claim', default: 'didAuth')
+ * @returns Test data matching the vcApiExchangeCreateSchema format (ExchangeCreateInput)
+ *
+ * @remarks
+ * - For 'claim' workflow, includes `vc` (test credential) in variables
+ * - For 'didAuth' workflow, includes optional `vc` for compatibility
+ * - Includes `retrievalId` in variables for tracking
+ */
+export const getDataForVcApiExchangeCreate = (
+  tenantName: string,
+  exchangeHost = 'http://localhost:4005',
+  workflowId: 'didAuth' | 'claim' = 'didAuth'
+): App.ExchangeCreateInput => {
+  const variables: App.ExchangeCreateInput['variables'] = {
+    tenantName,
+    exchangeHost,
+    retrievalId: 'test-retrieval-id'
+  }
+
+  // For claim workflow, include vc in variables
+  if (workflowId === 'claim') {
+    variables.vc = JSON.stringify(testVC)
+  }
+
+  return {
+    variables,
+    expires: new Date(Date.now() + 600000).toISOString() // 10 minutes from now
+  }
+}
+
+/**
+ * Creates a mock exchange object for a specific workflow type
+ *
+ * @param workflowId - The workflow type ('claim', 'didAuth', or 'verify')
+ * @param overrides - Partial exchange data to override defaults
+ * @returns A mock exchange object with all required variables for the workflow
+ */
+export const createMockExchangeForWorkflow = (
+  workflowId: 'claim' | 'didAuth' | 'verify',
+  overrides: Partial<App.ExchangeDetailBase> = {}
+): App.ExchangeDetailBase => {
+  const baseExchange = {
+    tenantName: 'default',
+    exchangeId: 'test-exchange-id',
+    workflowId,
+    expires: new Date(Date.now() + 1000).toISOString(),
+    state: 'active' as const,
+    variables: {
+      tenantName: 'default',
+      exchangeHost: 'http://localhost:4005',
+      challenge: 'test-challenge'
+    }
+  }
+
+  // Add workflow-specific variables
+  const variables: Record<string, any> = {
+    ...baseExchange.variables
+  }
+  if (workflowId === 'claim') {
+    variables.vc = JSON.stringify(testVC)
+  }
+
+  // Deep merge variables to preserve workflow-specific fields like vc
+  const mergedVariables = {
+    ...variables,
+    ...(overrides.variables || {})
+  }
+
+  return {
+    ...baseExchange,
+    ...overrides,
+    variables: mergedVariables
+  } as App.ExchangeDetailBase
+}
+
+/**
+ * Creates a mock exchange object for the claim workflow
+ * Includes the required `vc` variable needed for credential template building
+ *
+ * @param overrides - Partial exchange data to override defaults
+ * @returns A mock claim exchange with all required variables
+ */
+export const createMockClaimExchange = (
+  overrides: Partial<App.ExchangeDetailClaim> = {}
+): App.ExchangeDetailClaim => {
+  const baseVariables = {
+    tenantName: 'default',
+    exchangeHost: 'http://localhost:4005',
+    challenge: 'test-challenge',
+    vc: JSON.stringify(testVC)
+  }
+  return createMockExchangeForWorkflow('claim', {
+    variables: {
+      ...baseVariables,
+      ...overrides.variables
+    },
+    ...overrides
+  }) as App.ExchangeDetailClaim
+}
+
+/**
+ * Creates a mock exchange object for the didAuth workflow
+ *
+ * @param overrides - Partial exchange data to override defaults
+ * @returns A mock didAuth exchange with all required variables
+ */
+export const createMockDidAuthExchange = (
+  overrides: Partial<App.ExchangeDetailDidAuth> = {}
+): App.ExchangeDetailDidAuth => {
+  return createMockExchangeForWorkflow(
+    'didAuth',
+    overrides
+  ) as App.ExchangeDetailDidAuth
 }
 
 // Test factories for verification workflow

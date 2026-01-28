@@ -3,10 +3,17 @@
  * Defines the shape of the app context that will be available via getApp()
  */
 
+import type { ConfigService } from '../services/config-service.js'
+import type { IssuerService } from '../services/issuer-service.js'
+import type { KeyValueStoreService } from '../services/key-value-store-service.js'
+import type { ExchangeService } from '../services/exchange-service.js'
+
 export interface AppContext {
-	// Services will be added here as we create them
-	// For now, this is a placeholder
-	[key: string]: unknown;
+  configService: ConfigService
+  issuerService?: IssuerService
+  keyValueStore?: KeyValueStoreService
+  exchangeService?: ExchangeService
+  [key: string]: unknown
 }
 
 /**
@@ -14,9 +21,9 @@ export interface AppContext {
  * Allows overriding environment variables for testing
  */
 export interface InitialAppContext {
-	env?: {
-		public?: Record<string, string>;
-		private?: Record<string, string>;
-	};
-	[key: string]: unknown;
+  env?: {
+    public?: Record<string, string>
+    private?: Record<string, string>
+  }
+  [key: string]: unknown
 }

@@ -33,28 +33,12 @@ export function generateCNonce(): string {
 }
 
 /**
- * Generate credential offer URL for an exchange
- * @param exchangeHost The exchange host URL
- * @param workflowId The workflow ID
- * @param exchangeId The exchange ID
- * @returns The credential offer URL
+ * Re-export frontend-safe URL generation functions
  */
-export function generateCredentialOfferUrl(
-  exchangeHost: string,
-  workflowId: string,
-  exchangeId: string
-): string {
-  return `${exchangeHost}/workflows/${workflowId}/exchanges/${exchangeId}/openid/credential-offer`
-}
-
-/**
- * Generate openid-credential-offer deep link URL
- * @param credentialOfferUri The credential offer URI
- * @returns The deep link URL
- */
-export function generateDeepLinkUrl(credentialOfferUri: string): string {
-  return `openid-credential-offer://?credential_offer_uri=${encodeURIComponent(credentialOfferUri)}`
-}
+export {
+	generateCredentialOfferUrl,
+	generateDeepLinkUrl
+} from './url-utils.js'
 
 /**
  * Calculate token expiration time (default: 1 hour)

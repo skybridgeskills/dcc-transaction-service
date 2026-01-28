@@ -1,15 +1,22 @@
 /**
  * Minimal ExchangeService implementation for Storybook
- * Only implements getExchangeState() - other methods throw "Not implemented"
+ * Implements getExchangeState(), getExchangeData(), and getExchangeProtocols()
  * Frontend-safe: No backend dependencies, uses in-memory Map storage
  */
 
 import type { ExchangeService } from '../services/exchange-service.js'
 import type { OID4VCI } from '../protocols/oid4vci/types.js'
+import { getDIDAuthVPR, getVerifyVPR } from '../protocols/vpr-generation.js'
+import { getLcwProtocol } from '../../protocols/lcw.js'
+import {
+	generateCredentialOfferUrl,
+	generateDeepLinkUrl
+} from '../protocols/oid4vci/url-utils.js'
 
 /**
  * Lightweight ExchangeService for Storybook stories
- * Only implements getExchangeState() which is needed by ExchangeStatusPoll component
+ * Implements getExchangeState() for ExchangeStatusPoll component
+ * and getExchangeData()/getExchangeProtocols() for WalletSelector component
  */
 export class StorybookExchangeService implements ExchangeService {
   private exchanges: Map<string, App.ExchangeDetailBase> = new Map()
@@ -34,7 +41,7 @@ export class StorybookExchangeService implements ExchangeService {
 
   /**
    * Gets the current state of an exchange
-   * This is the only method actually used by Storybook components
+   * Used by ExchangeStatusPoll component
    */
   async getExchangeState(
     exchangeId: string,
@@ -59,10 +66,19 @@ export class StorybookExchangeService implements ExchangeService {
   }
 
   async getExchangeData(
-    _exchangeId: string,
-    _workflowId: string
+    exchangeId: string,
+    workflowId: string
   ): Promise<App.ExchangeDetailBase> {
-    throw new Error('Not implemented in StorybookExchangeService')
+    const exchange = this.exchanges.get(exchangeId)
+    if (!exchange) {
+      throw new Error(`Exchange not found: ${exchangeId}`)
+    }
+    if (exchange.workflowId !== workflowId) {
+      throw new Error(
+        `Workflow mismatch: expected ${workflowId}, got ${exchange.workflowId}`
+      )
+    }
+    return exchange
   }
 
   async saveExchange(_data: App.ExchangeDetailBase): Promise<boolean> {
@@ -81,14 +97,45 @@ export class StorybookExchangeService implements ExchangeService {
     throw new Error('Not implemented in StorybookExchangeService')
   }
 
-  getExchangeProtocols(_exchange: App.ExchangeDetailBase): {
+  getExchangeProtocols(exchange: App.ExchangeDetailBase): {
     iu: string
     vcapi: string
     lcw?: string
     OID4VCI?: string
     verifiablePresentationRequest: any
   } {
-    throw new Error('Not implemented in StorybookExchangeService')
+    const verifiablePresentationRequest =
+      exchange.workflowId === 'verify'
+        ? getVerifyVPR(exchange as App.ExchangeDetailVerify)
+        : getDIDAuthVPR(exchange)
+    const serviceEndpoint =
+      verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
+    // Use the canonical interactions endpoint per VCALM spec
+    const interactionsUrl = `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}?iuv=1`
+    const protocols: {
+      iu: string
+      vcapi: string
+      lcw?: string
+      OID4VCI?: string
+      verifiablePresentationRequest: any
+    } = {
+      iu: interactionsUrl,
+      vcapi: serviceEndpoint,
+      lcw: getLcwProtocol(exchange),
+      verifiablePresentationRequest
+    }
+
+    // Add OID4VCI protocol for claim exchanges
+    if (exchange.workflowId === 'claim') {
+      const credentialOfferUrl = generateCredentialOfferUrl(
+        exchange.variables.exchangeHost,
+        exchange.workflowId,
+        exchange.exchangeId
+      )
+      protocols.OID4VCI = generateDeepLinkUrl(credentialOfferUrl)
+    }
+
+    return protocols
   }
 
   async getOid4vciCredentialOffer(

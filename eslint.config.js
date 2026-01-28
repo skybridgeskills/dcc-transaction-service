@@ -4,7 +4,13 @@ import eslintConfigPrettier from 'eslint-config-prettier'
 
 export default [
   {
-    ignores: ['dist/**/*', 'node_modules/**/*', 'coverage/**/*']
+    ignores: [
+      'dist/**/*',
+      'node_modules/**/*',
+      'coverage/**/*',
+      '.svelte-kit/**/*',
+      'build/**/*'
+    ]
   },
   {
     languageOptions: { globals: globals.node }

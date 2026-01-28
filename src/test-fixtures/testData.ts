@@ -75,7 +75,9 @@ export const getDataForVcApiExchangeCreate = (
  */
 export const createMockExchangeForWorkflow = (
   workflowId: 'claim' | 'didAuth' | 'verify',
-  overrides: Partial<App.ExchangeDetailBase> = {}
+  overrides: Omit<Partial<App.ExchangeDetailBase>, 'variables'> & {
+    variables?: Partial<App.ExchangeDetailBase['variables']>
+  } = {}
 ): App.ExchangeDetailBase => {
   const baseExchange = {
     tenantName: 'default',
@@ -115,13 +117,15 @@ export const createMockExchangeForWorkflow = (
  * Creates a mock exchange object for the claim workflow
  * Includes the required `vc` variable needed for credential template building
  *
- * @param overrides - Partial exchange data to override defaults
+ * @param overrides - Partial exchange data to override defaults. The `variables` field, if provided, can be a Partial of the base variables (challenge, exchangeHost, tenantName, vc).
  * @returns A mock claim exchange with all required variables
  */
 export const createMockClaimExchange = (
-  overrides: Partial<App.ExchangeDetailClaim> = {}
+  overrides: Omit<Partial<App.ExchangeDetailClaim>, 'variables'> & {
+    variables?: Partial<App.ExchangeDetailClaim['variables']>
+  } = {}
 ): App.ExchangeDetailClaim => {
-  const baseVariables = {
+  const baseVariables: App.ExchangeDetailClaim['variables'] = {
     tenantName: 'default',
     exchangeHost: 'http://localhost:4005',
     challenge: 'test-challenge',
@@ -131,7 +135,7 @@ export const createMockClaimExchange = (
     variables: {
       ...baseVariables,
       ...overrides.variables
-    },
+    } as App.ExchangeDetailClaim['variables'],
     ...overrides
   }) as App.ExchangeDetailClaim
 }

@@ -1,5 +1,6 @@
 import { HTTPException } from 'hono/http-exception'
 import { getApp } from '../app/app-context.js'
+import type { KeyValueStoreService } from './key-value-store-service.js'
 import {
   createExchangeClaim,
   participateInClaimExchange,
@@ -177,14 +178,36 @@ export interface ExchangeService {
 }
 
 export class RealExchangeService implements ExchangeService {
-  async getExchangeById(exchangeId: string): Promise<App.ExchangeDetailBase> {
+  private readonly explicitKeyValueStore?: KeyValueStoreService
+
+  /**
+   * Constructor for RealExchangeService
+   * @param options Optional explicit dependencies (for testing/Storybook)
+   *   - keyValueStore: If provided, will be used instead of getApp().keyValueStore
+   */
+  constructor(options?: { keyValueStore?: KeyValueStoreService }) {
+    this.explicitKeyValueStore = options?.keyValueStore
+  }
+
+  /**
+   * Gets the key-value store, using explicit dependency if provided, otherwise from app context
+   */
+  private getKeyValueStore(): KeyValueStoreService {
+    if (this.explicitKeyValueStore) {
+      return this.explicitKeyValueStore
+    }
     const app = getApp()
     if (!app.keyValueStore) {
       throw new HTTPException(500, {
         message: 'KeyValueStore not available in app context'
       })
     }
-    const storedData = await app.keyValueStore.get(exchangeId)
+    return app.keyValueStore
+  }
+
+  async getExchangeById(exchangeId: string): Promise<App.ExchangeDetailBase> {
+    const keyValueStore = this.getKeyValueStore()
+    const storedData = await keyValueStore.get(exchangeId)
     if (!storedData) {
       throw new HTTPException(404, { message: 'Exchange not found' })
     }
@@ -195,13 +218,8 @@ export class RealExchangeService implements ExchangeService {
     exchangeId: string,
     workflowId: string
   ): Promise<App.ExchangeDetailBase> {
-    const app = getApp()
-    if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
-    }
-    const storedData = await app.keyValueStore.get(exchangeId)
+    const keyValueStore = this.getKeyValueStore()
+    const storedData = await keyValueStore.get(exchangeId)
     if (!storedData || storedData.workflowId !== workflowId) {
       throw new HTTPException(404, { message: 'Exchange not found' })
     }
@@ -209,14 +227,9 @@ export class RealExchangeService implements ExchangeService {
   }
 
   async saveExchange(data: App.ExchangeDetailBase): Promise<boolean> {
-    const app = getApp()
-    if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
-    }
+    const keyValueStore = this.getKeyValueStore()
     const ttl = new Date(data.expires).getTime() - Date.now() + 1000
-    const success = await app.keyValueStore.set(data.exchangeId, data, ttl)
+    const success = await keyValueStore.set(data.exchangeId, data, ttl)
     if (!success) {
       throw new HTTPException(500, { message: 'Failed to save exchange.' })
     }
@@ -224,10 +237,8 @@ export class RealExchangeService implements ExchangeService {
   }
 
   async clearExchanges(): Promise<void> {
-    const app = getApp()
-    if (app.keyValueStore) {
-      await app.keyValueStore.clear()
-    }
+    const keyValueStore = this.getKeyValueStore()
+    await keyValueStore.clear()
   }
 
   async createExchange(
@@ -370,15 +381,10 @@ export class RealExchangeService implements ExchangeService {
     const claimExchange = exchange as App.ExchangeDetailClaim
 
     // Get or generate pre-authorized code
-    const app = getApp()
-    if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
-    }
+    const keyValueStore = this.getKeyValueStore()
 
     const codeKey = `oid4vci:code:${exchange.exchangeId}`
-    let storedCode = await app.keyValueStore.get<OID4VCI.StoredCode>(codeKey)
+    let storedCode = await keyValueStore.get<OID4VCI.StoredCode>(codeKey)
 
     let preAuthorizedCode: string
     if (
@@ -397,7 +403,7 @@ export class RealExchangeService implements ExchangeService {
         used: false
       }
       const ttl = new Date(expiresAt).getTime() - Date.now()
-      await app.keyValueStore.set(codeKey, storedCode, ttl)
+      await keyValueStore.set(codeKey, storedCode, ttl)
     }
 
     return generateCredentialOffer(
@@ -412,12 +418,7 @@ export class RealExchangeService implements ExchangeService {
     exchangeId: string,
     preAuthorizedCode: string
   ): Promise<OID4VCI.AuthorizationResponse> {
-    const app = getApp()
-    if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
-    }
+    const keyValueStore = this.getKeyValueStore()
 
     // Get exchange to validate it's a claim exchange
     const exchange = await this.getExchangeById(exchangeId)
@@ -429,7 +430,7 @@ export class RealExchangeService implements ExchangeService {
 
     // Get stored pre-authorized code
     const codeKey = `oid4vci:code:${exchangeId}`
-    const storedCode = await app.keyValueStore.get<OID4VCI.StoredCode>(codeKey)
+    const storedCode = await keyValueStore.get<OID4VCI.StoredCode>(codeKey)
 
     // Process authorization
     const authResponse = processAuthorization(preAuthorizedCode, storedCode)
@@ -443,12 +444,12 @@ export class RealExchangeService implements ExchangeService {
         used: false
       }
       const ttl = new Date(authCodeData.expiresAt).getTime() - Date.now()
-      await app.keyValueStore.set(authCodeKey, authCodeData, ttl)
+      await keyValueStore.set(authCodeKey, authCodeData, ttl)
 
       // Mark pre-authorized code as used
       if (storedCode) {
         storedCode.used = true
-        await app.keyValueStore.set(codeKey, storedCode)
+        await keyValueStore.set(codeKey, storedCode)
       }
     }
 
@@ -461,12 +462,7 @@ export class RealExchangeService implements ExchangeService {
     code?: string,
     preAuthorizedCode?: string
   ): Promise<OID4VCI.TokenResponse> {
-    const app = getApp()
-    if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
-    }
+    const keyValueStore = this.getKeyValueStore()
 
     // Get exchange to validate it's a claim exchange
     const exchange = await this.getExchangeById(exchangeId)
@@ -488,7 +484,7 @@ export class RealExchangeService implements ExchangeService {
 
       const codeKey = `oid4vci:code:${exchangeId}`
       const storedCode =
-        await app.keyValueStore.get<OID4VCI.StoredCode>(codeKey)
+        await keyValueStore.get<OID4VCI.StoredCode>(codeKey)
       tokenResponse = generateTokenForPreAuthorizedCode(
         preAuthorizedCode,
         storedCode
@@ -497,7 +493,7 @@ export class RealExchangeService implements ExchangeService {
       // Mark pre-authorized code as used
       if (storedCode) {
         storedCode.used = true
-        await app.keyValueStore.set(codeKey, storedCode)
+        await keyValueStore.set(codeKey, storedCode)
       }
     } else if (grantType === 'authorization_code') {
       if (!code) {
@@ -508,13 +504,13 @@ export class RealExchangeService implements ExchangeService {
 
       const authCodeKey = `oid4vci:authcode:${exchangeId}`
       const storedCode =
-        await app.keyValueStore.get<OID4VCI.StoredCode>(authCodeKey)
+        await keyValueStore.get<OID4VCI.StoredCode>(authCodeKey)
       tokenResponse = generateTokenForAuthorizationCode(code, storedCode)
 
       // Mark authorization code as used
       if (storedCode) {
         storedCode.used = true
-        await app.keyValueStore.set(authCodeKey, storedCode)
+        await keyValueStore.set(authCodeKey, storedCode)
       }
     } else {
       throw new HTTPException(400, {
@@ -534,7 +530,7 @@ export class RealExchangeService implements ExchangeService {
         : undefined
     }
     const ttl = new Date(tokenData.expiresAt).getTime() - Date.now()
-    await app.keyValueStore.set(tokenKey, tokenData, ttl)
+    await keyValueStore.set(tokenKey, tokenData, ttl)
 
     return tokenResponse
   }
@@ -545,12 +541,7 @@ export class RealExchangeService implements ExchangeService {
     credentialRequest: OID4VCI.CredentialRequest,
     config: App.Config
   ): Promise<OID4VCI.CredentialResponse> {
-    const app = getApp()
-    if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
-    }
+    const keyValueStore = this.getKeyValueStore()
 
     // Get exchange and validate it's a claim exchange
     const exchange = await this.getExchangeById(exchangeId)
@@ -563,7 +554,7 @@ export class RealExchangeService implements ExchangeService {
     // Validate access token
     const tokenKey = `oid4vci:token:${exchangeId}`
     const storedToken =
-      await app.keyValueStore.get<OID4VCI.StoredToken>(tokenKey)
+      await keyValueStore.get<OID4VCI.StoredToken>(tokenKey)
     validateAccessToken(accessToken, storedToken, exchangeId)
 
     // Get workflow

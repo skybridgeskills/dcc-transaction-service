@@ -62,6 +62,7 @@
     "@iconify-json/material-symbols-light": "^1.2.53",
     "@iconify-json/mdi-light": "^1.2.2",
     "@iconify/tailwind4": "^1.2.1",
+    "@internationalized/date": "^3.10.1",
     "@storybook/addon-a11y": "10.0.2",
     "@storybook/addon-docs": "10.0.2",
     "@storybook/addon-svelte-csf": "^5.0.10",

@@ -185,9 +185,12 @@ export const verifiableCredentialSchema = z.union([
 export const verifiablePresentationSchema = z
   .object({
     '@context': z.array(z.string()),
-    type: z.string(),
+    type: z.union([z.string(), z.array(z.string())]),
     issuer: issuerSchema,
-    verifiableCredential: verifiableCredentialSchema,
+    verifiableCredential: z.union([
+      verifiableCredentialSchema,
+      z.array(verifiableCredentialSchema)
+    ]),
     proof: proofSchema
   })
   .passthrough() // Allow additional properties

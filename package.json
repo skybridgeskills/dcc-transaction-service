@@ -3,6 +3,7 @@
   "description": "A web app for managing DID Auth and other VC-API exchanges.",
   "version": "0.3.1",
   "type": "module",
+  "packageManager": "pnpm@10.22.0",
   "scripts": {
     "build": "vite build",
     "build:tsc": "tsc",
@@ -85,6 +86,7 @@
     "storybook": "10.0.2",
     "supertest": "^6.3.3",
     "svelte": "^5.45.6",
+    "svelte-check": "^4.3.4",
     "typescript": "^5.8.3",
     "vite": "^7.2.6",
     "vitest": "^4.0.15"

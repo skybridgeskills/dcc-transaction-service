@@ -4,7 +4,10 @@ import { HTTPException } from 'hono/http-exception'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyPresentation } from '@digitalcredentials/verifier-core'
 import { z } from 'zod'
-import { verifiablePresentationSchema } from '../verifiableCredentialSchema.js'
+import {
+  verifiablePresentationSchema,
+  type VerifiablePresentation
+} from '../verifiableCredentialSchema.js'
 
 export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -365,7 +368,7 @@ export const participateInVerifyExchange = async ({
 
   // Verify presentation using verifier-core
   const result = await verifyPresentation({
-    presentation: validatedPresentation,
+    presentation: validatedPresentation as VerifiablePresentation,
     challenge: exchange.variables.challenge,
     knownDIDRegistries,
     reloadIssuerRegistry: true

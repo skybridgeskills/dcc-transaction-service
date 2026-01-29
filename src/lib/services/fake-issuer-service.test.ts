@@ -1,4 +1,3 @@
-import { describe, test, expect } from 'vitest'
 import { FakeIssuerService } from './fake-issuer-service.js'
 
 const testCredentialOB = {

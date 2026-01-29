@@ -1,4 +1,3 @@
-import { describe, test, expect } from 'vitest'
 import { FakeWalletService } from './fake-wallet-service.js'
 
 describe('FakeWalletService', () => {

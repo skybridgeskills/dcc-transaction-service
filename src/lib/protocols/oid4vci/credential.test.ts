@@ -1,4 +1,3 @@
-import { expect, test, describe } from 'vitest'
 import { validateAccessToken, formatCredentialResponse } from './credential.js'
 import type { OID4VCI } from './types.js'
 import { HTTPException } from 'hono/http-exception'

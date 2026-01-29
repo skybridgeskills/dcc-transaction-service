@@ -1,4 +1,3 @@
-import { expect, test, describe, vi } from 'vitest'
 import { GET } from './+server.js'
 import {
   createRequestEvent,

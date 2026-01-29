@@ -1,4 +1,3 @@
-import { describe, test, expect } from 'vitest'
 import { MemoryKeyValueStoreService } from './memory-key-value-store-service.js'
 
 describe('MemoryKeyValueStoreService', () => {

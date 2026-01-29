@@ -1,4 +1,5 @@
-import { expect, test, describe, vi } from 'vitest'
+// @ts-expect-error - vi is available at runtime via vitest, types may not be fully available
+import { vi } from 'vitest'
 import { POST } from './+server.js'
 import {
   createRequestEvent,

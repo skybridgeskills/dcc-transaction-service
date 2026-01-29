@@ -12,7 +12,8 @@
     "resolveJsonModule": true,
     "allowJs": true,
     "checkJs": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["vitest/globals"]
   },
   "include": [
     ".storybook/**/*.d.ts",

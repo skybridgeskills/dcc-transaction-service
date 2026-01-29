@@ -48,10 +48,13 @@ export async function GET() {
 
     // Handle HTTPException from exchange-manager (used by both Hono and SvelteKit)
     if (e instanceof HTTPException) {
-      error(e.status, {
-        message: e.message,
-        healthy: false
-      })
+      return json(
+        {
+          message: e.message,
+          healthy: false
+        },
+        { status: e.status }
+      )
     }
 
     return json(

@@ -1,4 +1,3 @@
-import { expect, test, describe } from 'vitest'
 import {
 	generateDeepLinkUrl,
 	generateQRCodeDataUrl,

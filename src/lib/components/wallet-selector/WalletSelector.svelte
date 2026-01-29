@@ -47,11 +47,13 @@
 	let error = $state<Error | null>(null)
 
 	// Determine device preference
-	const prefersSameDevice = propPrefersSameDevice
-		? true
-		: propPrefersOtherDevice
-			? false
-			: undefined
+	const prefersSameDevice = $derived(
+		propPrefersSameDevice
+			? true
+			: propPrefersOtherDevice
+				? false
+				: undefined
+	)
 
 	async function loadExchangeProtocols() {
 		loading = true

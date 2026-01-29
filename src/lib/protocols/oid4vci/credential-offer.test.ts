@@ -1,4 +1,3 @@
-import { expect, test, describe } from 'vitest'
 import { generateCredentialOffer } from './credential-offer.js'
 import { createMockClaimExchange } from '../../../test-fixtures/testData.js'
 import { getWorkflow } from '../../../workflows.js'
@@ -139,6 +138,7 @@ describe('generateCredentialOffer', function () {
 
     const preAuthGrant =
       offer.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']
-    expect(preAuthGrant['pre-authorized_code']).toBe(providedCode)
+    expect(preAuthGrant).toBeDefined()
+    expect(preAuthGrant!['pre-authorized_code']).toBe(providedCode)
   })
 })

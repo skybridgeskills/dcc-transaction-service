@@ -8,7 +8,11 @@
 
 	let { delay = 100, initialLoading = true }: Props = $props()
 
-	let loadingState = $state(initialLoading)
+	// Initialize state with prop value; component manages its own state after initialization
+	let loadingState = $state(false)
+	$effect(() => {
+		loadingState = initialLoading
+	})
 
 	function toggleLoading() {
 		loadingState = !loadingState

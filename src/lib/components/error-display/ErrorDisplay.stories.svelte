@@ -6,7 +6,6 @@
 
 	const { Story } = defineMeta({
 		title: 'Components/ErrorDisplay',
-		tags: ['autodocs'],
 		argTypes: {
 			exchangeState: {
 				control: 'select',

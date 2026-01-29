@@ -9,10 +9,14 @@
 	let { delay = 250, loading = true }: Props = $props()
 
 	let show = $state(false)
+	let timeoutId: ReturnType<typeof setTimeout> | null = null
 
 	$effect(() => {
 		// Store timeoutId in closure to avoid reactivity tracking
-		let timeoutId: ReturnType<typeof setTimeout> | null = null
+		if(timeoutId) {
+			clearTimeout(timeoutId)
+			timeoutId = null
+		}
 
 		// Reset show state when loading changes
 		if (!loading) {

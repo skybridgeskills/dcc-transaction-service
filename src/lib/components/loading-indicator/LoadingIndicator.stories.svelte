@@ -3,10 +3,10 @@
 	import { expect, within, waitFor } from 'storybook/test'
 
 	import LoadingIndicator from './LoadingIndicator.svelte'
+	import LoadingIndicatorWrapper from './LoadingIndicatorWrapper.svelte'
 
 	const { Story } = defineMeta({
 		title: 'Components/LoadingIndicator',
-		tags: ['autodocs'],
 		argTypes: {
 			loading: {
 				control: 'boolean',
@@ -74,7 +74,7 @@
 
 <Story
 	name="LoadingThenStopped"
-	play={async ({ canvasElement, args }) => {
+	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		// Wait for indicator to appear
 		await waitFor(
@@ -82,17 +82,18 @@
 				const indicator = canvas.getByRole('status', { name: /loading/i })
 				expect(indicator).toBeInTheDocument()
 			},
-			{ timeout: 300 }
+			{ timeout: 250 }
 		)
 
-		// Stop loading
-		args.loading = false
-		await new Promise((resolve) => setTimeout(resolve, 50))
+		// Stop loading by clicking the trigger element
+		const trigger = canvas.getByTestId('loading-trigger')
+		trigger.click()
+		await new Promise((resolve) => setTimeout(resolve, 2500))
 
 		// Indicator should disappear
 		const indicator = canvas.queryByRole('status', { name: /loading/i })
 		expect(indicator).not.toBeInTheDocument()
 	}}
 >
-	<LoadingIndicator loading={true} delay={100} />
+	<LoadingIndicatorWrapper initialLoading={true} delay={25} />
 </Story>

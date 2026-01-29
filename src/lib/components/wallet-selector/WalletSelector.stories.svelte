@@ -12,7 +12,6 @@
 
 	const { Story } = defineMeta({
 		title: 'Components/WalletSelector',
-		tags: ['autodocs'],
 		argTypes: {
 			exchangeId: {
 				control: 'text',
@@ -89,27 +88,48 @@
 	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		
-		// Wait for wallets to load
+		// Wait for wallets to load (title appears when wallets are ready)
 		await waitFor(
 			() => {
-				const walletCards = canvas.getAllByTestId(/^wallet-/)
-				expect(walletCards.length).toBeGreaterThan(0)
+				const title = canvas.getByText(/select a wallet/i)
+				expect(title).toBeInTheDocument()
 			},
 			{ timeout: 2000 }
 		)
 
-		// Click on a wallet (prefer one that supports cross-device)
-		const walletButton = canvas.getByTestId('wallet-learncard')
+		// Click on a wallet (prefer one that supports cross-device) - wait for specific wallet
+		const walletButton = await waitFor(
+			() => {
+				const button = canvas.getByTestId('wallet-learncard')
+				expect(button).toBeInTheDocument()
+				return button
+			},
+			{ timeout: 2000 }
+		)
 		await userEvent.click(walletButton)
 
-		// Wait for QR code to appear
+		// Wait for wallet selection to complete (back button appears)
 		await waitFor(
 			() => {
-				const qrCode = canvas.getByTestId('qr-code')
-				expect(qrCode).toBeInTheDocument()
+				const backButton = canvas.getByTestId('back-button')
+				expect(backButton).toBeInTheDocument()
+			},
+			{ timeout: 2000 }
+		)
+
+		// Wait for invocation result to appear (loading completed)
+		await waitFor(
+			() => {
+				const qrCode = canvas.queryByTestId('qr-code')
+				const deepLink = canvas.queryByTestId('deep-link-button')
+				expect(qrCode || deepLink).toBeInTheDocument()
 			},
 			{ timeout: 3000 }
 		)
+
+		// Verify it's specifically a QR code (cross-device)
+		const qrCode = canvas.getByTestId('qr-code')
+		expect(qrCode).toBeInTheDocument()
 
 		// Verify instruction text
 		const instruction = canvas.getByText(/scan this qr code/i)
@@ -129,17 +149,24 @@
 	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		
-		// Wait for wallets to load
+		// Wait for wallets to load (title appears when wallets are ready)
 		await waitFor(
 			() => {
-				const walletCards = canvas.getAllByTestId(/^wallet-/)
-				expect(walletCards.length).toBeGreaterThan(0)
+				const title = canvas.getByText(/select a wallet/i)
+				expect(title).toBeInTheDocument()
 			},
 			{ timeout: 2000 }
 		)
 
-		// Click on a wallet that prefers same device
-		const walletButton = canvas.getByTestId('wallet-asu-pocket')
+		// Click on a wallet that prefers same device - wait for specific wallet
+		const walletButton = await waitFor(
+			() => {
+				const button = canvas.getByTestId('wallet-asu-pocket')
+				expect(button).toBeInTheDocument()
+				return button
+			},
+			{ timeout: 2000 }
+		)
 		await userEvent.click(walletButton)
 
 		// Wait for deep link button to appear
@@ -169,17 +196,24 @@
 	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		
-		// Wait for wallets to load
+		// Wait for wallets to load (title appears when wallets are ready)
 		await waitFor(
 			() => {
-				const walletCards = canvas.getAllByTestId(/^wallet-/)
-				expect(walletCards.length).toBeGreaterThan(0)
+				const title = canvas.getByText(/select a wallet/i)
+				expect(title).toBeInTheDocument()
 			},
 			{ timeout: 2000 }
 		)
 
-		// Click on a wallet that supports multiple protocols
-		const walletButton = canvas.getByTestId('wallet-asu-pocket')
+		// Click on a wallet that supports multiple protocols - wait for specific wallet
+		const walletButton = await waitFor(
+			() => {
+				const button = canvas.getByTestId('wallet-asu-pocket')
+				expect(button).toBeInTheDocument()
+				return button
+			},
+			{ timeout: 2000 }
+		)
 		await userEvent.click(walletButton)
 
 		// Wait for wallet selection to complete
@@ -229,17 +263,24 @@
 	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		
-		// Wait for wallets to load
+		// Wait for wallets to load (title appears when wallets are ready)
 		await waitFor(
 			() => {
-				const walletCards = canvas.getAllByTestId(/^wallet-/)
-				expect(walletCards.length).toBeGreaterThan(0)
+				const title = canvas.getByText(/select a wallet/i)
+				expect(title).toBeInTheDocument()
 			},
 			{ timeout: 2000 }
 		)
 
-		// Verify exchange should show OID4VP compatible wallets
-		const walletButton = canvas.getByTestId('wallet-learncard')
+		// Verify exchange should show OID4VP compatible wallets - wait for specific wallet
+		const walletButton = await waitFor(
+			() => {
+				const button = canvas.getByTestId('wallet-learncard')
+				expect(button).toBeInTheDocument()
+				return button
+			},
+			{ timeout: 2000 }
+		)
 		await userEvent.click(walletButton)
 
 		// Wait for QR code or deep link to appear
@@ -265,17 +306,24 @@
 	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		
-		// Wait for wallets to load
+		// Wait for wallets to load (title appears when wallets are ready)
 		await waitFor(
 			() => {
-				const walletCards = canvas.getAllByTestId(/^wallet-/)
-				expect(walletCards.length).toBeGreaterThan(0)
+				const title = canvas.getByText(/select a wallet/i)
+				expect(title).toBeInTheDocument()
 			},
 			{ timeout: 2000 }
 		)
 
-		// Select a wallet
-		const walletButton = canvas.getByTestId('wallet-learncard')
+		// Select a wallet - wait for the specific wallet to appear
+		const walletButton = await waitFor(
+			() => {
+				const button = canvas.getByTestId('wallet-learncard')
+				expect(button).toBeInTheDocument()
+				return button
+			},
+			{ timeout: 2000 }
+		)
 		await userEvent.click(walletButton)
 
 		// Wait for selection to complete

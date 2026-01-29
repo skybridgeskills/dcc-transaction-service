@@ -10,7 +10,10 @@
 
 	let { exchangeState, error, message }: Props = $props()
 
-	function getErrorMessage(): string {
+	function getErrorMessage(
+		message?: string,
+		error?: Error | { message?: string; status?: number },
+		exchangeState?: App.ExchangeState): string {
 		// Exchange invalid state
 		if (exchangeState === 'invalid') {
 			return 'This exchange is no longer valid. Please start a new exchange.'
@@ -41,20 +44,21 @@
 			}
 		}
 
-		// Error object with message
-		if (error && typeof error === 'object' && 'message' in error) {
+		// Error instance
+		if (error instanceof Error) {
+			const errorMessageLower = error.message.toLowerCase()
+			// Network/timeout errors
+			if (errorMessageLower.includes('network') || errorMessageLower.includes('fetch')) {
+				return 'Network error. Please check your connection and try again.'
+			}
+			if (errorMessageLower.includes('timeout')) {
+				return 'Request timed out. Please try again.'
+			}
 			return error.message || 'An error occurred'
 		}
 
-		// Error instance
-		if (error instanceof Error) {
-			// Network/timeout errors
-			if (error.message.includes('network') || error.message.includes('fetch')) {
-				return 'Network error. Please check your connection and try again.'
-			}
-			if (error.message.includes('timeout')) {
-				return 'Request timed out. Please try again.'
-			}
+		// Error object with message
+		if (error && typeof error === 'object' && 'message' in error) {
 			return error.message || 'An error occurred'
 		}
 
@@ -62,7 +66,7 @@
 		return 'An unexpected error occurred. Please try again.'
 	}
 
-	const displayMessage = $derived(getErrorMessage())
+	const displayMessage = $derived(getErrorMessage(message, error, exchangeState))
 </script>
 
 <div class="error-display" role="alert">

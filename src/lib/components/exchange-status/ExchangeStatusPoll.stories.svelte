@@ -10,7 +10,6 @@
 
 	const { Story } = defineMeta({
 		title: 'Components/ExchangeStatusPoll',
-		tags: ['autodocs'],
 		argTypes: {
 			exchangeId: {
 				control: 'text',

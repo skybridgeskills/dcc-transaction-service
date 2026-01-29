@@ -24,7 +24,7 @@
 		expect(preview).toBeInTheDocument()
 
 		const typeTag = canvas.getByTestId('credential-type-tag')
-		expect(typeTag).toHaveTextContent('OPEN BADGE')
+		expect(typeTag).toHaveTextContent('Open Badge')
 
 		const openBadge = canvas.getByTestId('open-badge')
 		expect(openBadge).toBeInTheDocument()
@@ -62,7 +62,7 @@
 		expect(preview).toBeInTheDocument()
 
 		const typeTag = canvas.getByTestId('credential-type-tag')
-		expect(typeTag).toHaveTextContent('UNKNOWN')
+		expect(typeTag).toHaveTextContent('Unknown')
 
 		const unsupported = canvas.getByTestId('unsupported-credential')
 		expect(unsupported).toBeInTheDocument()
@@ -90,7 +90,7 @@
 		expect(preview).toBeInTheDocument()
 
 		const typeTag = canvas.getByTestId('credential-type-tag')
-		expect(typeTag).toHaveTextContent('UNKNOWN')
+		expect(typeTag).toHaveTextContent('Unknown')
 
 		const unsupported = canvas.getByTestId('unsupported-credential')
 		expect(unsupported).toBeInTheDocument()

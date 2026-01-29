@@ -40,8 +40,10 @@ export function getAvailableProtocolsFromExchange(protocols: {
   const available: AvailableProtocol[] = []
 
   // OID4VP is available if verifiablePresentationRequest exists
+  // Use vcapi URL (service endpoint) for OID4VP if available, otherwise use iu URL
   if (protocols.verifiablePresentationRequest) {
-    available.push({ type: 'OID4VP' })
+    const oid4vpUrl = protocols.vcapi || protocols.iu
+    available.push({ type: 'OID4VP', url: oid4vpUrl })
   }
 
   // OID4VCI is available if OID4VCI URL exists

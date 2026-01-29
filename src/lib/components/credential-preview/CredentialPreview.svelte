@@ -12,8 +12,8 @@
 
 	let { credential }: Props = $props()
 
-	$: credentialType = detectCredentialType(credential)
-	$: displayName = getCredentialDisplayName(credential)
+	const credentialType = $derived(detectCredentialType(credential))
+	const displayName = $derived(getCredentialDisplayName(credential))
 </script>
 
 <div class="credential-preview" data-testid="credential-preview">

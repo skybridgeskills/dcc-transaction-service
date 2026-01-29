@@ -6,7 +6,6 @@
 
 	const { Story } = defineMeta({
 		title: 'Components/CredentialPreview',
-		tags: ['autodocs'],
 		argTypes: {
 			credential: {
 				control: 'object',
@@ -42,7 +41,7 @@
 		expect(preview).toBeInTheDocument()
 
 		const typeTag = canvas.getByTestId('credential-type-tag')
-		expect(typeTag).toHaveTextContent('OPEN BADGE')
+		expect(typeTag).toHaveTextContent('Open Badge')
 
 		const openBadge = canvas.getByTestId('open-badge')
 		expect(openBadge).toBeInTheDocument()
@@ -108,7 +107,7 @@
 		expect(preview).toBeInTheDocument()
 
 		const typeTag = canvas.getByTestId('credential-type-tag')
-		expect(typeTag).toHaveTextContent('OPEN BADGE')
+		expect(typeTag).toHaveTextContent('Open Badge')
 
 		const openBadge = canvas.getByTestId('open-badge')
 		expect(openBadge).toBeInTheDocument()

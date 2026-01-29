@@ -6,49 +6,55 @@
 	let { credential }: Props = $props()
 
 	// Parse credential if it's a string
-	$: parsedCredential = (() => {
+	const parsedCredential = $derived.by(() => {
 		try {
 			return typeof credential === 'string' ? JSON.parse(credential) : credential
 		} catch {
 			return credential
 		}
-	})()
+	})
 
 	// Extract badge data
-	$: badgeName =
+	const badgeName = $derived(
 		parsedCredential?.name ||
-		parsedCredential?.credentialSubject?.achievement?.name ||
-		'Untitled Badge'
+			parsedCredential?.credentialSubject?.achievement?.name ||
+			'Untitled Badge'
+	)
 
-	$: badgeDescription =
+	const badgeDescription = $derived(
 		parsedCredential?.credentialSubject?.achievement?.description ||
-		parsedCredential?.credentialSubject?.achievement?.criteria?.narrative ||
-		''
+			parsedCredential?.credentialSubject?.achievement?.criteria?.narrative ||
+			''
+	)
 
-	$: issuerName =
+	const issuerName = $derived(
 		typeof parsedCredential?.issuer === 'object'
 			? parsedCredential.issuer.name || parsedCredential.issuer.id
 			: parsedCredential?.issuer || 'Unknown Issuer'
+	)
 
-	$: issuerImage =
+	const issuerImage = $derived(
 		typeof parsedCredential?.issuer === 'object' &&
-		parsedCredential.issuer.image
+			parsedCredential.issuer.image
 			? typeof parsedCredential.issuer.image === 'string'
 				? parsedCredential.issuer.image
 				: parsedCredential.issuer.image.id
 			: null
+	)
 
-	$: badgeImage =
+	const badgeImage = $derived(
 		parsedCredential?.credentialSubject?.achievement?.image ||
-		parsedCredential?.image ||
-		null
+			parsedCredential?.image ||
+			null
+	)
 
-	$: badgeImageUrl =
+	const badgeImageUrl = $derived(
 		badgeImage
 			? typeof badgeImage === 'string'
 				? badgeImage
 				: badgeImage.id || badgeImage.url
 			: null
+	)
 </script>
 
 <div class="open-badge" data-testid="open-badge">

@@ -6,7 +6,6 @@
 
 	const { Story } = defineMeta({
 		title: 'Credentials/OpenBadge',
-		tags: ['autodocs'],
 		argTypes: {
 			credential: {
 				control: 'object',

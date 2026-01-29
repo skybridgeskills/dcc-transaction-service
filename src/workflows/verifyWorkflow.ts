@@ -359,6 +359,17 @@ export const participateInVerifyExchange = async ({
   // Validate and type the presentation using Zod schema
   const validatedPresentation = verifiablePresentationSchema.parse(presentation)
 
+  // Normalize type field: verifier-core expects string, but Zod schema allows string | string[]
+  // TODO: This is a workaround for verifier-core type deficiency - it should accept string[]
+  const normalizedType: string = Array.isArray(validatedPresentation.type)
+    ? validatedPresentation.type[0]
+    : validatedPresentation.type
+  // Create normalized presentation with explicit type annotation to satisfy TypeScript
+  const normalizedPresentation = {
+    ...validatedPresentation,
+    type: normalizedType
+  } as unknown as VerifiablePresentation
+
   // Determine which registries to use
   const knownDIDRegistries =
     exchange.variables.trustedRegistries &&
@@ -367,8 +378,11 @@ export const participateInVerifyExchange = async ({
       : config.defaultTrustedRegistries
 
   // Verify presentation using verifier-core
+  // Type mismatch: Zod schema allows type: string | string[], but verifier-core expects string.
+  // We normalize the type field above, but TypeScript can't infer this from the spread operation.
   const result = await verifyPresentation({
-    presentation: validatedPresentation as VerifiablePresentation,
+    // @ts-expect-error - Type mismatch resolved at runtime via normalization above (line 364-371)
+    presentation: normalizedPresentation,
     challenge: exchange.variables.challenge,
     knownDIDRegistries,
     reloadIssuerRegistry: true

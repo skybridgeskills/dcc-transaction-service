@@ -16,5 +16,12 @@ export default [
     languageOptions: { globals: globals.node }
   },
   pluginJs.configs.recommended,
-  eslintConfigPrettier
+  eslintConfigPrettier,
+  {
+    // Disable naming convention rule for shadcn-svelte components
+    files: ['src/lib/components/ui/**/*.svelte'],
+    rules: {
+      '@typescript-eslint/naming-convention': 'off'
+    }
+  }
 ]

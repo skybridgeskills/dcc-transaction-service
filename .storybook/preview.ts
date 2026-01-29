@@ -1,4 +1,42 @@
-import type { Preview } from '@storybook/sveltekit'
+import '../src/routes/layout.css';
+import type { Preview } from '@storybook/sveltekit';
+
+// Initialize dark mode based on system preference
+function initializeDarkMode() {
+	if (typeof window === 'undefined') return;
+
+	const theme = localStorage.getItem('theme') || 'system';
+	const html = document.documentElement;
+
+	if (theme === 'system') {
+		const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+			? 'dark'
+			: 'light';
+		if (systemTheme === 'dark') {
+			html.classList.add('dark');
+		} else {
+			html.classList.remove('dark');
+		}
+	} else if (theme === 'dark') {
+		html.classList.add('dark');
+	} else {
+		html.classList.remove('dark');
+	}
+}
+
+// Set theme immediately to prevent flash
+if (typeof window !== 'undefined') {
+	initializeDarkMode();
+
+	// Listen for system preference changes
+	const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+	mediaQuery.addEventListener('change', () => {
+		const theme = localStorage.getItem('theme') || 'system';
+		if (theme === 'system') {
+			initializeDarkMode();
+		}
+	});
+}
 
 const preview: Preview = {
 	decorators: [],
@@ -16,6 +54,6 @@ const preview: Preview = {
 			test: 'todo'
 		}
 	}
-}
+};
 
-export default preview
+export default preview;

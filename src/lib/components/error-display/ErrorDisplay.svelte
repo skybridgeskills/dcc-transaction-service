@@ -69,32 +69,10 @@
 	const displayMessage = $derived(getErrorMessage(message, error, exchangeState))
 </script>
 
-<div class="error-display" role="alert">
-	<div class="error-icon">⚠️</div>
-	<div class="error-message">{displayMessage}</div>
+<div
+	class="flex items-start gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-destructive dark:bg-destructive/20 dark:text-destructive"
+	role="alert"
+>
+	<div class="flex-shrink-0 text-xl leading-none">⚠️</div>
+	<div class="flex-1 text-sm leading-relaxed">{displayMessage}</div>
 </div>
-
-<style>
-	.error-display {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-		padding: 1rem;
-		background-color: #fef2f2;
-		border: 1px solid #fecaca;
-		border-radius: 0.375rem;
-		color: #991b1b;
-	}
-
-	.error-icon {
-		font-size: 1.25rem;
-		line-height: 1;
-		flex-shrink: 0;
-	}
-
-	.error-message {
-		flex: 1;
-		font-size: 0.875rem;
-		line-height: 1.5;
-	}
-</style>

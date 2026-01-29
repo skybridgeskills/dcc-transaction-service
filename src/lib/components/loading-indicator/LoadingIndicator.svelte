@@ -41,35 +41,13 @@
 
 {#if show && loading}
 	<div
-		class="loading-indicator"
+		class="inline-flex items-center justify-center p-2"
 		role="status"
 		aria-live="polite"
 		aria-label="Loading"
 	>
-		<div class="spinner"></div>
+		<div
+			class="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-primary"
+		></div>
 	</div>
 {/if}
-
-<style>
-	.loading-indicator {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.5rem;
-	}
-
-	.spinner {
-		width: 1rem;
-		height: 1rem;
-		border: 2px solid #e5e7eb;
-		border-top-color: #3b82f6;
-		border-radius: 50%;
-		animation: spin 0.6s linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-</style>

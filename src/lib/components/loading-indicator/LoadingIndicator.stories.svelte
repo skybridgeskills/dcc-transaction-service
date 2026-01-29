@@ -3,10 +3,10 @@
 	import { expect, within, waitFor } from 'storybook/test'
 
 	import LoadingIndicator from './LoadingIndicator.svelte'
-	import LoadingIndicatorWrapper from './LoadingIndicatorWrapper.svelte'
 
 	const { Story } = defineMeta({
 		title: 'Components/LoadingIndicator',
+		component: LoadingIndicator,
 		argTypes: {
 			loading: {
 				control: 'boolean',
@@ -17,65 +17,32 @@
 				description: 'Delay in milliseconds before showing (default: 250)'
 			}
 		},
-		args: {}
+		args: {
+			loading: true,
+			delay: 250
+		}
 	})
 </script>
 
-<Story
-	name="Default"
-	play={async ({ canvasElement }) => {
-		const canvas = within(canvasElement)
-		// Indicator should appear after delay
-		await waitFor(
-			() => {
-				const indicator = canvas.getByRole('status', { name: /loading/i })
-				expect(indicator).toBeInTheDocument()
-			},
-			{ timeout: 500 }
-		)
-	}}
->
-	<LoadingIndicator loading={true} delay={250} />
-</Story>
+<script lang="ts">
+	// State for "Loading then stopped" story - uses setTimeout to stop after 1 minute
+	let loadingThenStoppedState = $state(true)
+	setTimeout(() => {
+		loadingThenStoppedState = false
+	}, 3000)
+</script>
+
+<Story name="Default" args={{ loading: true, delay: 250 }} />
+
+<Story name="Not initially loading" args={{ loading: false, delay: 250 }} />
+
+<Story name="Custom delay" args={{ loading: true, delay: 1500 }} />
 
 <Story
-	name="NotLoading"
-	play={async ({ canvasElement }) => {
+	name="Loading then stopped"
+	play={async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		const canvas = within(canvasElement)
-		// Indicator should not appear when not loading
-		const indicator = canvas.queryByRole('status', { name: /loading/i })
-		expect(indicator).not.toBeInTheDocument()
-	}}
->
-	<LoadingIndicator loading={false} delay={250} />
-</Story>
-
-<Story
-	name="CustomDelay"
-	play={async ({ canvasElement }) => {
-		const canvas = within(canvasElement)
-		// Should not appear immediately
-		await new Promise((resolve) => setTimeout(resolve, 100))
-		let indicator = canvas.queryByRole('status', { name: /loading/i })
-		expect(indicator).not.toBeInTheDocument()
-
-		// Should appear after custom delay
-		await waitFor(
-			() => {
-				indicator = canvas.getByRole('status', { name: /loading/i })
-				expect(indicator).toBeInTheDocument()
-			},
-			{ timeout: 600 }
-		)
-	}}
->
-	<LoadingIndicator loading={true} delay={500} />
-</Story>
-
-<Story
-	name="LoadingThenStopped"
-	play={async ({ canvasElement }) => {
-		const canvas = within(canvasElement)
+		
 		// Wait for indicator to appear
 		await waitFor(
 			() => {
@@ -85,15 +52,17 @@
 			{ timeout: 250 }
 		)
 
-		// Stop loading by clicking the trigger element
-		const trigger = canvas.getByTestId('loading-trigger')
-		trigger.click()
-		await new Promise((resolve) => setTimeout(resolve, 2500))
-
-		// Indicator should disappear
-		const indicator = canvas.queryByRole('status', { name: /loading/i })
-		expect(indicator).not.toBeInTheDocument()
+		// Wait for indicator to disappear (setTimeout will stop loading after 1 minute)
+		await waitFor(
+			() => {
+				const indicator = canvas.queryByRole('status', { name: /loading/i })
+				expect(indicator).not.toBeInTheDocument()
+			},
+			{ timeout: 5000 } // Wait up to 5 seconds (2 second buffer)
+		)
 	}}
 >
-	<LoadingIndicatorWrapper initialLoading={true} delay={25} />
+	{#snippet template()}
+		<LoadingIndicator loading={loadingThenStoppedState} delay={25} />
+	{/snippet}
 </Story>

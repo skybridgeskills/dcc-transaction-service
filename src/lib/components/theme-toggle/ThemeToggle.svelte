@@ -5,6 +5,13 @@
 
 	type Theme = 'light' | 'dark' | 'system';
 
+	interface Props {
+		/** localStorage key to use for theme storage (default: 'theme') */
+		storageKey?: string
+	}
+
+	let { storageKey = 'theme' }: Props = $props()
+
 	let currentTheme = $state<Theme>('system');
 	let resolvedTheme = $state<'light' | 'dark'>('light');
 
@@ -27,7 +34,7 @@
 	function setTheme(theme: Theme) {
 		currentTheme = theme;
 		if (typeof window !== 'undefined') {
-			localStorage.setItem('theme', theme);
+			localStorage.setItem(storageKey, theme);
 		}
 
 		if (theme === 'system') {
@@ -39,19 +46,17 @@
 	}
 
 	function toggleTheme() {
-		if (currentTheme === 'light') {
-			setTheme('dark');
-		} else if (currentTheme === 'dark') {
-			setTheme('system');
-		} else {
+		if (resolvedTheme === 'dark') {
 			setTheme('light');
+		} else {
+			setTheme('dark');
 		}
 	}
 
 	onMount(() => {
 		// Load saved theme or default to system
 		const savedTheme = (
-			typeof window !== 'undefined' ? localStorage.getItem('theme') : null
+			typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
 		) as Theme | null;
 
 		const initialTheme: Theme = savedTheme || 'system';

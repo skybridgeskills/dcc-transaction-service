@@ -98,15 +98,25 @@
 		)
 
 		// Click on a wallet (prefer one that supports cross-device) - wait for specific wallet
-		const walletButton = await waitFor(
+		const walletCard = await waitFor(
 			() => {
-				const button = canvas.getByTestId('wallet-learncard')
-				expect(button).toBeInTheDocument()
-				return button
+				const card = canvas.getByTestId('wallet-learncard')
+				expect(card).toBeInTheDocument()
+				return card
 			},
 			{ timeout: 2000 }
 		)
+		const walletButton = within(walletCard).getByRole('button')
 		await userEvent.click(walletButton)
+
+		// Wait for loading to complete (indicates async operation finished)
+		await waitFor(
+			() => {
+				const loadingIndicator = canvasElement.querySelector('[role="status"]')
+				expect(loadingIndicator).not.toBeInTheDocument()
+			},
+			{ timeout: 3000 }
+		)
 
 		// Wait for wallet selection to complete (back button appears)
 		await waitFor(
@@ -159,14 +169,15 @@
 		)
 
 		// Click on a wallet that prefers same device - wait for specific wallet
-		const walletButton = await waitFor(
+		const walletCard = await waitFor(
 			() => {
-				const button = canvas.getByTestId('wallet-asu-pocket')
-				expect(button).toBeInTheDocument()
-				return button
+				const card = canvas.getByTestId('wallet-asu-pocket')
+				expect(card).toBeInTheDocument()
+				return card
 			},
 			{ timeout: 2000 }
 		)
+		const walletButton = within(walletCard).getByRole('button')
 		await userEvent.click(walletButton)
 
 		// Wait for deep link button to appear
@@ -206,23 +217,33 @@
 		)
 
 		// Click on a wallet that supports multiple protocols - wait for specific wallet
-		const walletButton = await waitFor(
+		const walletCard = await waitFor(
 			() => {
-				const button = canvas.getByTestId('wallet-asu-pocket')
-				expect(button).toBeInTheDocument()
-				return button
+				const card = canvas.getByTestId('wallet-asu-pocket')
+				expect(card).toBeInTheDocument()
+				return card
 			},
 			{ timeout: 2000 }
 		)
+		const walletButton = within(walletCard).getByRole('button')
 		await userEvent.click(walletButton)
 
-		// Wait for wallet selection to complete
+		// Wait for loading to complete (indicates async operation finished)
+		await waitFor(
+			() => {
+				const loadingIndicator = canvasElement.querySelector('[role="status"]')
+				expect(loadingIndicator).not.toBeInTheDocument()
+			},
+			{ timeout: 3000 }
+		)
+
+		// Wait for wallet selection to complete (back button appears)
 		await waitFor(
 			() => {
 				const backButton = canvas.getByTestId('back-button')
 				expect(backButton).toBeInTheDocument()
 			},
-			{ timeout: 3000 }
+			{ timeout: 2000 }
 		)
 
 		// Toggle advanced protocol selection
@@ -273,14 +294,15 @@
 		)
 
 		// Verify exchange should show OID4VP compatible wallets - wait for specific wallet
-		const walletButton = await waitFor(
+		const walletCard = await waitFor(
 			() => {
-				const button = canvas.getByTestId('wallet-learncard')
-				expect(button).toBeInTheDocument()
-				return button
+				const card = canvas.getByTestId('wallet-learncard')
+				expect(card).toBeInTheDocument()
+				return card
 			},
 			{ timeout: 2000 }
 		)
+		const walletButton = within(walletCard).getByRole('button')
 		await userEvent.click(walletButton)
 
 		// Wait for QR code or deep link to appear
@@ -316,23 +338,33 @@
 		)
 
 		// Select a wallet - wait for the specific wallet to appear
-		const walletButton = await waitFor(
+		const walletCard = await waitFor(
 			() => {
-				const button = canvas.getByTestId('wallet-learncard')
-				expect(button).toBeInTheDocument()
-				return button
+				const card = canvas.getByTestId('wallet-learncard')
+				expect(card).toBeInTheDocument()
+				return card
 			},
 			{ timeout: 2000 }
 		)
+		const walletButton = within(walletCard).getByRole('button')
 		await userEvent.click(walletButton)
 
-		// Wait for selection to complete
+		// Wait for loading to complete (indicates async operation finished)
+		await waitFor(
+			() => {
+				const loadingIndicator = canvasElement.querySelector('[role="status"]')
+				expect(loadingIndicator).not.toBeInTheDocument()
+			},
+			{ timeout: 3000 }
+		)
+
+		// Wait for selection to complete (back button appears)
 		await waitFor(
 			() => {
 				const backButton = canvas.getByTestId('back-button')
 				expect(backButton).toBeInTheDocument()
 			},
-			{ timeout: 3000 }
+			{ timeout: 2000 }
 		)
 
 		// Click back button

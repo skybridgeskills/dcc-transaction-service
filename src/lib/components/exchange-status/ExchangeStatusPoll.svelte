@@ -2,6 +2,9 @@
 	import type { ExchangeService } from '../../services/exchange-service.js'
 	import LoadingIndicator from '../loading-indicator/LoadingIndicator.svelte'
 	import ErrorDisplay from '../error-display/ErrorDisplay.svelte'
+	import { Badge } from '$lib/components/ui/badge/index.js'
+	import { Button } from '$lib/components/ui/button/index.js'
+	import { Card, CardContent } from '$lib/components/ui/card/index.js'
 
 	interface Props {
 		/** Exchange ID to poll */
@@ -119,28 +122,42 @@
 	})
 </script>
 
-<div class="exchange-status-poll">
+<div class="flex flex-col gap-4 p-4">
 	{#if error}
 		<ErrorDisplay {error} />
 	{:else if exchange}
-		<div class="status-info">
-			<div class="status-badge status-{exchange.state}">
+		<div class="flex items-center gap-4">
+			<Badge
+				class={
+					exchange.state === 'pending'
+						? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+						: exchange.state === 'active'
+							? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+							: exchange.state === 'complete'
+								? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+								: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+				}
+			>
 				Status: {exchange.state}
-			</div>
-			<div class="poll-count">
+			</Badge>
+			<div class="text-sm text-muted-foreground">
 				Checks: {statusCheckCount} / {maxPolls}
 			</div>
 		</div>
 
 		{#if isPaused}
-			<div class="paused-state">
-				<p>Polling paused after {maxPolls} checks.</p>
-				<button type="button" onclick={resumePolling} class="resume-button">
-					▶ Resume Polling
-				</button>
-			</div>
+			<Card class="p-4">
+				<div class="flex flex-col gap-2">
+					<p class="m-0 text-sm text-muted-foreground">Polling paused after {maxPolls} checks.</p>
+					<Button type="button" onclick={resumePolling} size="sm" class="self-start">
+						▶ Resume Polling
+					</Button>
+				</div>
+			</Card>
 		{:else if exchange.state === 'complete'}
-			<div class="complete-message">✓ Exchange completed successfully</div>
+			<div class="rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-300">
+				✓ Exchange completed successfully
+			</div>
 		{:else if exchange.state === 'invalid'}
 			<ErrorDisplay exchangeState="invalid" />
 		{/if}
@@ -150,92 +167,3 @@
 		<LoadingIndicator loading={true} delay={0} />
 	{/if}
 </div>
-
-<style>
-	.exchange-status-poll {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		padding: 1rem;
-	}
-
-	.status-info {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.status-badge {
-		padding: 0.25rem 0.75rem;
-		border-radius: 0.375rem;
-		font-size: 0.875rem;
-		font-weight: 500;
-	}
-
-	.status-pending {
-		background-color: #fef3c7;
-		color: #92400e;
-	}
-
-	.status-active {
-		background-color: #dbeafe;
-		color: #1e40af;
-	}
-
-	.status-complete {
-		background-color: #d1fae5;
-		color: #065f46;
-	}
-
-	.status-invalid {
-		background-color: #fee2e2;
-		color: #991b1b;
-	}
-
-	.poll-count {
-		font-size: 0.875rem;
-		color: #6b7280;
-	}
-
-	.paused-state {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		padding: 1rem;
-		background-color: #f9fafb;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.375rem;
-	}
-
-	.paused-state p {
-		margin: 0;
-		font-size: 0.875rem;
-		color: #6b7280;
-	}
-
-	.resume-button {
-		align-self: flex-start;
-		padding: 0.5rem 1rem;
-		background-color: #3b82f6;
-		color: white;
-		border: none;
-		border-radius: 0.375rem;
-		font-size: 0.875rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: background-color 0.2s;
-	}
-
-	.resume-button:hover {
-		background-color: #2563eb;
-	}
-
-	.complete-message {
-		padding: 0.75rem;
-		background-color: #d1fae5;
-		color: #065f46;
-		border-radius: 0.375rem;
-		font-size: 0.875rem;
-		font-weight: 500;
-	}
-</style>

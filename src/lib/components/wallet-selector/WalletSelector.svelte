@@ -11,6 +11,9 @@
 	import { generateInvocation } from '../../wallets/wallet-invocation.js'
 	import LoadingIndicator from '../loading-indicator/LoadingIndicator.svelte'
 	import ErrorDisplay from '../error-display/ErrorDisplay.svelte'
+	import { Button } from '$lib/components/ui/button/index.js'
+	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card/index.js'
+	import { Label } from '$lib/components/ui/label/index.js'
 
 	interface Props {
 		/** Exchange service instance (dependency injection) */
@@ -145,330 +148,135 @@
 	})
 </script>
 
-<div class="wallet-selector">
+<div class="flex flex-col gap-6 p-4">
 	{#if error}
 		<ErrorDisplay {error} />
 	{:else if loading && compatibleWallets.length === 0}
 		<LoadingIndicator loading={true} delay={0} />
 	{:else if compatibleWallets.length === 0}
-		<div class="no-wallets">No compatible wallets found for this exchange.</div>
+		<div class="py-8 text-center text-muted-foreground">No compatible wallets found for this exchange.</div>
 	{:else if !selectedWalletId}
 		<!-- Wallet Selection -->
-		<div class="wallet-list">
-			<h3 class="section-title">Select a Wallet</h3>
-			<div class="wallet-cards">
+		<div class="w-full">
+			<h3 class="mb-4 text-xl font-semibold text-foreground">Select a Wallet</h3>
+			<div class="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4">
 				{#each compatibleWallets as wallet (wallet.id)}
-					<button
-						type="button"
-						class="wallet-card"
-						onclick={() => selectWallet(wallet.id)}
+					<Card
+						class="cursor-pointer transition-all hover:border-primary hover:shadow-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
 						data-testid={`wallet-${wallet.id}`}
 					>
-						<div class="wallet-info">
-							<h4 class="wallet-name">{wallet.name}</h4>
-							<p class="wallet-description">{wallet.description}</p>
-						</div>
-					</button>
+						<button
+							type="button"
+							class="w-full text-left"
+							onclick={() => selectWallet(wallet.id)}
+						>
+							<CardHeader>
+								<CardTitle class="text-lg font-semibold text-foreground">{wallet.name}</CardTitle>
+								<CardDescription class="text-sm text-muted-foreground">{wallet.description}</CardDescription>
+							</CardHeader>
+						</button>
+					</Card>
 				{/each}
 			</div>
 		</div>
 	{:else if walletSelection}
 		<!-- Wallet Selected -->
-		<div class="wallet-selected">
-			<div class="selected-wallet-header">
-				<button
+		<div class="flex flex-col gap-4">
+			<div class="flex items-center gap-4">
+				<Button
+					variant="outline"
+					size="sm"
 					type="button"
-					class="back-button"
 					onclick={resetSelection}
 					data-testid="back-button"
 				>
 					← Back
-				</button>
-				<h3 class="section-title">{walletSelection.wallet.name}</h3>
+				</Button>
+				<h3 class="text-xl font-semibold text-foreground">{walletSelection.wallet.name}</h3>
 			</div>
 
 			{#if shouldShowAdvancedProtocolSelection(
 				walletSelection.wallet,
 				walletSelection.availableProtocols
 			)}
-				<div class="protocol-selection">
-					<label class="protocol-label">
-						<input
-							type="checkbox"
-							bind:checked={showAdvancedProtocols}
-							data-testid="advanced-protocol-toggle"
-						/>
-						Show protocol options
-					</label>
+				<Card class="p-4">
+					<div class="flex flex-col gap-3">
+						<Label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+							<input
+								type="checkbox"
+								bind:checked={showAdvancedProtocols}
+								data-testid="advanced-protocol-toggle"
+								class="h-4 w-4 rounded border-input"
+							/>
+							Show protocol options
+						</Label>
 
-					{#if showAdvancedProtocols}
-						<div class="protocol-options">
-							{#each walletSelection.availableProtocols as protocol}
-								<label class="protocol-option">
-									<input
-										type="radio"
-										name="protocol"
-										value={protocol.type}
-										checked={selectedProtocol === protocol.type}
-										onchange={() => handleProtocolChange(protocol.type)}
-										data-testid={`protocol-${protocol.type}`}
-									/>
-									{protocol.type}
-								</label>
-							{/each}
-						</div>
-					{/if}
-				</div>
+						{#if showAdvancedProtocols}
+							<div class="ml-6 flex flex-col gap-2">
+								{#each walletSelection.availableProtocols as protocol}
+									<Label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+										<input
+											type="radio"
+											name="protocol"
+											value={protocol.type}
+											checked={selectedProtocol === protocol.type}
+											onchange={() => handleProtocolChange(protocol.type)}
+											data-testid={`protocol-${protocol.type}`}
+											class="h-4 w-4 border-input"
+										/>
+										{protocol.type}
+									</Label>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</Card>
 			{/if}
 
 			{#if loading}
 				<LoadingIndicator loading={true} delay={0} />
 			{:else if invocationResult}
-				<div class="invocation-result">
+				<Card class="flex flex-col items-center gap-4 p-8">
 					{#if invocationResult.qrCodeDataUrl}
 						<!-- Cross-device: Show QR Code -->
-						<div class="qr-code-container">
-							<p class="instruction-text">
+						<div class="flex flex-col items-center gap-4">
+							<p class="m-0 text-center text-foreground">
 								Scan this QR code with your wallet to continue:
 							</p>
 							<img
 								src={invocationResult.qrCodeDataUrl}
 								alt="QR Code for wallet invocation"
-								class="qr-code"
+								class="h-[300px] w-[300px] rounded-lg border border-border bg-background p-4"
 								data-testid="qr-code"
 							/>
 						</div>
 					{:else if invocationResult.deepLinkUrl}
 						<!-- Same-device: Show Deep Link Button -->
-						<div class="deep-link-container">
-							<p class="instruction-text">
+						<div class="flex flex-col items-center gap-4">
+							<p class="m-0 text-center text-foreground">
 								Click the button below to open your wallet:
 							</p>
 							<a
 								href={invocationResult.deepLinkUrl}
-								class="deep-link-button"
 								data-testid="deep-link-button"
 							>
-								Open {walletSelection.wallet.name}
+								<Button size="lg">
+									Open {walletSelection.wallet.name}
+								</Button>
 							</a>
 						</div>
 					{:else if invocationResult.url}
 						<!-- Fallback: Show URL -->
-						<div class="url-container">
-							<p class="instruction-text">Use this URL:</p>
-							<code class="url-text" data-testid="url-text">{invocationResult.url}</code>
+						<div class="flex flex-col items-center gap-2">
+							<p class="m-0 text-foreground">Use this URL:</p>
+							<code
+								class="max-w-full break-all rounded-md border border-border bg-background px-4 py-3 font-mono text-sm text-foreground"
+								data-testid="url-text"
+							>{invocationResult.url}</code>
 						</div>
 					{/if}
-				</div>
+				</Card>
 			{/if}
 		</div>
 	{/if}
 </div>
-
-<style>
-	.wallet-selector {
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-		padding: 1rem;
-	}
-
-	.section-title {
-		margin: 0 0 1rem 0;
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: #111827;
-	}
-
-	.wallet-list {
-		width: 100%;
-	}
-
-	.wallet-cards {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-		gap: 1rem;
-	}
-
-	.wallet-card {
-		padding: 1.5rem;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.5rem;
-		background: white;
-		cursor: pointer;
-		text-align: left;
-		transition: all 0.2s;
-	}
-
-	.wallet-card:hover {
-		border-color: #3b82f6;
-		box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-	}
-
-	.wallet-card:focus {
-		outline: 2px solid #3b82f6;
-		outline-offset: 2px;
-	}
-
-	.wallet-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.wallet-name {
-		margin: 0;
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: #111827;
-	}
-
-	.wallet-description {
-		margin: 0;
-		font-size: 0.875rem;
-		color: #6b7280;
-	}
-
-	.wallet-selected {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.selected-wallet-header {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.back-button {
-		padding: 0.5rem 1rem;
-		border: 1px solid #d1d5db;
-		border-radius: 0.375rem;
-		background: white;
-		color: #374151;
-		font-size: 0.875rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.back-button:hover {
-		background: #f9fafb;
-		border-color: #9ca3af;
-	}
-
-	.protocol-selection {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		padding: 1rem;
-		background: #f9fafb;
-		border-radius: 0.5rem;
-	}
-
-	.protocol-label {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.875rem;
-		color: #374151;
-		cursor: pointer;
-	}
-
-	.protocol-options {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		margin-left: 1.5rem;
-	}
-
-	.protocol-option {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.875rem;
-		color: #374151;
-		cursor: pointer;
-	}
-
-	.invocation-result {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
-		padding: 2rem;
-		background: #f9fafb;
-		border-radius: 0.5rem;
-	}
-
-	.instruction-text {
-		margin: 0;
-		font-size: 1rem;
-		color: #374151;
-		text-align: center;
-	}
-
-	.qr-code-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.qr-code {
-		width: 300px;
-		height: 300px;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		background: white;
-		padding: 1rem;
-	}
-
-	.deep-link-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1rem;
-	}
-
-	.deep-link-button {
-		padding: 0.75rem 2rem;
-		background: #3b82f6;
-		color: white;
-		border-radius: 0.5rem;
-		text-decoration: none;
-		font-weight: 500;
-		font-size: 1rem;
-		transition: background-color 0.2s;
-	}
-
-	.deep-link-button:hover {
-		background: #2563eb;
-	}
-
-	.url-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.url-text {
-		padding: 0.75rem 1rem;
-		background: white;
-		border: 1px solid #d1d5db;
-		border-radius: 0.375rem;
-		font-family: monospace;
-		font-size: 0.875rem;
-		color: #111827;
-		word-break: break-all;
-		max-width: 100%;
-	}
-
-	.no-wallets {
-		padding: 2rem;
-		text-align: center;
-		color: #6b7280;
-		font-size: 1rem;
-	}
-</style>

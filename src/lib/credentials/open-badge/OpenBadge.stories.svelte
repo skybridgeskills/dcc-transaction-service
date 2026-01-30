@@ -25,9 +25,6 @@
 
 		const badgeName = canvas.getByTestId('badge-name')
 		expect(badgeName).toHaveTextContent('A Simply Wonderful Course')
-
-		const badgeImage = canvas.queryByTestId('badge-image')
-		// Image may or may not be present depending on credential data
 	}}
 >
 	{@const credentialWithImage = {

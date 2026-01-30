@@ -4,7 +4,6 @@
 	import {
 		createStorybookSetup,
 		createStorybookClaimExchange,
-		createStorybookDidAuthExchange,
 		createStorybookVerifyExchange
 	} from '../../test-fixtures/storybook-helpers.js'
 
@@ -50,13 +49,14 @@
 		})
 	})
 
+	// TODO in the future
 	// Setup for didAuth exchange (supports OID4VP)
-	const didAuthExchangeSetup = createStorybookSetup({
-		'didauth-exchange-123': createStorybookDidAuthExchange({
-			exchangeId: 'didauth-exchange-123',
-			state: 'active'
-		})
-	})
+	// const didAuthExchangeSetup = createStorybookSetup({
+	// 	'didauth-exchange-123': createStorybookDidAuthExchange({
+	// 		exchangeId: 'didauth-exchange-123',
+	// 		state: 'active'
+	// 	})
+	// })
 </script>
 
 <Story

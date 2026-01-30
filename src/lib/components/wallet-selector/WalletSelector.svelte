@@ -199,82 +199,90 @@
 				walletSelection.wallet,
 				walletSelection.availableProtocols
 			)}
-				<Card class="p-4">
-					<div class="flex flex-col gap-3">
-						<Label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-							<input
-								type="checkbox"
-								bind:checked={showAdvancedProtocols}
-								data-testid="advanced-protocol-toggle"
-								class="h-4 w-4 rounded border-input"
-							/>
-							Show protocol options
-						</Label>
+				<Card>
+					<CardContent class="p-4">
+						<div class="flex flex-col gap-3">
+							<Label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+								<input
+									type="checkbox"
+									bind:checked={showAdvancedProtocols}
+									data-testid="advanced-protocol-toggle"
+									class="h-4 w-4 rounded border-input"
+								/>
+								Show protocol options
+							</Label>
 
-						{#if showAdvancedProtocols}
-							<div class="ml-6 flex flex-col gap-2">
-								{#each walletSelection.availableProtocols as protocol}
-									<Label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-										<input
-											type="radio"
-											name="protocol"
-											value={protocol.type}
-											checked={selectedProtocol === protocol.type}
-											onchange={() => handleProtocolChange(protocol.type)}
-											data-testid={`protocol-${protocol.type}`}
-											class="h-4 w-4 border-input"
-										/>
-										{protocol.type}
-									</Label>
-								{/each}
-							</div>
-						{/if}
-					</div>
+							{#if showAdvancedProtocols}
+								<div class="ml-6 flex flex-col gap-2">
+									{#each walletSelection.availableProtocols as protocol (protocol.type)}
+										<Label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+											<input
+												type="radio"
+												name="protocol"
+												value={protocol.type}
+												checked={selectedProtocol === protocol.type}
+												onchange={() => handleProtocolChange(protocol.type)}
+												data-testid={`protocol-${protocol.type}`}
+												class="h-4 w-4 border-input"
+											/>
+											{protocol.type}
+										</Label>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					</CardContent>
 				</Card>
 			{/if}
 
 			{#if loading}
 				<LoadingIndicator loading={true} delay={0} />
 			{:else if invocationResult}
-				<Card class="flex flex-col items-center gap-4 p-8">
-					{#if invocationResult.qrCodeDataUrl}
-						<!-- Cross-device: Show QR Code -->
-						<div class="flex flex-col items-center gap-4">
-							<p class="m-0 text-center text-foreground">
-								Scan this QR code with your wallet to continue:
-							</p>
-							<img
-								src={invocationResult.qrCodeDataUrl}
-								alt="QR Code for wallet invocation"
-								class="h-[300px] w-[300px] rounded-lg border border-border bg-background p-4"
-								data-testid="qr-code"
-							/>
-						</div>
-					{:else if invocationResult.deepLinkUrl}
-						<!-- Same-device: Show Deep Link Button -->
-						<div class="flex flex-col items-center gap-4">
+				<Card>
+					<CardContent class="flex flex-col items-center gap-4 p-8">
+						{#if invocationResult.qrCodeDataUrl}
+							<!-- Cross-device: Show QR Code -->
+							<div class="flex flex-col items-center gap-4">
+								<p class="m-0 text-center text-foreground">
+									Scan this QR code with your wallet to continue:
+								</p>
+								<img
+									src={invocationResult.qrCodeDataUrl}
+									alt="QR Code for wallet invocation"
+									class="h-[300px] w-[300px] rounded-lg border border-border bg-background p-4"
+									data-testid="qr-code"
+								/>
+							</div>
+						{:else if invocationResult.deepLinkUrl}
+							<!-- Same-device: Show Deep Link Button -->
+							<div class="flex flex-col items-center gap-4">
 							<p class="m-0 text-center text-foreground">
 								Click the button below to open your wallet:
 							</p>
+							<!-- eslint-disable svelte/no-navigation-without-resolve -->
 							<a
 								href={invocationResult.deepLinkUrl}
+								target="_blank"
+								rel="noopener noreferrer"
 								data-testid="deep-link-button"
 							>
 								<Button size="lg">
 									Open {walletSelection.wallet.name}
 								</Button>
 							</a>
-						</div>
-					{:else if invocationResult.url}
-						<!-- Fallback: Show URL -->
-						<div class="flex flex-col items-center gap-2">
-							<p class="m-0 text-foreground">Use this URL:</p>
-							<code
-								class="max-w-full break-all rounded-md border border-border bg-background px-4 py-3 font-mono text-sm text-foreground"
-								data-testid="url-text"
-							>{invocationResult.url}</code>
-						</div>
-					{/if}
+							<!-- eslint-enable svelte/no-navigation-without-resolve -->
+							</div>
+						{:else if invocationResult.url}
+							<!-- Fallback: Show URL -->
+							<div class="flex flex-col items-center gap-2">
+								<p class="m-0 text-foreground">Use this URL:</p>
+								<code
+									class="max-w-full break-all rounded-md border border-border bg-background px-4 py-3 font-mono text-sm text-foreground"
+									data-testid="url-text"
+								>{invocationResult.url}</code>
+							</div>
+						{/if}
+					</CardContent>
 				</Card>
 			{/if}
 		</div>

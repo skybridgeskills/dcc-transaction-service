@@ -146,13 +146,15 @@
 		</div>
 
 		{#if isPaused}
-			<Card class="p-4">
-				<div class="flex flex-col gap-2">
-					<p class="m-0 text-sm text-muted-foreground">Polling paused after {maxPolls} checks.</p>
-					<Button type="button" onclick={resumePolling} size="sm" class="self-start">
-						▶ Resume Polling
-					</Button>
-				</div>
+			<Card>
+				<CardContent class="p-4">
+					<div class="flex flex-col gap-2">
+						<p class="m-0 text-sm text-muted-foreground">Polling paused after {maxPolls} checks.</p>
+						<Button type="button" onclick={resumePolling} size="sm" class="self-start">
+							▶ Resume Polling
+						</Button>
+					</div>
+				</CardContent>
 			</Card>
 		{:else if exchange.state === 'complete'}
 			<div class="rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-300">

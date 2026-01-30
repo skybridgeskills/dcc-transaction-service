@@ -116,6 +116,7 @@ test-fixtures/.env.testing
 
 # Output
 .svelte-kit
+storybook-static/
 dist
 build
 

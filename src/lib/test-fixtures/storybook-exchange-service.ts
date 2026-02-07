@@ -9,8 +9,8 @@ import type { OID4VCI } from '../protocols/oid4vci/types.js'
 import { getDIDAuthVPR, getVerifyVPR } from '../protocols/vpr-generation.js'
 import { getLcwProtocol } from '../../protocols/lcw.js'
 import {
-	generateCredentialOfferUrl,
-	generateDeepLinkUrl
+  generateCredentialOfferUrl,
+  generateDeepLinkUrl
 } from '../protocols/oid4vci/url-utils.js'
 
 /**

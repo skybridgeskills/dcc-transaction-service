@@ -124,11 +124,12 @@ export function createStorybookVerifyExchange(
     trustedIssuers: [],
     vprClaims: []
   }
+  const mergedVariables = {
+    ...baseVariables,
+    ...overrides.variables
+  }
   return createStorybookExchangeData('verify', {
-    variables: {
-      ...baseVariables,
-      ...overrides.variables
-    } as App.ExchangeDetailVerify['variables'],
+    variables: mergedVariables as App.ExchangeDetailVerify['variables'],
     ...overrides
   }) as App.ExchangeDetailVerify
 }

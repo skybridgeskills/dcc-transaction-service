@@ -5,7 +5,7 @@ import { createPresentation } from '@digitalbazaar/vc'
 import Handlebars from 'handlebars'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyDIDAuth } from '../didAuth.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../lib/http-error.js'
 import { z } from 'zod'
 import { getApp } from '../lib/app/app-context.js'
 
@@ -81,9 +81,7 @@ export const participateInClaimExchange = async ({
   })
 
   if (!didAuthVerified) {
-    throw new HTTPException(401, {
-      message: 'Invalid DIDAuth or unsupported options.'
-    })
+    throw new HttpError(401, 'Invalid DIDAuth or unsupported options.')
   }
 
   const credentialTemplate = workflow?.credentialTemplates?.[0]
@@ -105,9 +103,7 @@ export const participateInClaimExchange = async ({
     credential = JSON.parse(builtCredential)
     credential.credentialSubject.id = data.holder
   } catch (error) {
-    throw new HTTPException(400, {
-      message: 'Failed to build credential from template'
-    })
+    throw new HttpError(400, 'Failed to build credential from template')
   }
 
   // add credential status if enabled
@@ -117,15 +113,13 @@ export const participateInClaimExchange = async ({
       credential
     )
   }
-  
+
   // Use IssuerService from app context
   const app = getApp()
   if (!app.issuerService) {
-    throw new HTTPException(500, {
-      message: 'IssuerService not available in app context'
-    })
+    throw new HttpError(500, 'IssuerService not available in app context')
   }
-  
+
   const signedCredential = await app.issuerService.signCredential(
     credential,
     exchange.tenantName

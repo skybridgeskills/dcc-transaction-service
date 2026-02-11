@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../../../../../lib/http-error.js'
 import { getApp } from '../../../../../../../lib/app/app-context.js'
 import type { OID4VCI } from '../../../../../../../lib/protocols/oid4vci/types.js'
 
@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
   try {
     await locals.ctx.exchangeService.getExchangeData(exchangeId, workflowId)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(404, { message: 'Exchange not found' })
@@ -67,7 +67,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
       )
     return json(credentialResponse)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(500, { message: 'Failed to issue credential' })

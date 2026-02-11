@@ -3,7 +3,7 @@
  */
 
 import type { ExchangeService } from '../../lib/services/exchange-service.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../lib/http-error.js'
 
 /**
  * Creates a batch of exchanges and returns wallet queries
@@ -22,7 +22,7 @@ export const createExchangeBatchHelper = async ({
 }) => {
   // Transform each batch item into ExchangeCreateInput and create exchanges
   const exchangeRequests: App.ExchangeDetailBase[] = []
-  
+
   switch (workflow.id) {
     case 'claim':
       for (const d of data.data) {
@@ -37,7 +37,11 @@ export const createExchangeBatchHelper = async ({
             ...(d.metadata && { metadata: d.metadata })
           }
         }
-        const exchange = await exchangeService.createExchange(input, config, workflow)
+        const exchange = await exchangeService.createExchange(
+          input,
+          config,
+          workflow
+        )
         exchangeRequests.push(exchange)
       }
       break
@@ -52,7 +56,11 @@ export const createExchangeBatchHelper = async ({
             ...(d.retrievalId && { retrievalId: d.retrievalId })
           }
         }
-        const exchange = await exchangeService.createExchange(input, config, workflow)
+        const exchange = await exchangeService.createExchange(
+          input,
+          config,
+          workflow
+        )
         exchangeRequests.push(exchange)
       }
       break
@@ -60,18 +68,21 @@ export const createExchangeBatchHelper = async ({
       for (const d of data.data) {
         // For verify workflow, use item directly as it's already in the correct format
         const input = d as unknown as App.ExchangeCreateInput
-        const exchange = await exchangeService.createExchange(input, config, workflow)
+        const exchange = await exchangeService.createExchange(
+          input,
+          config,
+          workflow
+        )
         exchangeRequests.push(exchange)
       }
       break
     case 'healthz':
-      throw new HTTPException(400, {
-        message: 'Workflow healthz is not valid for this endpoint'
-      })
+      throw new HttpError(
+        400,
+        'Workflow healthz is not valid for this endpoint'
+      )
     default:
-      throw new HTTPException(400, {
-        message: `Unknown workflow: ${workflow.id}`
-      })
+      throw new HttpError(400, `Unknown workflow: ${workflow.id}`)
   }
 
   // Transform exchanges into wallet queries

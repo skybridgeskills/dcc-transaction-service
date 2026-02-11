@@ -3,7 +3,7 @@ import {
   generateTokenForAuthorizationCode
 } from './token.js'
 import type { OID4VCI } from './types.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../http-error.js'
 import { calculateTokenExpiration } from './utils.js'
 
 describe('generateTokenForPreAuthorizedCode', function () {
@@ -59,7 +59,7 @@ describe('generateTokenForPreAuthorizedCode', function () {
 
     expect(() => {
       generateTokenForPreAuthorizedCode(preAuthorizedCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects used codes', function () {
@@ -72,7 +72,7 @@ describe('generateTokenForPreAuthorizedCode', function () {
 
     expect(() => {
       generateTokenForPreAuthorizedCode(preAuthorizedCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects expired codes', function () {
@@ -85,7 +85,7 @@ describe('generateTokenForPreAuthorizedCode', function () {
 
     expect(() => {
       generateTokenForPreAuthorizedCode(preAuthorizedCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects undefined stored code', function () {
@@ -93,7 +93,7 @@ describe('generateTokenForPreAuthorizedCode', function () {
 
     expect(() => {
       generateTokenForPreAuthorizedCode(preAuthorizedCode, undefined)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 })
 
@@ -150,7 +150,7 @@ describe('generateTokenForAuthorizationCode', function () {
 
     expect(() => {
       generateTokenForAuthorizationCode(authorizationCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects used codes', function () {
@@ -163,7 +163,7 @@ describe('generateTokenForAuthorizationCode', function () {
 
     expect(() => {
       generateTokenForAuthorizationCode(authorizationCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects expired codes', function () {
@@ -176,7 +176,7 @@ describe('generateTokenForAuthorizationCode', function () {
 
     expect(() => {
       generateTokenForAuthorizationCode(authorizationCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects undefined stored code', function () {
@@ -184,6 +184,6 @@ describe('generateTokenForAuthorizationCode', function () {
 
     expect(() => {
       generateTokenForAuthorizationCode(authorizationCode, undefined)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 })

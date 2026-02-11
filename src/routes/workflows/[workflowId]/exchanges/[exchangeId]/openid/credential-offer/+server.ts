@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../../../../../lib/http-error.js'
 import { getApp } from '../../../../../../../lib/app/app-context.js'
 
 /**
@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       workflowId
     )
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(404, { message: 'Exchange not found' })
@@ -52,7 +52,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       )
     return json(credentialOffer)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(500, { message: 'Failed to generate credential offer' })

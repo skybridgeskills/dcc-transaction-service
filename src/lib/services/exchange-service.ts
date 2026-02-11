@@ -1,4 +1,4 @@
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../http-error.js'
 import { getApp } from '../app/app-context.js'
 import type { KeyValueStoreService } from './key-value-store-service.js'
 import {
@@ -198,9 +198,7 @@ export class RealExchangeService implements ExchangeService {
     }
     const app = getApp()
     if (!app.keyValueStore) {
-      throw new HTTPException(500, {
-        message: 'KeyValueStore not available in app context'
-      })
+      throw new HttpError(500, 'KeyValueStore not available in app context')
     }
     return app.keyValueStore
   }
@@ -209,7 +207,7 @@ export class RealExchangeService implements ExchangeService {
     const keyValueStore = this.getKeyValueStore()
     const storedData = await keyValueStore.get(exchangeId)
     if (!storedData) {
-      throw new HTTPException(404, { message: 'Exchange not found' })
+      throw new HttpError(404, 'Exchange not found')
     }
     return storedData
   }
@@ -221,7 +219,7 @@ export class RealExchangeService implements ExchangeService {
     const keyValueStore = this.getKeyValueStore()
     const storedData = await keyValueStore.get(exchangeId)
     if (!storedData || storedData.workflowId !== workflowId) {
-      throw new HTTPException(404, { message: 'Exchange not found' })
+      throw new HttpError(404, 'Exchange not found')
     }
     return storedData
   }
@@ -231,7 +229,7 @@ export class RealExchangeService implements ExchangeService {
     const ttl = new Date(data.expires).getTime() - Date.now() + 1000
     const success = await keyValueStore.set(data.exchangeId, data, ttl)
     if (!success) {
-      throw new HTTPException(500, { message: 'Failed to save exchange.' })
+      throw new HttpError(500, 'Failed to save exchange.')
     }
     return success
   }
@@ -273,9 +271,10 @@ export class RealExchangeService implements ExchangeService {
         })
         break
       case 'healthz':
-        throw new HTTPException(400, {
-          message: 'Workflow healthz is not valid for this endpoint'
-        })
+        throw new HttpError(
+          400,
+          'Workflow healthz is not valid for this endpoint'
+        )
     }
 
     await this.saveExchange(exchange)
@@ -372,9 +371,7 @@ export class RealExchangeService implements ExchangeService {
     config: App.Config
   ): Promise<OID4VCI.CredentialOffer> {
     if (exchange.workflowId !== 'claim') {
-      throw new HTTPException(400, {
-        message: 'OID4VCI is only supported for claim exchanges'
-      })
+      throw new HttpError(400, 'OID4VCI is only supported for claim exchanges')
     }
 
     const workflow = getWorkflow('claim')
@@ -423,9 +420,7 @@ export class RealExchangeService implements ExchangeService {
     // Get exchange to validate it's a claim exchange
     const exchange = await this.getExchangeById(exchangeId)
     if (exchange.workflowId !== 'claim') {
-      throw new HTTPException(400, {
-        message: 'OID4VCI is only supported for claim exchanges'
-      })
+      throw new HttpError(400, 'OID4VCI is only supported for claim exchanges')
     }
 
     // Get stored pre-authorized code
@@ -467,24 +462,21 @@ export class RealExchangeService implements ExchangeService {
     // Get exchange to validate it's a claim exchange
     const exchange = await this.getExchangeById(exchangeId)
     if (exchange.workflowId !== 'claim') {
-      throw new HTTPException(400, {
-        message: 'OID4VCI is only supported for claim exchanges'
-      })
+      throw new HttpError(400, 'OID4VCI is only supported for claim exchanges')
     }
 
     let tokenResponse: OID4VCI.TokenResponse
 
     if (grantType === 'urn:ietf:params:oauth:grant-type:pre-authorized_code') {
       if (!preAuthorizedCode) {
-        throw new HTTPException(400, {
-          message:
-            'pre-authorized_code is required for pre-authorized_code grant'
-        })
+        throw new HttpError(
+          400,
+          'pre-authorized_code is required for pre-authorized_code grant'
+        )
       }
 
       const codeKey = `oid4vci:code:${exchangeId}`
-      const storedCode =
-        await keyValueStore.get<OID4VCI.StoredCode>(codeKey)
+      const storedCode = await keyValueStore.get<OID4VCI.StoredCode>(codeKey)
       tokenResponse = generateTokenForPreAuthorizedCode(
         preAuthorizedCode,
         storedCode
@@ -497,9 +489,10 @@ export class RealExchangeService implements ExchangeService {
       }
     } else if (grantType === 'authorization_code') {
       if (!code) {
-        throw new HTTPException(400, {
-          message: 'code is required for authorization_code grant'
-        })
+        throw new HttpError(
+          400,
+          'code is required for authorization_code grant'
+        )
       }
 
       const authCodeKey = `oid4vci:authcode:${exchangeId}`
@@ -513,9 +506,7 @@ export class RealExchangeService implements ExchangeService {
         await keyValueStore.set(authCodeKey, storedCode)
       }
     } else {
-      throw new HTTPException(400, {
-        message: `Unsupported grant_type: ${grantType}`
-      })
+      throw new HttpError(400, `Unsupported grant_type: ${grantType}`)
     }
 
     // Store access token
@@ -546,15 +537,12 @@ export class RealExchangeService implements ExchangeService {
     // Get exchange and validate it's a claim exchange
     const exchange = await this.getExchangeById(exchangeId)
     if (exchange.workflowId !== 'claim') {
-      throw new HTTPException(400, {
-        message: 'OID4VCI is only supported for claim exchanges'
-      })
+      throw new HttpError(400, 'OID4VCI is only supported for claim exchanges')
     }
 
     // Validate access token
     const tokenKey = `oid4vci:token:${exchangeId}`
-    const storedToken =
-      await keyValueStore.get<OID4VCI.StoredToken>(tokenKey)
+    const storedToken = await keyValueStore.get<OID4VCI.StoredToken>(tokenKey)
     validateAccessToken(accessToken, storedToken, exchangeId)
 
     // Get workflow
@@ -600,8 +588,6 @@ export class RealExchangeService implements ExchangeService {
     }
 
     // healthz/catchall
-    throw new HTTPException(400, {
-      message: 'Workflow is not valid for this endpoint'
-    })
+    throw new HttpError(400, 'Workflow is not valid for this endpoint')
   }
 }

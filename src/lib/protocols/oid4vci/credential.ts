@@ -1,12 +1,12 @@
 import type { OID4VCI } from './types.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../http-error.js'
 
 /**
  * Validate access token
  * @param accessToken The access token to validate
  * @param storedToken The stored token data from exchange state
  * @param expectedExchangeId The exchange ID this token should belong to
- * @throws HTTPException if token is invalid
+ * @throws HttpError if token is invalid
  */
 export function validateAccessToken(
   accessToken: string,
@@ -14,28 +14,20 @@ export function validateAccessToken(
   expectedExchangeId: string
 ): void {
   if (!storedToken) {
-    throw new HTTPException(401, {
-      message: 'Invalid access token'
-    })
+    throw new HttpError(401, 'Invalid access token')
   }
 
   if (storedToken.accessToken !== accessToken) {
-    throw new HTTPException(401, {
-      message: 'Invalid access token'
-    })
+    throw new HttpError(401, 'Invalid access token')
   }
 
   if (new Date(storedToken.expiresAt) < new Date()) {
-    throw new HTTPException(401, {
-      message: 'Access token has expired'
-    })
+    throw new HttpError(401, 'Access token has expired')
   }
 
   // Validate exchangeId matches
   if (storedToken.exchangeId !== expectedExchangeId) {
-    throw new HTTPException(401, {
-      message: 'Access token does not belong to this exchange'
-    })
+    throw new HttpError(401, 'Access token does not belong to this exchange')
   }
 }
 
@@ -75,9 +67,7 @@ export function formatCredentialResponse(
   }
 
   if (!credential) {
-    throw new HTTPException(500, {
-      message: 'Failed to extract credential from response'
-    })
+    throw new HttpError(500, 'Failed to extract credential from response')
   }
 
   return {

@@ -1,6 +1,6 @@
 import type { OID4VCI } from './types.js'
+import { HttpError } from '../../http-error.js'
 import { generateAccessToken, generateCNonce } from './utils.js'
-import { HTTPException } from 'hono/http-exception'
 
 /**
  * Generate token response for pre-authorized code grant
@@ -14,27 +14,19 @@ export function generateTokenForPreAuthorizedCode(
 ): OID4VCI.TokenResponse {
   // Validate pre-authorized code
   if (!storedCode) {
-    throw new HTTPException(400, {
-      message: 'Invalid pre-authorized code'
-    })
+    throw new HttpError(400, 'Invalid pre-authorized code')
   }
 
   if (storedCode.code !== preAuthorizedCode) {
-    throw new HTTPException(400, {
-      message: 'Invalid pre-authorized code'
-    })
+    throw new HttpError(400, 'Invalid pre-authorized code')
   }
 
   if (storedCode.used) {
-    throw new HTTPException(400, {
-      message: 'Pre-authorized code has already been used'
-    })
+    throw new HttpError(400, 'Pre-authorized code has already been used')
   }
 
   if (new Date(storedCode.expiresAt) < new Date()) {
-    throw new HTTPException(400, {
-      message: 'Pre-authorized code has expired'
-    })
+    throw new HttpError(400, 'Pre-authorized code has expired')
   }
 
   // Generate access token and c_nonce
@@ -64,27 +56,19 @@ export function generateTokenForAuthorizationCode(
 ): OID4VCI.TokenResponse {
   // Validate authorization code
   if (!storedCode) {
-    throw new HTTPException(400, {
-      message: 'Invalid authorization code'
-    })
+    throw new HttpError(400, 'Invalid authorization code')
   }
 
   if (storedCode.code !== authorizationCode) {
-    throw new HTTPException(400, {
-      message: 'Invalid authorization code'
-    })
+    throw new HttpError(400, 'Invalid authorization code')
   }
 
   if (storedCode.used) {
-    throw new HTTPException(400, {
-      message: 'Authorization code has already been used'
-    })
+    throw new HttpError(400, 'Authorization code has already been used')
   }
 
   if (new Date(storedCode.expiresAt) < new Date()) {
-    throw new HTTPException(400, {
-      message: 'Authorization code has expired'
-    })
+    throw new HttpError(400, 'Authorization code has expired')
   }
 
   // Generate access token and c_nonce

@@ -8,7 +8,7 @@ import {
   createMockClaimExchange,
   createMockDidAuthExchange
 } from '../../test-fixtures/testData.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../http-error.js'
 import { runInAppContext } from '../app/app-context.js'
 import type { OID4VCI } from '../protocols/oid4vci/types.js'
 import { calculateTokenExpiration } from '../protocols/oid4vci/utils.js'
@@ -144,7 +144,7 @@ describe('ExchangeService OID4VCI Methods', function () {
         const config = ctx.configService.getConfig()
         await expect(
           exchangeService.getOid4vciCredentialOffer(exchange, config)
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
 
@@ -242,7 +242,7 @@ describe('ExchangeService OID4VCI Methods', function () {
             exchange.exchangeId,
             'invalid-code'
           )
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
 
@@ -266,7 +266,7 @@ describe('ExchangeService OID4VCI Methods', function () {
             exchange.exchangeId,
             'some-code'
           )
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
   })
@@ -387,7 +387,7 @@ describe('ExchangeService OID4VCI Methods', function () {
             exchange.exchangeId,
             'invalid_grant_type'
           )
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
   })
@@ -487,7 +487,7 @@ describe('ExchangeService OID4VCI Methods', function () {
             credentialRequest,
             config
           )
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
 
@@ -519,7 +519,7 @@ describe('ExchangeService OID4VCI Methods', function () {
             credentialRequest,
             config
           )
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
 
@@ -551,7 +551,7 @@ describe('ExchangeService OID4VCI Methods', function () {
             credentialRequest,
             config
           )
-        ).rejects.toThrow(HTTPException)
+        ).rejects.toThrow(HttpError)
       })
     })
   })

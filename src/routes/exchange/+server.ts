@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit'
 import { createExchangeBatchHelper } from './exchange-helpers.js'
 import { getWorkflow } from '../../workflows.js'
 import { exchangeBatchSchema } from '../../schema.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../lib/http-error.js'
 import { z } from 'zod'
 import { zodErrorToProblemDetails } from '../../utils.js'
 
@@ -68,8 +68,8 @@ export const POST = async ({ request, locals }) => {
     })
     return json(walletQueries)
   } catch (e) {
-    // Handle HTTPException from exchange creation
-    if (e instanceof HTTPException) {
+    // Handle HttpError from exchange creation
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     console.error('Error creating exchange batch:', e)

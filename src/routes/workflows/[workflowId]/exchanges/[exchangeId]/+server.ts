@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
 import { getWorkflow } from '../../../../../workflows.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../../../lib/http-error.js'
 
 /**
  * POST /workflows/:workflowId/exchanges/:exchangeId
@@ -30,7 +30,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
       workflowId
     )
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(404, { message: 'Exchange not found' })
@@ -78,7 +78,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
     )
     return json(result)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     console.error('Error participating in exchange:', e)
@@ -113,7 +113,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
       workflowId
     )
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(404, { message: 'Exchange not found' })

@@ -1,6 +1,6 @@
 import { validateAccessToken, formatCredentialResponse } from './credential.js'
 import type { OID4VCI } from './types.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../http-error.js'
 import { calculateTokenExpiration } from './utils.js'
 
 describe('validateAccessToken', function () {
@@ -32,7 +32,7 @@ describe('validateAccessToken', function () {
 
     expect(() => {
       validateAccessToken(accessToken, storedToken, exchangeId)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('validates exchangeId matches', function () {
@@ -46,7 +46,7 @@ describe('validateAccessToken', function () {
     // Try to use token for different exchange
     expect(() => {
       validateAccessToken(accessToken, storedToken, 'different-exchange')
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects invalid tokens', function () {
@@ -60,7 +60,7 @@ describe('validateAccessToken', function () {
 
     expect(() => {
       validateAccessToken(accessToken, storedToken, exchangeId)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects undefined stored token', function () {
@@ -69,7 +69,7 @@ describe('validateAccessToken', function () {
 
     expect(() => {
       validateAccessToken(accessToken, undefined, exchangeId)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 })
 

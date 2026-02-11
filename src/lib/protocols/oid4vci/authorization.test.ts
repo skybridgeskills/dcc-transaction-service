@@ -1,6 +1,6 @@
 import { processAuthorization } from './authorization.js'
 import type { OID4VCI } from './types.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../http-error.js'
 import { calculateTokenExpiration } from './utils.js'
 
 describe('processAuthorization', function () {
@@ -30,7 +30,7 @@ describe('processAuthorization', function () {
 
     expect(() => {
       processAuthorization(preAuthorizedCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects used codes', function () {
@@ -43,7 +43,7 @@ describe('processAuthorization', function () {
 
     expect(() => {
       processAuthorization(preAuthorizedCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects expired codes', function () {
@@ -56,7 +56,7 @@ describe('processAuthorization', function () {
 
     expect(() => {
       processAuthorization(preAuthorizedCode, storedCode)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('rejects undefined stored code', function () {
@@ -64,7 +64,7 @@ describe('processAuthorization', function () {
 
     expect(() => {
       processAuthorization(preAuthorizedCode, undefined)
-    }).toThrow(HTTPException)
+    }).toThrow(HttpError)
   })
 
   test('generates authorization code on success', function () {

@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../../../../../lib/http-error.js'
 
 /**
  * POST /workflows/:workflowId/exchanges/:exchangeId/openid/token
@@ -36,7 +36,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
   try {
     await locals.ctx.exchangeService.getExchangeData(exchangeId, workflowId)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(404, { message: 'Exchange not found' })
@@ -52,7 +52,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     )
     return json(tokenResponse)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(500, { message: 'Failed to generate token' })

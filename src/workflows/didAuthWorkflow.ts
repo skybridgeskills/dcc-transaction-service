@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../lib/http-error.js'
 import { verifyDIDAuth } from '../didAuth.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
@@ -61,9 +61,7 @@ export const participateInDidAuthExchange = async ({
   })
 
   if (!didAuthVerified) {
-    throw new HTTPException(401, {
-      message: 'Invalid DIDAuth or unsupported options.'
-    })
+    throw new HttpError(401, 'Invalid DIDAuth or unsupported options.')
   }
 
   const credentialTemplate = workflow?.credentialTemplates?.[0]

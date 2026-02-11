@@ -1,5 +1,5 @@
 import { redirect, error } from '@sveltejs/kit'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../lib/http-error.js'
 
 /**
  * Load function for /interactions/[exchangeId]
@@ -19,7 +19,7 @@ export const load = async ({ locals, params, request }) => {
   try {
     exchangeData = await locals.ctx.exchangeService.getExchangeById(exchangeId)
   } catch (e) {
-    if (e instanceof HTTPException) {
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     error(404, { message: 'Exchange not found' })

@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
 import { getWorkflow } from '../../../../workflows.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../../lib/http-error.js'
 import { z } from 'zod'
 import { zodErrorToProblemDetails } from '../../../../utils.js'
 
@@ -61,8 +61,8 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
         errors: problemDetails
       })
     }
-    // Handle HTTPException from exchange creation
-    if (e instanceof HTTPException) {
+    // Handle HttpError from exchange creation
+    if (e instanceof HttpError) {
       error(e.status, { message: e.message })
     }
     console.error('Error creating exchange:', e)

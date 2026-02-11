@@ -1,6 +1,6 @@
 import type { OID4VCI } from './types.js'
+import { HttpError } from '../../http-error.js'
 import { generateAuthorizationCode } from './utils.js'
-import { HTTPException } from 'hono/http-exception'
 
 /**
  * Validate and process authorization request with pre-authorized code
@@ -14,27 +14,19 @@ export function processAuthorization(
 ): OID4VCI.AuthorizationResponse {
   // Validate pre-authorized code
   if (!storedCode) {
-    throw new HTTPException(400, {
-      message: 'Invalid pre-authorized code'
-    })
+    throw new HttpError(400, 'Invalid pre-authorized code')
   }
 
   if (storedCode.code !== preAuthorizedCode) {
-    throw new HTTPException(400, {
-      message: 'Invalid pre-authorized code'
-    })
+    throw new HttpError(400, 'Invalid pre-authorized code')
   }
 
   if (storedCode.used) {
-    throw new HTTPException(400, {
-      message: 'Pre-authorized code has already been used'
-    })
+    throw new HttpError(400, 'Pre-authorized code has already been used')
   }
 
   if (new Date(storedCode.expiresAt) < new Date()) {
-    throw new HTTPException(400, {
-      message: 'Pre-authorized code has expired'
-    })
+    throw new HttpError(400, 'Pre-authorized code has expired')
   }
 
   // Generate authorization code

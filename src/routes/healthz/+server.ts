@@ -1,11 +1,11 @@
 import { json, error } from '@sveltejs/kit'
 import { getApp } from '../../lib/app/app-context.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../lib/http-error.js'
 
 export async function GET() {
   const app = getApp()
   const config = app.configService.getConfig()
-  
+
   if (!app.exchangeService) {
     error(500, { message: 'ExchangeService not available' })
   }
@@ -32,7 +32,10 @@ export async function GET() {
     await new Promise((resolve) =>
       setTimeout(resolve, 4 * config.keyvWriteDelayMs)
     )
-    const result = await app.exchangeService.getExchangeData(`healthz-${timestamp}`, 'healthz')
+    const result = await app.exchangeService.getExchangeData(
+      `healthz-${timestamp}`,
+      'healthz'
+    )
     if (!result) {
       throw new Error('Failed to retrieve exchange from Keyv')
     }
@@ -46,8 +49,8 @@ export async function GET() {
   } catch (e) {
     console.log(`exception in healthz: ${JSON.stringify(e)}`)
 
-    // Handle HTTPException from exchange-manager (used by both Hono and SvelteKit)
-    if (e instanceof HTTPException) {
+    // Handle HttpError from ExchangeService / protocol layer so we can return JSON with the correct status instead of a generic 503
+    if (e instanceof HttpError) {
       return json(
         {
           message: e.message,

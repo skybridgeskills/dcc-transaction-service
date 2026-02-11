@@ -5,10 +5,13 @@ import {
   createRequestEvent,
   callEndpoint
 } from '../../../../../test-fixtures/sveltekit-test-helpers.js'
-import { createTestAppContext, createFakeExchangeService } from '../../../../../test-fixtures/test-app-context.js'
+import {
+  createTestAppContext,
+  createFakeExchangeService
+} from '../../../../../test-fixtures/test-app-context.js'
 import { createMockDidAuthExchange } from '../../../../../test-fixtures/testData.js'
 import { createFakeConfigService } from '../../../../../lib/services/fake-config-service.js'
-import { HTTPException } from 'hono/http-exception'
+import { HttpError } from '../../../../../lib/http-error.js'
 
 describe('POST /workflows/:workflowId/exchanges/:exchangeId', function () {
   const mockExchangeService = createFakeExchangeService()
@@ -33,9 +36,7 @@ describe('POST /workflows/:workflowId/exchanges/:exchangeId', function () {
   test('returns 404 if invalid exchangeId', async function () {
     mockExchangeService.getExchangeData = vi
       .fn()
-      .mockRejectedValue(
-        new HTTPException(404, { message: 'Exchange not found' })
-      )
+      .mockRejectedValue(new HttpError(404, 'Exchange not found'))
 
     const event = createRequestEvent({
       url: '/workflows/didAuth/exchanges/NO-SUCH-EXCHANGE',
@@ -107,9 +108,7 @@ describe('GET /workflows/:workflowId/exchanges/:exchangeId', function () {
   test('returns 404 if invalid exchangeId', async function () {
     mockExchangeService.getExchangeData = vi
       .fn()
-      .mockRejectedValue(
-        new HTTPException(404, { message: 'Exchange not found' })
-      )
+      .mockRejectedValue(new HttpError(404, 'Exchange not found'))
 
     const event = createRequestEvent({
       url: '/workflows/didAuth/exchanges/NO-SUCH-EXCHANGE',

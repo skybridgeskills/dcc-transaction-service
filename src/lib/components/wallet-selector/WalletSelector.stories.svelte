@@ -12,15 +12,6 @@
 	const { Story } = defineMeta({
 		title: 'Components/WalletSelector',
 		argTypes: {
-			exchangeId: {
-				control: 'text',
-				description: 'Exchange ID'
-			},
-			workflowId: {
-				control: 'select',
-				options: ['claim', 'didAuth', 'verify'],
-				description: 'Workflow ID'
-			},
 			prefersSameDevice: {
 				control: 'boolean',
 				description: 'Prefer same device (overrides wallet preference)'
@@ -34,19 +25,15 @@
 	})
 
 	// Setup for claim exchange (supports OID4VCI)
-	const claimExchangeSetup = createStorybookSetup({
-		'claim-exchange-123': createStorybookClaimExchange({
-			exchangeId: 'claim-exchange-123',
-			state: 'active'
-		})
+	const claimExchange = createStorybookClaimExchange({
+		exchangeId: 'claim-exchange-123',
+		state: 'active'
 	})
 
 	// Setup for verify exchange (supports OID4VP)
-	const verifyExchangeSetup = createStorybookSetup({
-		'verify-exchange-123': createStorybookVerifyExchange({
-			exchangeId: 'verify-exchange-123',
-			state: 'active'
-		})
+	const verifyExchange = createStorybookVerifyExchange({
+		exchangeId: 'verify-exchange-123',
+		state: 'active'
 	})
 
 	// TODO in the future
@@ -76,11 +63,7 @@
 		expect(walletCards.length).toBeGreaterThan(0)
 	}}
 >
-	<WalletSelector
-		exchangeId="claim-exchange-123"
-		workflowId="claim"
-		exchangeService={claimExchangeSetup.exchangeService}
-	/>
+	<WalletSelector exchange={claimExchange} />
 </Story>
 
 <Story
@@ -146,12 +129,7 @@
 		expect(instruction).toBeInTheDocument()
 	}}
 >
-	<WalletSelector
-		exchangeId="claim-exchange-123"
-		workflowId="claim"
-		exchangeService={claimExchangeSetup.exchangeService}
-		prefersOtherDevice={true}
-	/>
+	<WalletSelector exchange={claimExchange} prefersOtherDevice={true} />
 </Story>
 
 <Story
@@ -194,12 +172,7 @@
 		expect(instruction).toBeInTheDocument()
 	}}
 >
-	<WalletSelector
-		exchangeId="claim-exchange-123"
-		workflowId="claim"
-		exchangeService={claimExchangeSetup.exchangeService}
-		prefersSameDevice={true}
-	/>
+	<WalletSelector exchange={claimExchange} prefersSameDevice={true} />
 </Story>
 
 <Story
@@ -272,11 +245,7 @@
 		)
 	}}
 >
-	<WalletSelector
-		exchangeId="claim-exchange-123"
-		workflowId="claim"
-		exchangeService={claimExchangeSetup.exchangeService}
-	/>
+	<WalletSelector exchange={claimExchange} />
 </Story>
 
 <Story
@@ -316,11 +285,7 @@
 		)
 	}}
 >
-	<WalletSelector
-		exchangeId="verify-exchange-123"
-		workflowId="verify"
-		exchangeService={verifyExchangeSetup.exchangeService}
-	/>
+	<WalletSelector exchange={verifyExchange} />
 </Story>
 
 <Story
@@ -381,9 +346,5 @@
 		)
 	}}
 >
-	<WalletSelector
-		exchangeId="claim-exchange-123"
-		workflowId="claim"
-		exchangeService={claimExchangeSetup.exchangeService}
-	/>
+	<WalletSelector exchange={claimExchange} />
 </Story>

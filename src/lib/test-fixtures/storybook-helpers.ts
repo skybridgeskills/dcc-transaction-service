@@ -1,22 +1,22 @@
 /**
  * Storybook test utilities
  * Lightweight, frontend-safe helpers for Storybook stories
- * Uses StorybookExchangeService (minimal implementation) instead of RealExchangeService
+ * Uses FakeExchangeClient instead of server-side ExchangeService
  * to avoid backend dependencies that cause Vite resolution errors
  */
 
-import { StorybookExchangeService } from './storybook-exchange-service.js'
-import type { ExchangeService } from '../services/exchange-service.js'
+import { createFakeExchangeClient } from './fake-exchange-client.js'
+import type { ExchangeClient } from '../services/ui/exchange-client.js'
 
 /**
- * Creates a complete Storybook setup with exchange service and pre-populated data
+ * Creates a complete Storybook setup with exchange client and pre-populated data
  *
  * @param exchanges Record of exchangeId -> exchange data to pre-populate
- * @returns Object with exchangeService
+ * @returns Object with exchangeClient
  *
  * @example
  * ```ts
- * const { exchangeService } = createStorybookSetup({
+ * const { exchangeClient } = createStorybookSetup({
  *   'test-exchange-123': createStorybookClaimExchange({ exchangeId: 'test-exchange-123' })
  * })
  * ```
@@ -24,15 +24,21 @@ import type { ExchangeService } from '../services/exchange-service.js'
 export function createStorybookSetup(
 	exchanges: Record<string, App.ExchangeDetailBase> = {}
 ): {
-	exchangeService: ExchangeService
+	exchangeClient: ExchangeClient
 } {
-	const exchangeService = new StorybookExchangeService()
-
-	if (Object.keys(exchanges).length > 0) {
-		exchangeService.addExchanges(exchanges)
+	// Convert exchanges to the format expected by FakeExchangeClient
+	// Key format: `${workflowId}:${exchangeId}`
+	const exchangeMap: Record<string, App.ExchangeDetailBase> = {}
+	for (const exchange of Object.values(exchanges)) {
+		const key = `${exchange.workflowId}:${exchange.exchangeId}`
+		exchangeMap[key] = exchange
 	}
 
-	return { exchangeService }
+	const exchangeClient = createFakeExchangeClient({
+		exchanges: exchangeMap
+	})
+
+	return { exchangeClient }
 }
 
 // Re-export commonly used test data creators for convenience

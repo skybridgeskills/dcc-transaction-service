@@ -2,9 +2,9 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf'
 	import { expect, within, waitFor } from 'storybook/test'
 	import {
-		createStorybookSetup,
 		createStorybookClaimExchange,
-		createStorybookVerifyExchange
+		createStorybookVerifyExchange,
+		createStorybookSetup
 	} from '../test-fixtures/storybook-helpers.js'
 
 	import InteractionPage from './InteractionPage.svelte'
@@ -25,55 +25,76 @@
 		args: {}
 	})
 
-	// Setup for claim exchange
-	const claimExchangeSetup = createStorybookSetup({
-		'claim-exchange-123': createStorybookClaimExchange({
-			exchangeId: 'claim-exchange-123',
-			state: 'pending'
-		}),
-		'claim-exchange-complete': createStorybookClaimExchange({
-			exchangeId: 'claim-exchange-complete',
-			state: 'complete'
-		}),
-		'claim-exchange-invalid': createStorybookClaimExchange({
-			exchangeId: 'claim-exchange-invalid',
-			state: 'invalid'
-		})
+	// Exchange data for claim workflow
+	const claimExchangePending = createStorybookClaimExchange({
+		exchangeId: 'claim-exchange-123',
+		state: 'pending'
+	})
+	const claimExchangeComplete = createStorybookClaimExchange({
+		exchangeId: 'claim-exchange-complete',
+		state: 'complete'
+	})
+	const claimExchangeInvalid = createStorybookClaimExchange({
+		exchangeId: 'claim-exchange-invalid',
+		state: 'invalid'
 	})
 
-	// Setup for verify exchange
-	const verifyExchangeSetup = createStorybookSetup({
-		'verify-exchange-123': createStorybookVerifyExchange({
-			exchangeId: 'verify-exchange-123',
-			state: 'pending',
-			variables: {
-				vprContext: ['https://www.w3.org/2018/credentials/v1'],
-				vprCredentialType: ['VerifiableCredential', 'OpenBadgeCredential'],
-				vprClaims: [
-					{ path: ['credentialSubject', 'name'] },
-					{ path: ['credentialSubject', 'achievement'], values: ['Test Achievement'] }
-				],
-				trustedIssuers: ['did:example:issuer1', 'did:example:issuer2'],
-				trustedRegistries: ['https://registry.example.com']
-			}
-		}),
-		'verify-exchange-complete': createStorybookVerifyExchange({
-			exchangeId: 'verify-exchange-complete',
-			state: 'complete',
-			variables: {
-				vprContext: ['https://www.w3.org/2018/credentials/v1'],
-				vprCredentialType: ['VerifiableCredential']
-			}
-		}),
-		'verify-exchange-invalid': createStorybookVerifyExchange({
-			exchangeId: 'verify-exchange-invalid',
-			state: 'invalid',
-			variables: {
-				vprContext: ['https://www.w3.org/2018/credentials/v1'],
-				vprCredentialType: ['VerifiableCredential']
-			}
-		})
+	// Exchange data for verify workflow
+	const verifyExchangePending = createStorybookVerifyExchange({
+		exchangeId: 'verify-exchange-123',
+		state: 'pending',
+		variables: {
+			vprContext: ['https://www.w3.org/2018/credentials/v1'],
+			vprCredentialType: ['VerifiableCredential', 'OpenBadgeCredential'],
+			vprClaims: [
+				{ path: ['credentialSubject', 'name'] },
+				{ path: ['credentialSubject', 'achievement'], values: ['Test Achievement'] }
+			],
+			trustedIssuers: ['did:example:issuer1', 'did:example:issuer2'],
+			trustedRegistries: ['https://registry.example.com']
+		}
 	})
+	const verifyExchangeComplete = createStorybookVerifyExchange({
+		exchangeId: 'verify-exchange-complete',
+		state: 'complete',
+		variables: {
+			vprContext: ['https://www.w3.org/2018/credentials/v1'],
+			vprCredentialType: ['VerifiableCredential']
+		}
+	})
+	const verifyExchangeInvalid = createStorybookVerifyExchange({
+		exchangeId: 'verify-exchange-invalid',
+		state: 'invalid',
+		variables: {
+			vprContext: ['https://www.w3.org/2018/credentials/v1'],
+			vprCredentialType: ['VerifiableCredential']
+		}
+	})
+
+	// Create fake exchange clients for each story
+	const verificationPendingClient = createStorybookSetup({
+		'verify-exchange-123': verifyExchangePending
+	}).exchangeClient
+
+	const verificationCompleteClient = createStorybookSetup({
+		'verify-exchange-complete': verifyExchangeComplete
+	}).exchangeClient
+
+	const verificationInvalidClient = createStorybookSetup({
+		'verify-exchange-invalid': verifyExchangeInvalid
+	}).exchangeClient
+
+	const claimPendingClient = createStorybookSetup({
+		'claim-exchange-123': claimExchangePending
+	}).exchangeClient
+
+	const claimCompleteClient = createStorybookSetup({
+		'claim-exchange-complete': claimExchangeComplete
+	}).exchangeClient
+
+	const claimInvalidClient = createStorybookSetup({
+		'claim-exchange-invalid': claimExchangeInvalid
+	}).exchangeClient
 </script>
 
 <!-- Verification Workflow Stories -->
@@ -98,13 +119,7 @@
 		expect(walletSelector).toBeInTheDocument()
 	}}
 >
-	{@const exchange = verifyExchangeSetup.exchangeService.getExchangeData('verify-exchange-123', 'verify')}
-	{#await exchange then exchangeData}
-		<InteractionPage
-			exchangeService={verifyExchangeSetup.exchangeService}
-			exchange={exchangeData}
-		/>
-	{/await}
+	<InteractionPage exchange={verifyExchangePending} exchangeClient={verificationPendingClient} />
 </Story>
 
 <Story
@@ -124,13 +139,7 @@
 		expect(successIcon).toBeInTheDocument()
 	}}
 >
-	{@const exchange = verifyExchangeSetup.exchangeService.getExchangeData('verify-exchange-complete', 'verify')}
-	{#await exchange then exchangeData}
-		<InteractionPage
-			exchangeService={verifyExchangeSetup.exchangeService}
-			exchange={exchangeData}
-		/>
-	{/await}
+	<InteractionPage exchange={verifyExchangeComplete} exchangeClient={verificationCompleteClient} />
 </Story>
 
 <Story
@@ -146,13 +155,7 @@
 		)
 	}}
 >
-	{@const exchange = verifyExchangeSetup.exchangeService.getExchangeData('verify-exchange-invalid', 'verify')}
-	{#await exchange then exchangeData}
-		<InteractionPage
-			exchangeService={verifyExchangeSetup.exchangeService}
-			exchange={exchangeData}
-		/>
-	{/await}
+	<InteractionPage exchange={verifyExchangeInvalid} exchangeClient={verificationInvalidClient} />
 </Story>
 
 <!-- Claim Workflow Stories -->
@@ -177,13 +180,7 @@
 		expect(walletSelector).toBeInTheDocument()
 	}}
 >
-	{@const exchange = claimExchangeSetup.exchangeService.getExchangeData('claim-exchange-123', 'claim')}
-	{#await exchange then exchangeData}
-		<InteractionPage
-			exchangeService={claimExchangeSetup.exchangeService}
-			exchange={exchangeData}
-		/>
-	{/await}
+	<InteractionPage exchange={claimExchangePending} exchangeClient={claimPendingClient} />
 </Story>
 
 <Story
@@ -203,13 +200,7 @@
 		expect(issuedText).toBeInTheDocument()
 	}}
 >
-	{@const exchange = claimExchangeSetup.exchangeService.getExchangeData('claim-exchange-complete', 'claim')}
-	{#await exchange then exchangeData}
-		<InteractionPage
-			exchangeService={claimExchangeSetup.exchangeService}
-			exchange={exchangeData}
-		/>
-	{/await}
+	<InteractionPage exchange={claimExchangeComplete} exchangeClient={claimCompleteClient} />
 </Story>
 
 <Story
@@ -225,11 +216,5 @@
 		)
 	}}
 >
-	{@const exchange = claimExchangeSetup.exchangeService.getExchangeData('claim-exchange-invalid', 'claim')}
-	{#await exchange then exchangeData}
-		<InteractionPage
-			exchangeService={claimExchangeSetup.exchangeService}
-			exchange={exchangeData}
-		/>
-	{/await}
+	<InteractionPage exchange={claimExchangeInvalid} exchangeClient={claimInvalidClient} />
 </Story>

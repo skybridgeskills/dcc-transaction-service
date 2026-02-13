@@ -1,29 +1,13 @@
 <script lang="ts" module>
 	import { defineMeta } from '@storybook/addon-svelte-csf'
 	import { expect, within, userEvent, waitFor } from 'storybook/test'
-	import {
-		createStorybookSetup,
-		createStorybookClaimExchange
-	} from '../../test-fixtures/storybook-helpers.js'
+	import { createStorybookClaimExchange } from '../../test-fixtures/storybook-helpers.js'
 
 	import ExchangeStatusPoll from './ExchangeStatusPoll.svelte'
 
 	const { Story } = defineMeta({
 		title: 'Components/ExchangeStatusPoll',
 		argTypes: {
-			exchangeId: {
-				control: 'text',
-				description: 'Exchange ID to poll'
-			},
-			workflowId: {
-				control: 'select',
-				options: ['claim', 'didAuth', 'verify'],
-				description: 'Workflow ID'
-			},
-			pollInterval: {
-				control: 'number',
-				description: 'Polling interval in milliseconds (default: 3000)'
-			},
 			maxPolls: {
 				control: 'number',
 				description: 'Maximum number of polls before pausing (default: 40)'
@@ -32,36 +16,37 @@
 		args: {}
 	})
 
-	// Setup services for each story
-	const activeExchangeSetup = createStorybookSetup({
-		'test-exchange-123': createStorybookClaimExchange({
-			exchangeId: 'test-exchange-123',
-			state: 'active'
-		})
+	// Exchange data for each story
+	const activeExchange = createStorybookClaimExchange({
+		exchangeId: 'test-exchange-123',
+		state: 'active'
 	})
 
-	const completeExchangeSetup = createStorybookSetup({
-		'test-exchange-complete': createStorybookClaimExchange({
-			exchangeId: 'test-exchange-complete',
-			state: 'complete'
-		})
+	const completeExchange = createStorybookClaimExchange({
+		exchangeId: 'test-exchange-complete',
+		state: 'complete'
 	})
 
-	const invalidExchangeSetup = createStorybookSetup({
-		'test-exchange-invalid': createStorybookClaimExchange({
-			exchangeId: 'test-exchange-invalid',
-			state: 'invalid'
-		})
+	const invalidExchange = createStorybookClaimExchange({
+		exchangeId: 'test-exchange-invalid',
+		state: 'invalid'
 	})
 
-	const pausedExchangeSetup = createStorybookSetup({
-		'test-exchange-paused': createStorybookClaimExchange({
-			exchangeId: 'test-exchange-paused',
-			state: 'active'
-		})
+	const pausedExchange = createStorybookClaimExchange({
+		exchangeId: 'test-exchange-paused',
+		state: 'active'
 	})
 
-	const notFoundExchangeSetup = createStorybookSetup({})
+	// Mock callback that returns the exchange
+	function mockOnPollRequest(exchange: App.ExchangeDetailBase) {
+		return async () => exchange
+	}
+
+	// Mock resume callback
+	let mockResumeCalled = false
+	function mockResumePolling() {
+		mockResumeCalled = true
+	}
 </script>
 
 <Story
@@ -78,11 +63,12 @@
 	}}
 >
 	<ExchangeStatusPoll
-		exchangeId="test-exchange-123"
-		workflowId="claim"
-		pollInterval={1000}
+		exchange={activeExchange}
+		onPollRequest={mockOnPollRequest(activeExchange)}
+		isPolling={false}
+		statusCheckCount={3}
+		isPaused={false}
 		maxPolls={5}
-		exchangeService={activeExchangeSetup.exchangeService}
 	/>
 </Story>
 
@@ -100,10 +86,11 @@
 	}}
 >
 	<ExchangeStatusPoll
-		exchangeId="test-exchange-complete"
-		workflowId="claim"
-		pollInterval={1000}
-		exchangeService={completeExchangeSetup.exchangeService}
+		exchange={completeExchange}
+		onPollRequest={mockOnPollRequest(completeExchange)}
+		isPolling={false}
+		statusCheckCount={10}
+		isPaused={false}
 	/>
 </Story>
 
@@ -122,10 +109,11 @@
 	}}
 >
 	<ExchangeStatusPoll
-		exchangeId="test-exchange-invalid"
-		workflowId="claim"
-		pollInterval={1000}
-		exchangeService={invalidExchangeSetup.exchangeService}
+		exchange={invalidExchange}
+		onPollRequest={mockOnPollRequest(invalidExchange)}
+		isPolling={false}
+		statusCheckCount={5}
+		isPaused={false}
 	/>
 </Story>
 
@@ -135,10 +123,12 @@
 		const canvas = within(canvasElement)
 		await waitFor(
 			() => {
-				const pausedText = canvas.getByText(/polling paused/i)
-				expect(pausedText).toBeInTheDocument()
+				// Verify resume button is present (replaces progress bar when paused)
 				const resumeButton = canvas.getByRole('button', { name: /resume/i })
 				expect(resumeButton).toBeInTheDocument()
+				// Verify status badge is still visible
+				const statusBadge = canvas.getByText(/status: active/i)
+				expect(statusBadge).toBeInTheDocument()
 			},
 			{ timeout: 2000 }
 		)
@@ -156,31 +146,35 @@
 	}}
 >
 	<ExchangeStatusPoll
-		exchangeId="test-exchange-paused"
-		workflowId="claim"
-		pollInterval={100}
+		exchange={pausedExchange}
+		onPollRequest={mockOnPollRequest(pausedExchange)}
+		isPolling={false}
+		statusCheckCount={3}
+		isPaused={true}
 		maxPolls={3}
-		exchangeService={pausedExchangeSetup.exchangeService}
+		onResumePolling={mockResumePolling}
 	/>
 </Story>
 
 <Story
-	name="ExchangeNotFound"
+	name="PollingInProgress"
 	play={async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await waitFor(
 			() => {
-				const errorDisplay = canvas.getByRole('alert')
-				expect(errorDisplay).toBeInTheDocument()
+				const loadingIndicator = canvasElement.querySelector('[role="status"]')
+				expect(loadingIndicator).toBeInTheDocument()
 			},
-			{ timeout: 2000 }
+			{ timeout: 1000 }
 		)
 	}}
 >
 	<ExchangeStatusPoll
-		exchangeId="non-existent-exchange"
-		workflowId="claim"
-		pollInterval={1000}
-		exchangeService={notFoundExchangeSetup.exchangeService}
+		exchange={activeExchange}
+		onPollRequest={mockOnPollRequest(activeExchange)}
+		isPolling={true}
+		statusCheckCount={2}
+		isPaused={false}
+		maxPolls={5}
 	/>
 </Story>

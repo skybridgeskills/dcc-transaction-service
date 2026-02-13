@@ -72,6 +72,7 @@
 <div
 	class="flex items-start gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-destructive dark:bg-destructive/20 dark:text-destructive"
 	role="alert"
+	data-testid="error-display"
 >
 	<div class="flex-shrink-0 text-xl leading-none">⚠️</div>
 	<div class="flex-1 text-sm leading-relaxed">{displayMessage}</div>

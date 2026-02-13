@@ -4,6 +4,15 @@
  */
 
 /**
+ * Helper type for Storybook exchange overrides
+ * Makes base variables optional since they're provided by default
+ */
+type StorybookExchangeOverrides<T extends App.ExchangeDetailBase> = 
+  Omit<Partial<T>, 'variables'> & {
+    variables?: Partial<T['variables']>
+  }
+
+/**
  * Minimal mock VC data (placeholder string)
  * Avoids importing testVC.js which may have backend dependencies
  */
@@ -27,7 +36,7 @@ const MOCK_VC_STRING = JSON.stringify({
 export function createStorybookExchangeData(
   workflowId: 'claim' | 'didAuth' | 'verify',
   overrides: Omit<Partial<App.ExchangeDetailBase>, 'variables'> & {
-    variables?: Partial<App.ExchangeDetailBase['variables']>
+    variables?: Partial<Record<string, any>>
   } = {}
 ): App.ExchangeDetailBase {
   const baseExchange = {
@@ -72,9 +81,7 @@ export function createStorybookExchangeData(
  * @returns A mock claim exchange with all required variables
  */
 export function createStorybookClaimExchange(
-  overrides: Omit<Partial<App.ExchangeDetailClaim>, 'variables'> & {
-    variables?: Partial<App.ExchangeDetailClaim['variables']>
-  } = {}
+  overrides: StorybookExchangeOverrides<App.ExchangeDetailClaim> = {}
 ): App.ExchangeDetailClaim {
   const baseVariables: App.ExchangeDetailClaim['variables'] = {
     tenantName: 'default',
@@ -98,7 +105,7 @@ export function createStorybookClaimExchange(
  * @returns A mock didAuth exchange with all required variables
  */
 export function createStorybookDidAuthExchange(
-  overrides: Partial<App.ExchangeDetailDidAuth> = {}
+  overrides: StorybookExchangeOverrides<App.ExchangeDetailDidAuth> = {}
 ): App.ExchangeDetailDidAuth {
   return createStorybookExchangeData(
     'didAuth',
@@ -113,7 +120,7 @@ export function createStorybookDidAuthExchange(
  * @returns A mock verify exchange with all required variables
  */
 export function createStorybookVerifyExchange(
-  overrides: Partial<App.ExchangeDetailVerify> = {}
+  overrides: StorybookExchangeOverrides<App.ExchangeDetailVerify> = {}
 ): App.ExchangeDetailVerify {
   const baseVariables: App.ExchangeDetailVerify['variables'] = {
     tenantName: 'default',

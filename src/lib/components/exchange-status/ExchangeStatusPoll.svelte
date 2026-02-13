@@ -1,168 +1,108 @@
 <script lang="ts">
-	import type { ExchangeService } from '../../services/exchange-service.js'
 	import LoadingIndicator from '../loading-indicator/LoadingIndicator.svelte'
 	import ErrorDisplay from '../error-display/ErrorDisplay.svelte'
 	import { Badge } from '$lib/components/ui/badge/index.js'
 	import { Button } from '$lib/components/ui/button/index.js'
-	import { Card, CardContent } from '$lib/components/ui/card/index.js'
 
 	interface Props {
-		/** Exchange ID to poll */
-		exchangeId: string
-		/** Workflow ID */
-		workflowId: App.SupportedWorkflowIds
-		/** Exchange service instance (dependency injection) */
-		exchangeService: ExchangeService
-		/** Polling interval in milliseconds (default: 3000) */
-		pollInterval?: number
+		/** Exchange data */
+		exchange: App.ExchangeDetailBase
+		/** Callback to trigger exchange state fetch */
+		onPollRequest: () => Promise<App.ExchangeDetailBase>
+		/** Whether polling is currently in progress */
+		isPolling?: boolean
+		/** Current status check count */
+		statusCheckCount?: number
+		/** Whether polling is paused */
+		isPaused?: boolean
 		/** Maximum number of polls before pausing (default: 40) */
 		maxPolls?: number
+		/** Callback to resume polling */
+		onResumePolling?: () => void
 	}
 
 	let {
-		exchangeId,
-		workflowId,
-		exchangeService,
-		pollInterval = 3000,
-		maxPolls = 40
+		exchange,
+		onPollRequest,
+		isPolling = false,
+		statusCheckCount = 0,
+		isPaused = false,
+		maxPolls = 40,
+		onResumePolling
 	}: Props = $props()
 
-	let exchange = $state<App.ExchangeDetailBase | null>(null)
-	let error = $state<Error | null>(null)
-	let statusCheckCount = $state(0)
-	let isPolling = $state(false)
-	let isPaused = $state(false)
-	// Non-reactive variable - doesn't need to trigger updates
-	let pollingIntervalId: ReturnType<typeof setInterval> | null = null
-
-	async function checkExchangeStatus() {
-		// Don't poll if already waiting for response or paused
-		if (isPolling || isPaused) {
-			return
-		}
-
-		// Stop if we've reached max polls
-		if (statusCheckCount >= maxPolls) {
-			isPaused = true
-			stopPolling()
-			return
-		}
-
-		// Stop if exchange is complete or invalid
-		if (exchange && (exchange.state === 'complete' || exchange.state === 'invalid')) {
-			stopPolling()
-			return
-		}
-
-		isPolling = true
-		error = null
-
-		try {
-			const result = await exchangeService.getExchangeState(exchangeId, workflowId)
-			exchange = result
-			statusCheckCount++
-		} catch (e) {
-			error = e instanceof Error ? e : new Error(String(e))
-			stopPolling()
-		} finally {
-			isPolling = false
+	function handleResumePolling() {
+		if (onResumePolling) {
+			onResumePolling()
 		}
 	}
 
-	function startPolling() {
-		if (pollingIntervalId) {
-			return
-		}
+	// Calculate remaining checks and fill percentage
+	const remainingChecks = $derived(maxPolls - statusCheckCount)
+	const fillPercentage = $derived(remainingChecks / maxPolls)
 
-		// Defer initial check to avoid synchronous execution during effect
-		queueMicrotask(() => {
-			checkExchangeStatus()
-		})
-
-		// Set up interval
-		pollingIntervalId = setInterval(() => {
-			checkExchangeStatus()
-		}, pollInterval)
-	}
-
-	function stopPolling() {
-		if (pollingIntervalId) {
-			clearInterval(pollingIntervalId)
-			pollingIntervalId = null
-		}
-	}
-
-	function resumePolling() {
-		isPaused = false
-		statusCheckCount = 0
-		startPolling()
-	}
-
-	// Start polling on mount and when props change
-	$effect(() => {
-		// Explicitly track only props we care about (not internal state)
-		exchangeId
-		workflowId
-		pollInterval
-
-		// Stop any existing polling
-		stopPolling()
-		// Reset state when props change
-		exchange = null
-		error = null
-		statusCheckCount = 0
-		isPaused = false
-
-		// Start new polling
-		startPolling()
-
-		return () => {
-			stopPolling()
+	// Determine color based on remaining checks
+	// Green until 30% remaining (12 checks), then yellow
+	// Threshold: 30% of maxPolls = 12 remaining checks (for default maxPolls=40)
+	const statusBarColor = $derived.by(() => {
+		const threshold = Math.ceil(maxPolls * 0.3) // 30% threshold
+		if (remainingChecks > threshold) {
+			// More than 30% remaining - green
+			return 'bg-green-500 dark:bg-green-600'
+		} else {
+			// 30% or less remaining - yellow
+			return 'bg-yellow-400 dark:bg-yellow-600'
 		}
 	})
 </script>
 
 <div class="flex flex-col gap-4 p-4">
-	{#if error}
-		<ErrorDisplay {error} />
-	{:else if exchange}
-		<div class="flex items-center gap-4">
-			<Badge
-				class={
-					exchange.state === 'pending'
-						? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-						: exchange.state === 'active'
-							? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-							: exchange.state === 'complete'
-								? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-								: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-				}
-			>
-				Status: {exchange.state}
-			</Badge>
-			<div class="text-sm text-muted-foreground">
-				Checks: {statusCheckCount} / {maxPolls}
-			</div>
-		</div>
+	<div class="flex items-center gap-4">
+		<Badge
+			class={
+				exchange.state === 'pending'
+					? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+					: exchange.state === 'active'
+						? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+						: exchange.state === 'complete'
+							? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+							: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+			}
+		>
+			Status: {exchange.state}
+		</Badge>
 
 		{#if isPaused}
-			<Card>
-				<CardContent class="p-4">
-					<div class="flex flex-col gap-2">
-						<p class="m-0 text-sm text-muted-foreground">Polling paused after {maxPolls} checks.</p>
-						<Button type="button" onclick={resumePolling} size="sm" class="self-start">
-							▶ Resume Polling
-						</Button>
-					</div>
-				</CardContent>
-			</Card>
-		{:else if exchange.state === 'complete'}
-			<div class="rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-300">
-				✓ Exchange completed successfully
+			<!-- Resume Button - inline with badge -->
+			{#if onResumePolling}
+				<Button type="button" onclick={handleResumePolling} size="sm">
+					▶ Resume
+				</Button>
+			{/if}
+		{:else}
+			<!-- Status Bar - inline with badge -->
+			<div
+				class="h-3 w-[40px] overflow-hidden rounded-full border border-border bg-white dark:bg-gray-800"
+				role="progressbar"
+				aria-valuenow={remainingChecks}
+				aria-valuemin={0}
+				aria-valuemax={maxPolls}
+				aria-label={`${remainingChecks} checks remaining`}
+			>
+				<div
+					class="h-full transition-all duration-300 {statusBarColor}"
+					style="width: {fillPercentage * 100}%"
+				></div>
 			</div>
-		{:else if exchange.state === 'invalid'}
-			<ErrorDisplay exchangeState="invalid" />
 		{/if}
+	</div>
+
+	{#if exchange.state === 'complete'}
+		<div class="rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-300">
+			✓ Exchange completed successfully
+		</div>
+	{:else if exchange.state === 'invalid'}
+		<ErrorDisplay exchangeState="invalid" />
 	{/if}
 
 	{#if isPolling}

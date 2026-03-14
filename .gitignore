@@ -115,6 +115,7 @@ test-fixtures/.env.testing
 
 # Output
 dist
+storybook-static
 
 # MacOS
 .DS_Store
@@ -123,3 +124,6 @@ dist
 src/data
 
 compose-test.yaml
+
+# developer notes and plans
+docs/plans/*

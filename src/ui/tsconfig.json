@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "rootDir": ".",
+    "outDir": "../../dist/ui",
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": ["./**/*"],
+  "exclude": []
+}

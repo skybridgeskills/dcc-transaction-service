@@ -18,6 +18,8 @@ import { JSONObject } from 'hono/utils/types'
 import { getWorkflow } from './workflows.js'
 import { getConfig } from './config.js'
 import { getExchangeData } from './transactionManager.js'
+import { handleInteraction } from './interactions.js'
+import { serveStatic } from '@hono/node-server/serve-static'
 
 /**
  * Wraps a Hono handler with error handling
@@ -90,7 +92,8 @@ const routes = {
   legacyExchangeDetail: '/exchange/:exchangeId', // This might not be used anymore if it is not referenced by the exchange creation
   exchangeCreate: '/workflows/:workflowId/exchanges',
   exchangeDetail: '/workflows/:workflowId/exchanges/:exchangeId',
-  protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols'
+  protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols',
+  interaction: '/interactions/:exchangeId'
 }
 
 export const app = new Hono()
@@ -102,6 +105,7 @@ export const app = new Hono()
 
   .use(logger())
   .use(cors())
+  .use('/ui/*', serveStatic({ root: './dist/' }))
   .use(setConfigContext)
 
   // Config Handler adds config to the context
@@ -261,5 +265,8 @@ export const app = new Hono()
   VC-API 0.7 as of 2025-06-08: https://w3c-ccg.github.io/vc-api/#interaction-url-format
   */
   .get(routes.protocols, getInteractionsForExchange)
+
+  // VCALM interaction URL — content-negotiated endpoint for browser and API access
+  .get(routes.interaction, handleInteraction)
 
 export type AppType = typeof app

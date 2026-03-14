@@ -61,6 +61,18 @@ export const getExchangeData = async (
 }
 
 /**
+ * Retrieves exchange data by exchangeId only, without requiring a workflowId.
+ * Used by the interaction URL endpoint where the workflowId is not in the URL path.
+ */
+export const getExchangeDataById = async (exchangeId: string) => {
+  const storedData = await keyv.get(exchangeId)
+  if (!storedData) {
+    throw new HTTPException(404, { message: 'Unknown exchangeId.' })
+  }
+  return storedData
+}
+
+/**
  * Sets up one exchange and save it to Keyv. The local exchangeId is used as the key for the
  * record. Success/Failure boolean is returned.
  */

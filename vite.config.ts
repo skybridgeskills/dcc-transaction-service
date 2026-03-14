@@ -4,6 +4,11 @@ import { defineConfig } from 'vite'
 import { resolve } from 'path'
 import { createRequire } from 'module'
 
+import * as dotenv from 'dotenv'
+if (process.env.NODE_ENV === 'development') {
+  dotenv.config()
+}
+
 const require = createRequire(import.meta.url)
 
 // Helper to resolve package main entry
@@ -22,6 +27,11 @@ function resolvePackageMain(packageName: string) {
 
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
+  server: {
+    port: process.env.PORT ? parseInt(process.env.PORT) : 4004,
+    host: process.env.HOST || '0.0.0.0',
+    allowedHosts: true
+  },
   resolve: {
     alias: {
       '@digitalcredentials/dcc-context': resolvePackageMain(

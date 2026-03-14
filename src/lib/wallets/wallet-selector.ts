@@ -3,7 +3,11 @@
  * Determines supported protocols for wallets and handles protocol prioritization
  */
 
-import type { WalletConfig, ProtocolType, ProtocolConfig } from './wallet-config.js'
+import type {
+  WalletConfig,
+  ProtocolType,
+  ProtocolConfig
+} from './wallet-config.js'
 import { getAllWalletConfigs, getWalletConfig } from './wallet-config.js'
 
 export interface AvailableProtocol {
@@ -20,9 +24,7 @@ export interface WalletSelection {
 /**
  * Get supported protocols for a wallet, ordered by priority
  */
-export function getSupportedProtocols(
-  wallet: WalletConfig
-): ProtocolConfig[] {
+export function getSupportedProtocols(wallet: WalletConfig): ProtocolConfig[] {
   return [...wallet.supportedProtocols].sort((a, b) => a.priority - b.priority)
 }
 
@@ -78,9 +80,7 @@ export function findBestProtocol(
   availableProtocols: AvailableProtocol[]
 ): ProtocolType | null {
   const supportedProtocols = getSupportedProtocols(wallet)
-  const availableProtocolTypes = new Set(
-    availableProtocols.map((p) => p.type)
-  )
+  const availableProtocolTypes = new Set(availableProtocols.map((p) => p.type))
 
   // Find the first supported protocol that is also available
   for (const protocolConfig of supportedProtocols) {
@@ -98,9 +98,8 @@ export function findBestProtocol(
 export function getCompatibleWallets(
   availableProtocols: AvailableProtocol[]
 ): WalletConfig[] {
-  const availableProtocolTypes = new Set(
-    availableProtocols.map((p) => p.type)
-  )
+  console.log('getCompatibleWallets', availableProtocols)
+  const availableProtocolTypes = new Set(availableProtocols.map((p) => p.type))
 
   return getAllWalletConfigs().filter((wallet) =>
     wallet.supportedProtocols.some((p) => availableProtocolTypes.has(p.type))

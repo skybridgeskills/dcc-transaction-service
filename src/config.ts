@@ -30,7 +30,7 @@ const parseConfig = (): App.Config => {
 
   const config: App.Config = {
     port: parseInt(process.env.PORT ?? '0') || defaultPort,
-    defaultExchangeHost: process.env.EXCHANGE_HOST ?? defaultExchangeHost,
+    defaultExchangeHost: process.env.DEFAULT_EXCHANGE_HOST ?? defaultExchangeHost,
     exchangeTtl: parseInt(process.env.EXCHANGE_TTL ?? '0') || defaultTtlSeconds,
     statusService: process.env.STATUS_SERVICE ?? '',
     signingService: process.env.SIGNING_SERVICE ?? defaultSigningService,

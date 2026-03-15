@@ -44,8 +44,9 @@ Usage: pnpm transaction <workflowId> [profileName] [--no-open]
   --no-open    Don't auto-open the interaction URL in the browser
 
 Environment variables:
-  CLI_BASE_URL      Server base URL (default: http://localhost:4004)
-  CLI_TENANT_TOKEN  Bearer token for tenant auth (optional)
+  CLI_BASE_URL       Server base URL (default: http://localhost:4004)
+  CLI_EXCHANGE_HOST  Public exchange host URL (default: server's DEFAULT_EXCHANGE_HOST)
+  CLI_TENANT_TOKEN   Bearer token for tenant auth (optional)
 
 Examples:
   pnpm transaction didAuth
@@ -92,7 +93,7 @@ async function main() {
   }
 
   const variables: Record<string, unknown> = {
-    exchangeHost: baseUrl,
+    ...(process.env.CLI_EXCHANGE_HOST && { exchangeHost: process.env.CLI_EXCHANGE_HOST }),
     ...profileVars
   }
 

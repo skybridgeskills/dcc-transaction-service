@@ -17,7 +17,7 @@
     "dev:ui": "npx vite dev --config vite.config.ui.ts",
     "storybook": "storybook dev -p 6006 --config-dir src/storybook/.storybook",
     "build-storybook": "storybook build --config-dir src/storybook/.storybook",
-    "transaction": "tsx src/cli/cli.ts"
+    "transaction": "dotenvx run -f .env -- tsx src/cli/cli.ts"
   },
   "dependencies": {
     "@digitalbazaar/credentials-context": "^3.2.0",

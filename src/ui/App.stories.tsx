@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { App } from './App'
-import { FakeExchangeClient } from './services/fake-exchange-client'
+import { FakeExchangeClient } from '../lib/services/exchange-client/fake-exchange-client'
 
 const mockProtocols = {
   vcapi: 'https://example.com/workflows/verify/exchanges/test-123',

@@ -1,5 +1,6 @@
 import type {
   ExchangeClient,
+  ExchangeProtocols,
   ExchangeState,
   ExchangeStatusResponse
 } from './exchange-client'
@@ -22,11 +23,22 @@ export class FakeExchangeClient implements ExchangeClient {
       : [options.states]
   }
 
-  async fetchProtocols(): Promise<Record<string, string>> {
+  async createExchange(
+    _workflowId: string,
+    _variables: Record<string, unknown>
+  ): Promise<ExchangeProtocols> {
+    return {
+      iu: this.protocols['iu'] ?? '',
+      vcapi: this.protocols['vcapi'] ?? '',
+      ...this.protocols
+    }
+  }
+
+  async fetchProtocols(_exchangeId: string): Promise<Record<string, string>> {
     return this.protocols
   }
 
-  async fetchExchangeStatus(): Promise<ExchangeStatusResponse> {
+  async fetchExchangeStatus(_vcapiUrl: string): Promise<ExchangeStatusResponse> {
     const idx = Math.min(this.callIndex, this.states.length - 1)
     const state = this.states[idx]
     this.callIndex++

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { ExchangeClient, ExchangeState } from './services/exchange-client'
+import type { ExchangeClient, ExchangeState } from '../lib/services/exchange-client/exchange-client'
 
 interface ExchangeStatusResult {
   state: ExchangeState | null

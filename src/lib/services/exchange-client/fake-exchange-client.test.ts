@@ -4,8 +4,23 @@ import { FakeExchangeClient } from './fake-exchange-client'
 describe('FakeExchangeClient', () => {
   const mockProtocols = {
     vcapi: 'https://example.com/workflows/verify/exchanges/123',
-    iu: 'https://example.com/workflows/verify/exchanges/123/protocols?iuv=1'
+    iu: 'https://example.com/interactions/123'
   }
+
+  describe('createExchange', () => {
+    test('returns configured protocols', async () => {
+      const client = new FakeExchangeClient({
+        protocols: mockProtocols,
+        states: 'pending'
+      })
+
+      const result = await client.createExchange('claim', {})
+      expect(result.iu).toBe('https://example.com/interactions/123')
+      expect(result.vcapi).toBe(
+        'https://example.com/workflows/verify/exchanges/123'
+      )
+    })
+  })
 
   describe('fetchProtocols', () => {
     test('returns configured protocols', async () => {

@@ -223,7 +223,7 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   const serviceEndpoint =
     verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
   const protocols = {
-    iu: `${serviceEndpoint}/protocols?iuv=1`,
+    iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}`,
     vcapi: serviceEndpoint,
     lcw: getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint),
     verifiablePresentationRequest

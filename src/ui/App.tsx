@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { wallets } from '../lib/wallets/index'
 import { WalletInteraction } from './WalletInteraction'
 import { useExchangeStatus } from './useExchangeStatus'
-import type { ExchangeClient } from './services/exchange-client'
-import { HttpExchangeClient } from './services/http-exchange-client'
+import type { ExchangeClient } from '../lib/services/exchange-client/exchange-client'
+import { HttpExchangeClient } from '../lib/services/exchange-client/http-exchange-client'
 
 interface AppProps {
   exchangeClient?: ExchangeClient

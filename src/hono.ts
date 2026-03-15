@@ -8,7 +8,10 @@ import {
   getInteractionsForExchange,
   participateInExchange
 } from './exchanges.js'
-import { authenticateTenantMiddleware } from './auth.js'
+import {
+  authenticateTenantMiddleware,
+  authenticateExchangeOrTenantMiddleware
+} from './auth.js'
 import { healthCheck } from './health.js'
 import { HTTPException } from 'hono/http-exception'
 import * as schema from './schema.js'
@@ -239,20 +242,22 @@ export const app = new Hono()
   // Get Exchange State
   .get(
     routes.exchangeDetail,
-    authenticateTenantMiddleware,
+    authenticateExchangeOrTenantMiddleware,
     addWorkflowByParam,
     async (c) => {
       const exchange = await getExchangeData(
         c.req.param('exchangeId')!,
         c.var.workflow.id
       )
-      const authEnabled = c.var.config.tenantAuthenticationEnabled
-      if (
-        authEnabled &&
-        c.var.authTenant &&
-        c.var.authTenant.tenantName !== exchange?.tenantName
-      ) {
-        throw new HTTPException(401, { message: 'Unauthorized' })
+      if (!c.var.exchangeTokenAuth) {
+        const authEnabled = c.var.config.tenantAuthenticationEnabled
+        if (
+          authEnabled &&
+          c.var.authTenant &&
+          c.var.authTenant.tenantName !== exchange?.tenantName
+        ) {
+          throw new HTTPException(401, { message: 'Unauthorized' })
+        }
       }
 
       return c.json(exchange)

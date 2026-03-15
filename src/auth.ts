@@ -1,6 +1,8 @@
 import { createMiddleware } from 'hono/factory'
+import { getCookie } from 'hono/cookie'
 import { getConfig } from './config.js'
 import { HTTPException } from 'hono/http-exception'
+import { verifyExchangeToken } from './lib/server/exchangeToken.js'
 
 export const getTenant = async ({
   tenantName,
@@ -69,6 +71,53 @@ export const authenticateTenantMiddleware = createMiddleware<{
   }
   const tenant = await authenticateTenant(authHeader[1])
 
+  if (!tenant) {
+    throw new HTTPException(401, { message: 'Unauthorized' })
+  }
+
+  c.set('authTenant', tenant)
+  await next()
+})
+
+/**
+ * Middleware that accepts either an exchange-scoped JWT cookie or a tenant
+ * Bearer token. The cookie path is tried first; if it succeeds the request
+ * proceeds with `exchangeTokenAuth` set to true, skipping tenant checks.
+ */
+export const authenticateExchangeOrTenantMiddleware = createMiddleware<{
+  Variables: {
+    authTenant?: App.Tenant
+    exchangeTokenAuth?: boolean
+  }
+}>(async (c, next) => {
+  const token = getCookie(c, 'exchange_token')
+  if (token) {
+    const payload = await verifyExchangeToken(token)
+    if (
+      payload &&
+      payload.exchangeId === c.req.param('exchangeId') &&
+      payload.workflowId === c.req.param('workflowId')
+    ) {
+      c.set('exchangeTokenAuth', true)
+      await next()
+      return
+    }
+    throw new HTTPException(401, { message: 'Invalid exchange token' })
+  }
+
+  const config = getConfig()
+  if (!config.tenantAuthenticationEnabled) {
+    await next()
+    return
+  }
+
+  const authHeader = c.req.header('Authorization')?.split(' ')
+  if (!authHeader || authHeader.length !== 2 || authHeader[0] !== 'Bearer') {
+    throw new HTTPException(401, {
+      message: 'Unauthorized'
+    })
+  }
+  const tenant = await authenticateTenant(authHeader[1])
   if (!tenant) {
     throw new HTTPException(401, { message: 'Unauthorized' })
   }

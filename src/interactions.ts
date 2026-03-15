@@ -1,8 +1,10 @@
 import type { Context } from 'hono'
 import { readFile } from 'fs/promises'
 import { resolve } from 'path'
+import { setCookie } from 'hono/cookie'
 import { getExchangeDataById } from './transactionManager.js'
 import { getProtocols } from './exchanges.js'
+import { signExchangeToken } from './lib/server/exchangeToken.js'
 
 /**
  * Determines whether the request prefers an HTML response based on the Accept header.
@@ -37,6 +39,21 @@ export const handleInteraction = async (c: Context) => {
   const accept = c.req.header('accept')
 
   if (prefersHtml(accept)) {
+    const exchangeData = await getExchangeDataById(c.req.param('exchangeId'))
+    const token = await signExchangeToken({
+      exchangeId: exchangeData.exchangeId,
+      workflowId: exchangeData.workflowId,
+      expiresAt: exchangeData.expires
+    })
+    setCookie(c, 'exchange_token', token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      secure: c.req.url.startsWith('https'),
+      path: '/',
+      maxAge: Math.floor(
+        (new Date(exchangeData.expires).getTime() - Date.now()) / 1000
+      )
+    })
     const html = await getUiHtml()
     return c.html(html)
   }

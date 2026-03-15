@@ -16,7 +16,7 @@ import {
   createMockExpiredCredential,
   createMockRevokedCredential
 } from '../test-fixtures/testData.js'
-import { getLcwProtocol } from '../protocols/lcw.js'
+import { getWalletInteractionUrl } from '../lib/wallets/index.js'
 import { participateInExchange } from '../exchanges.js'
 
 const testData = {
@@ -319,32 +319,23 @@ describe('participateInExchange - Empty Body Handling', function () {
 
 describe('LCW Protocol URL Generation', function () {
   test('generates correct LCW protocol URL format for verify workflow', function () {
-    const exchange = createMockExchange({
-      exchangeId: 'ae2b438a-8471-4b00-82ec-a688d1857245',
-      variables: {
-        ...createMockExchange().variables,
-        exchangeHost: 'https://verifierplus.org'
-      }
-    })
+    const serviceEndpoint =
+      'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
 
-    const lcwUrl = getLcwProtocol(exchange)
+    const lcwUrl = getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint)!
 
-    // Should use /request (not /request.html)
     expect(lcwUrl).toMatch(/^https:\/\/lcw\.app\/request\?request=/)
 
-    // Extract and decode the request parameter
     const url = new URL(lcwUrl)
     const requestParam = url.searchParams.get('request')
     expect(requestParam).toBeDefined()
 
     const decodedRequest = JSON.parse(decodeURIComponent(requestParam!))
 
-    // Should have the correct structure
     expect(decodedRequest).toEqual({
       credentialRequestOrigin: 'https://verifierplus.org',
       protocols: {
-        vcapi:
-          'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
+        vcapi: serviceEndpoint
       }
     })
   })

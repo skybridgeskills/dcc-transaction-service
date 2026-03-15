@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "rootDir": ".",
+    "rootDir": "..",
     "outDir": "../../dist/ui",
     "moduleResolution": "bundler",
     "noEmit": true

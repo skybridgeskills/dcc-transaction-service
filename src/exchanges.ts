@@ -18,7 +18,7 @@ import {
 } from './workflows/verifyWorkflow.js'
 import type { Context } from 'hono'
 
-import { getLcwProtocol } from './protocols/lcw.js'
+import { getWalletInteractionUrl } from './lib/wallets/index.js'
 import { HTTPException } from 'hono/http-exception'
 
 import { verifyDIDAuth } from './didAuth.js'
@@ -225,7 +225,7 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   const protocols = {
     iu: `${serviceEndpoint}/protocols?iuv=1`,
     vcapi: serviceEndpoint,
-    lcw: getLcwProtocol(exchange),
+    lcw: getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint),
     verifiablePresentationRequest
     // TODO: add "OID4VCI" support (claim workflow)
     // TODO: add "OID4VP" support for forthcoming verification workflows

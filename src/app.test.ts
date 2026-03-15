@@ -85,16 +85,16 @@ describe('api', function () {
       const walletQuery = walletQuerys.find((q) => q.retrievalId === 'someId')
       expect(walletQuery).toBeDefined()
       const url = walletQuery?.vprDeepLink ?? ''
+      const serviceEndpoint = extractServiceEndpoint(url)
+      const path = new URL(serviceEndpoint).pathname
 
-      const parsedDeepLink = new URL(url)
-      //should be http://localhost:4004/exchange?challenge=VOclS8ZiMs&auth_type=bearer
-      const requestURI = parsedDeepLink.searchParams.get('vc_request_url') ?? ''
-      // here we need to pull out just the path
-      // since we are calling the endpoint via
-      // supertest
-      const path = new URL(requestURI).pathname
-      // the challenge that the exchange service generated
-      const challenge = parsedDeepLink.searchParams.get('challenge') ?? ''
+      const initResponse = await app.request(path, {
+        method: 'POST',
+        body: JSON.stringify({}),
+        headers: { 'Content-Type': 'application/json' }
+      })
+      const initBody = (await initResponse.json()) as any
+      const challenge = initBody.verifiablePresentationRequest.challenge
       const didAuth = await getSignedDIDAuth(challenge)
 
       const exchangeResponse = await app.request(path, {
@@ -360,14 +360,8 @@ describe('api', function () {
       const walletQuery = await doSetup(app)
       const url = walletQuery?.vprDeepLink ?? ''
 
-      // Step 2. mimics what the wallet would do when opened by deeplink
-      // which is to parse the deeplink and call the exchange initiation endpoint
-      const parsedDeepLink = new URL(url)
-      const inititationURI =
-        parsedDeepLink.searchParams.get('vc_request_url') ?? ''
-
-      // strip out the host because we are using supertest
-      const initiationURIPath = new URL(inititationURI).pathname
+      const serviceEndpoint = extractServiceEndpoint(url)
+      const initiationURIPath = new URL(serviceEndpoint).pathname
 
       const initiationResponse = await app.request(initiationURIPath, {
         method: 'POST' // empty body to initiate a VC-API exchange
@@ -412,14 +406,8 @@ describe('api', function () {
       const walletQuery = await doSetup(app, 'claim')
       const url = walletQuery?.vprDeepLink ?? ''
 
-      // Step 2. mimics what the wallet would do when opened by deeplink
-      // which is to parse the deeplink and call the exchange initiation endpoint
-      const parsedDeepLink = new URL(url)
-      const inititationURI =
-        parsedDeepLink.searchParams.get('vc_request_url') ?? ''
-
-      // strip out the host because we are using supertest
-      const initiationURIPath = new URL(inititationURI).pathname
+      const serviceEndpoint = extractServiceEndpoint(url)
+      const initiationURIPath = new URL(serviceEndpoint).pathname
 
       const initiationResponse = await app.request(initiationURIPath, {
         method: 'POST'
@@ -489,16 +477,26 @@ const doSetup = async (app: AppType, workflowId = 'didAuth') => {
   return walletQuery
 }
 
+const extractServiceEndpoint = (walletUrl: string): string => {
+  const parsed = new URL(walletUrl)
+  const requestJson = JSON.parse(
+    decodeURIComponent(parsed.searchParams.get('request')!)
+  )
+  return requestJson.protocols.vcapi
+}
+
 const doSetupWithDirectDeepLink = async (app: AppType) => {
   const walletQuery = await doSetup(app)
   const url = walletQuery?.directDeepLink ?? ''
+  const serviceEndpoint = extractServiceEndpoint(url)
+  const path = new URL(serviceEndpoint).pathname
 
-  const parsedDeepLink = new URL(url)
-  const requestURI = parsedDeepLink.searchParams.get('vc_request_url') ?? '' //should be http://localhost:4004/exchange?challenge=VOclS8ZiMs&auth_type=bearer
-  // here we need to pull out just the path
-  // since we are calling the endpoint via
-  // supertest
-  const path = new URL(requestURI).pathname
-  const challenge = parsedDeepLink.searchParams.get('challenge') ?? '' // the challenge that the exchange service generated
+  const initResponse = await app.request(path, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    headers: { 'Content-Type': 'application/json' }
+  })
+  const initBody = (await initResponse.json()) as any
+  const challenge = initBody.verifiablePresentationRequest.challenge as string
   return { path, challenge }
 }

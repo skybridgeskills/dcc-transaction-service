@@ -1,6 +1,7 @@
 import { expect, test, describe, vi, beforeAll, afterAll } from 'vitest'
 import { app } from './hono.js'
 import { prefersHtml } from './interactions.js'
+import { signExchangeToken } from './lib/server/exchangeToken.js'
 import * as transactionManager from './transactionManager.js'
 
 describe('prefersHtml', () => {
@@ -112,5 +113,98 @@ describe('GET /interactions/:exchangeId', () => {
       }
     )
     expect(response.status).toBe(404)
+  })
+
+  test('sets exchange_token cookie when serving HTML', async () => {
+    const response = await app.request(
+      '/interactions/test-interaction-id?iuv=1',
+      {
+        headers: { Accept: 'text/html' }
+      }
+    )
+    expect(response.status).toBe(200)
+    const setCookie = response.headers.get('set-cookie')
+    expect(setCookie).toContain('exchange_token=')
+    expect(setCookie).toContain('HttpOnly')
+  })
+})
+
+describe('Exchange-scoped JWT cookie auth', () => {
+  const mockExchange: App.ExchangeDetailDidAuth = {
+    tenantName: 'test',
+    workflowId: 'didAuth',
+    exchangeId: 'cookie-auth-test-id',
+    expires: new Date(Date.now() + 600000).toISOString(),
+    state: 'pending',
+    variables: {
+      exchangeHost: 'http://localhost:4005',
+      challenge: 'test-challenge-cookie'
+    }
+  }
+
+  beforeAll(async () => {
+    await transactionManager.saveExchange(mockExchange)
+  })
+
+  test('GET exchange detail accepts exchange_token cookie', async () => {
+    const token = await signExchangeToken({
+      exchangeId: 'cookie-auth-test-id',
+      workflowId: 'didAuth',
+      expiresAt: mockExchange.expires
+    })
+    const response = await app.request(
+      '/workflows/didAuth/exchanges/cookie-auth-test-id',
+      {
+        headers: { Cookie: `exchange_token=${token}` }
+      }
+    )
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.exchangeId).toBe('cookie-auth-test-id')
+  })
+
+  test('rejects cookie with wrong exchangeId', async () => {
+    const token = await signExchangeToken({
+      exchangeId: 'wrong-exchange-id',
+      workflowId: 'didAuth',
+      expiresAt: mockExchange.expires
+    })
+    const response = await app.request(
+      '/workflows/didAuth/exchanges/cookie-auth-test-id',
+      {
+        headers: { Cookie: `exchange_token=${token}` }
+      }
+    )
+    expect(response.status).toBe(401)
+  })
+
+  test('rejects cookie with wrong workflowId', async () => {
+    const token = await signExchangeToken({
+      exchangeId: 'cookie-auth-test-id',
+      workflowId: 'verify',
+      expiresAt: mockExchange.expires
+    })
+    const response = await app.request(
+      '/workflows/didAuth/exchanges/cookie-auth-test-id',
+      {
+        headers: { Cookie: `exchange_token=${token}` }
+      }
+    )
+    expect(response.status).toBe(401)
+  })
+
+  test('rejects expired cookie', async () => {
+    const token = await signExchangeToken({
+      exchangeId: 'cookie-auth-test-id',
+      workflowId: 'didAuth',
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    })
+    const response = await app.request(
+      '/workflows/didAuth/exchanges/cookie-auth-test-id',
+      {
+        headers: { Cookie: `exchange_token=${token}` }
+      }
+    )
+    expect(response.status).toBe(401)
   })
 })

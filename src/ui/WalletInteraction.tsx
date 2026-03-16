@@ -20,15 +20,19 @@ export function WalletInteraction({
 
   let interactionUrl: string
   if (wallet) {
-    const protocolId = Object.keys(wallet.protocols).find(
-      (p) => protocols[p]
-    ) as ProtocolId | undefined
-    if (!protocolId) {
-      return <p>This wallet does not support any available protocol.</p>
+    if (selectedId === 'lcw' && protocols.lcw) {
+      interactionUrl = protocols.lcw
+    } else {
+      const protocolId = Object.keys(wallet.protocols).find(
+        (p) => protocols[p]
+      ) as ProtocolId | undefined
+      if (!protocolId) {
+        return <p>This wallet does not support any available protocol.</p>
+      }
+      interactionUrl = wallet.protocols[protocolId]!.getInteractionUrl(
+        protocols[protocolId]
+      )
     }
-    interactionUrl = wallet.protocols[protocolId]!.getInteractionUrl(
-      protocols[protocolId]
-    )
   } else {
     interactionUrl = protocols[selectedId] ?? vcapiUrl
   }

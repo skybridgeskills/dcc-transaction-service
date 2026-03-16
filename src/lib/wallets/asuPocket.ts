@@ -8,13 +8,7 @@ export const asuPocket: Wallet = {
   protocols: {
     vcapi: {
       getInteractionUrl(serviceEndpoint: string) {
-        const origin = new URL(serviceEndpoint).origin
-        return `asuprequest://request?request=${encodeURIComponent(
-          JSON.stringify({
-            credentialRequestOrigin: origin,
-            protocols: { vcapi: serviceEndpoint }
-          })
-        )}`
+        return `asuprequest://request?vc_request_url=${encodeURIComponent(serviceEndpoint)}`
       }
     }
   }

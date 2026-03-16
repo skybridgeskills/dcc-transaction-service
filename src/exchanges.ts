@@ -225,7 +225,9 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   const protocols = {
     iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}`,
     vcapi: serviceEndpoint,
-    lcw: getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint),
+    lcw: getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint, {
+      challenge: exchange.variables.challenge
+    }),
     verifiablePresentationRequest
     // TODO: add "OID4VCI" support (claim workflow)
     // TODO: add "OID4VP" support for forthcoming verification workflows

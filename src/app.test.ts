@@ -479,10 +479,7 @@ const doSetup = async (app: AppType, workflowId = 'didAuth') => {
 
 const extractServiceEndpoint = (walletUrl: string): string => {
   const parsed = new URL(walletUrl)
-  const requestJson = JSON.parse(
-    decodeURIComponent(parsed.searchParams.get('request')!)
-  )
-  return requestJson.protocols.vcapi
+  return decodeURIComponent(parsed.searchParams.get('vc_request_url')!)
 }
 
 const doSetupWithDirectDeepLink = async (app: AppType) => {

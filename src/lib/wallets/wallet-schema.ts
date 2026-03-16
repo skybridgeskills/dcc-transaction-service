@@ -1,7 +1,14 @@
 export type ProtocolId = 'vcapi'
 
+export interface InteractionUrlOptions {
+  challenge?: string
+}
+
 export interface WalletProtocol {
-  getInteractionUrl(serviceEndpoint: string): string
+  getInteractionUrl(
+    serviceEndpoint: string,
+    options?: InteractionUrlOptions
+  ): string
 }
 
 export interface Wallet {

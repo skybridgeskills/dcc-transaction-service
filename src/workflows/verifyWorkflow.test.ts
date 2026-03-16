@@ -324,20 +324,9 @@ describe('LCW Protocol URL Generation', function () {
 
     const lcwUrl = getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint)!
 
-    expect(lcwUrl).toMatch(/^https:\/\/lcw\.app\/request\?request=/)
-
-    const url = new URL(lcwUrl)
-    const requestParam = url.searchParams.get('request')
-    expect(requestParam).toBeDefined()
-
-    const decodedRequest = JSON.parse(decodeURIComponent(requestParam!))
-
-    expect(decodedRequest).toEqual({
-      credentialRequestOrigin: 'https://verifierplus.org',
-      protocols: {
-        vcapi: serviceEndpoint
-      }
-    })
+    expect(lcwUrl).toBe(
+      `https://lcw.app/request.html?issuer=verifierplus.org&auth_type=bearer&vc_request_url=${encodeURIComponent(serviceEndpoint)}`
+    )
   })
 
   test('generates correct VPR structure for verify workflow', function () {

@@ -79,15 +79,11 @@ const getCredentialQuery = ({
   trustedIssuers: string[]
   vprClaims: App.DcqlClaim[]
 }) => {
-  const credentialQuery = {
-    example: {
-      '@context': vprContext,
-      type: vprCredentialType
-    }
+  const example: Record<string, unknown> = { type: vprCredentialType }
+  if (vprContext.length > 0) {
+    example['@context'] = vprContext
   }
-  // We don't yet support trusted issuers or specific claims yet
-  // because the query by example spec is very underspecified
-  return credentialQuery
+  return { example }
 }
 
 export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
@@ -99,34 +95,44 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
     (c) => ![CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c)
   )
 
-  // If no VC context is specified, we will generate a query for each major VC version.
-  const credentialQueries = vprContext.some((c) =>
-    [CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c)
-  )
-    ? [
-        getCredentialQuery({
-          vprContext,
-          vprCredentialType,
-          trustedIssuers,
-          vprClaims
-        })
-      ]
-    : [
-        // VCDM V1 credential query
-        getCredentialQuery({
-          vprContext: [CONTEXT_URL_V1, ...specificContexts],
-          vprCredentialType,
-          trustedIssuers,
-          vprClaims
-        }),
-        // VCDM V2 credential query
-        getCredentialQuery({
-          vprContext: [CONTEXT_URL_V2, ...specificContexts],
-          vprCredentialType,
-          trustedIssuers,
-          vprClaims
-        })
-      ]
+  const credentialQueries =
+    vprContext.length === 0
+      ? // No context constraint — single context-free query
+        [
+          getCredentialQuery({
+            vprContext: [],
+            vprCredentialType,
+            trustedIssuers,
+            vprClaims
+          })
+        ]
+      : vprContext.some((c) =>
+            [CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c)
+          )
+        ? [
+            getCredentialQuery({
+              vprContext,
+              vprCredentialType,
+              trustedIssuers,
+              vprClaims
+            })
+          ]
+        : [
+            // VCDM V1 credential query
+            getCredentialQuery({
+              vprContext: [CONTEXT_URL_V1, ...specificContexts],
+              vprCredentialType,
+              trustedIssuers,
+              vprClaims
+            }),
+            // VCDM V2 credential query
+            getCredentialQuery({
+              vprContext: [CONTEXT_URL_V2, ...specificContexts],
+              vprCredentialType,
+              trustedIssuers,
+              vprClaims
+            })
+          ]
 
   const vpr = {
     query: [
@@ -440,8 +446,11 @@ export const participateInVerifyExchange = async ({
 }) => {
   const presentation = preparePresentation(data)
 
-  // Validate and type the presentation using Zod schema
-  const validatedPresentation = verifiablePresentationSchema.parse(presentation)
+  // Validate structure, then cast for verifier-core (its TS interface declares
+  // `type: string` but it accepts `string[]` at runtime per W3C spec)
+  const validatedPresentation = verifiablePresentationSchema.parse(
+    presentation
+  ) as Parameters<typeof verifyPresentation>[0]['presentation']
 
   // Determine which registries to use
   const knownDIDRegistries =

@@ -1,4 +1,4 @@
-export type ProtocolId = 'vcapi'
+export type ProtocolId = 'vcapi' | 'vcapiExchange'
 
 export interface InteractionUrlOptions {
   challenge?: string

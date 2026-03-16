@@ -14,6 +14,14 @@ export const lcw: Wallet = {
           : ''
         return `https://lcw.app/request.html?issuer=${issuer}&auth_type=bearer${challenge}&vc_request_url=${vcRequestUrl}`
       }
+    },
+    vcapiExchange: {
+      getInteractionUrl(serviceEndpoint: string) {
+        const request = encodeURIComponent(
+          JSON.stringify({ protocols: { vcapi: serviceEndpoint } })
+        )
+        return `https://lcw.app/request?request=${request}`
+      }
     }
   }
 }

@@ -64,6 +64,21 @@ describe('wallet vcapi interaction URLs', () => {
     )
   })
 
+  test('LCW vcapiExchange generates protocols.vcapi deep link', () => {
+    const url = lcw.protocols.vcapiExchange!.getInteractionUrl(testEndpoint)
+    const expectedRequest = encodeURIComponent(
+      JSON.stringify({ protocols: { vcapi: testEndpoint } })
+    )
+    expect(url).toBe(`https://lcw.app/request?request=${expectedRequest}`)
+  })
+
+  test('LCW vcapiExchange URL decodes to valid exchange invitation', () => {
+    const url = lcw.protocols.vcapiExchange!.getInteractionUrl(testEndpoint)
+    const requestParam = new URL(url).searchParams.get('request')!
+    const parsed = JSON.parse(requestParam)
+    expect(parsed).toEqual({ protocols: { vcapi: testEndpoint } })
+  })
+
   test('getWalletInteractionUrl helper works', () => {
     const url = getWalletInteractionUrl('lcw', 'vcapi', testEndpoint)
     expect(url).toContain('https://lcw.app/request')

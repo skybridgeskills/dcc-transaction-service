@@ -231,12 +231,15 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
       : getDIDAuthVPR(exchange)
   const serviceEndpoint =
     verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
+  const isVerify = exchange.workflowId === 'verify'
   const protocols = {
     iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}`,
     vcapi: serviceEndpoint,
-    lcw: getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint, {
-      challenge: exchange.variables.challenge
-    }),
+    lcw: isVerify
+      ? getWalletInteractionUrl('lcw', 'vcapiExchange', serviceEndpoint)
+      : getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint, {
+          challenge: exchange.variables.challenge
+        }),
     verifiablePresentationRequest
     // TODO: add "OID4VCI" support (claim workflow)
     // TODO: add "OID4VP" support for forthcoming verification workflows

@@ -5,6 +5,7 @@ import { createPresentation } from '@digitalbazaar/vc'
 import Handlebars from 'handlebars'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyDIDAuth } from '../didAuth.js'
+import { saveExchange } from '../transactionManager.js'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 
@@ -120,6 +121,19 @@ export const participateInClaimExchange = async ({
     `${config.signingService}/instance/${exchange.tenantName}/credentials/sign`,
     credential
   )
+
+  const updatedExchange: App.ExchangeDetailClaim = {
+    ...exchange,
+    state: 'complete',
+    variables: {
+      ...exchange.variables,
+      result: {
+        default: { verifiableCredential: signedCredential }
+      }
+    }
+  }
+  await saveExchange(updatedExchange)
+
   // generate VP to return VCs
   const verifiablePresentation = createPresentation()
   verifiablePresentation.verifiableCredential = [signedCredential]

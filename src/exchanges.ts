@@ -157,20 +157,23 @@ const participateWithEmptyBody = async ({
   workflow: App.Workflow
   exchange: App.ExchangeDetailBase
 }) => {
+  let vpr
   if (['claim', 'didAuth'].includes(workflow.id)) {
-    // Reply with a VPR to authenticate the wallet.
-    const vpr = await getDIDAuthVPR(exchange)
-    return { verifiablePresentationRequest: vpr }
-  }
-  if (workflow.id === 'verify') {
-    const vpr = await getVerifyVPR(exchange as App.ExchangeDetailVerify)
-    return { verifiablePresentationRequest: vpr }
+    vpr = getDIDAuthVPR(exchange)
+  } else if (workflow.id === 'verify') {
+    vpr = getVerifyVPR(exchange as App.ExchangeDetailVerify)
+  } else {
+    throw new HTTPException(400, {
+      message: 'Workflow is not valid for this endpoint'
+    })
   }
 
-  // healthz/catchall
-  throw new HTTPException(400, {
-    message: 'Workflow is not valid for this endpoint'
-  })
+  if (exchange.state === 'pending') {
+    exchange.state = 'active'
+    await saveExchange(exchange)
+  }
+
+  return { verifiablePresentationRequest: vpr }
 }
 
 export const participateInExchange = async ({
@@ -184,6 +187,12 @@ export const participateInExchange = async ({
   workflow: App.Workflow
   exchange: App.ExchangeDetailBase
 }) => {
+  if (exchange.state === 'complete') {
+    throw new HTTPException(400, {
+      message: 'Exchange has already been completed.'
+    })
+  }
+
   if (!data || !Object.keys(data).length) {
     // If there is no body, this is the initial step of the exchange.
     return participateWithEmptyBody({ config, workflow, exchange })

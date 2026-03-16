@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { HTTPException } from 'hono/http-exception'
 import { verifyDIDAuth } from '../didAuth.js'
+import { saveExchange } from '../transactionManager.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
 
@@ -90,7 +91,15 @@ export const participateInDidAuthExchange = async ({
     })
   }
 
-  const credentialTemplate = workflow?.credentialTemplates?.[0]
+  const updatedExchange: App.ExchangeDetailDidAuth = {
+    ...exchange,
+    state: 'complete',
+    variables: {
+      ...exchange.variables,
+      result: { holder: data.holder }
+    }
+  }
+  await saveExchange(updatedExchange)
 
   return {
     redirectUrl: exchange.variables.redirectUrl ?? ''

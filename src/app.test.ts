@@ -7,6 +7,7 @@ import { getDataForExchangeSetupPost } from './test-fixtures/testData.js'
 import { getSignedDIDAuth } from './didAuth.js'
 import {
   saveExchange,
+  getExchangeData,
   initializeTransactionManager
 } from './transactionManager.js'
 import * as transactionManager from './transactionManager.js'
@@ -449,6 +450,202 @@ describe('api', function () {
       expect(body.verifiableCredential).toBeDefined()
       expect(body.verifiableCredential.length).toBe(1) // It will just be the mocked {}
     })
+  })
+})
+
+describe('single-use exchange enforcement', function () {
+  beforeAll(() => {
+    vi.spyOn(axios, 'post').mockImplementation(() =>
+      Promise.resolve({ data: {} })
+    )
+
+    const currentConfig = config.getConfig()
+    vi.spyOn(config, 'getConfig').mockImplementation(() => {
+      return {
+        ...currentConfig,
+        statusService: '',
+        tenantAuthenticationEnabled: false
+      }
+    })
+  })
+
+  afterAll(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('initial VPR request transitions exchange to active', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(initResponse.status).toBe(200)
+
+    const exchangeId = path.split('/exchanges/')[1]
+    const exchange = await getExchangeData(exchangeId, 'didAuth')
+    expect(exchange.state).toBe('active')
+  })
+
+  test('completed didAuth exchange returns 400 on second attempt', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const challenge = vpr.challenge
+    const didAuth = await getSignedDIDAuth(challenge)
+
+    // First completion — should succeed
+    const firstResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(firstResponse.status).toBe(200)
+
+    // Second attempt — should be rejected
+    const secondResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(secondResponse.status).toBe(400)
+    const body = await secondResponse.json()
+    expect(body.message).toBe('Exchange has already been completed.')
+  })
+
+  test('completed exchange rejects empty-body VPR request too', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const didAuth = await getSignedDIDAuth(vpr.challenge)
+
+    await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    // Try to get VPR again after completion
+    const secondInit = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(secondInit.status).toBe(400)
+    const body = await secondInit.json()
+    expect(body.message).toBe('Exchange has already been completed.')
+  })
+
+  test('didAuth completion stores holder in result', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const holderId = `did:ex:${crypto.randomUUID()}`
+    const didAuth = await getSignedDIDAuth(vpr.challenge, holderId)
+
+    await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    const exchangeId = path.split('/exchanges/')[1]
+    const exchange = await getExchangeData(exchangeId, 'didAuth')
+    expect(exchange.state).toBe('complete')
+    expect(exchange.variables.result).toBeDefined()
+    expect(exchange.variables.result.holder).toBe(holderId)
+  })
+
+  test('claim completion stores credential and sets complete', async function () {
+    const walletQuery = await doSetup(app, 'claim')
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const didAuth = await getSignedDIDAuth(vpr.challenge)
+
+    await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    const exchangeId = path.split('/exchanges/')[1]
+    const exchange = await getExchangeData(exchangeId, 'claim')
+    expect(exchange.state).toBe('complete')
+    expect(exchange.variables.result).toBeDefined()
+    expect(exchange.variables.result.default).toBeDefined()
+    expect(exchange.variables.result.default.verifiableCredential).toBeDefined()
+  })
+
+  test('completed claim exchange returns 400 on second attempt', async function () {
+    const walletQuery = await doSetup(app, 'claim')
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const didAuth = await getSignedDIDAuth(vpr.challenge)
+
+    const firstResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(firstResponse.status).toBe(200)
+
+    const secondResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(secondResponse.status).toBe(400)
+    const body = await secondResponse.json()
+    expect(body.message).toBe('Exchange has already been completed.')
   })
 })
 

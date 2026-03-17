@@ -121,7 +121,7 @@ storybook-static
 .DS_Store
 
 # the keyv data store
-src/data
+.local/
 
 compose-test.yaml
 

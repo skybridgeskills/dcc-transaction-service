@@ -1,7 +1,5 @@
-import type { Context } from 'hono'
 import { readFile } from 'fs/promises'
 import { resolve } from 'path'
-import { setCookie } from 'hono/cookie'
 import { getExchangeDataById } from './transactionManager.js'
 import { getProtocols } from './exchanges.js'
 import { signExchangeToken } from './lib/server/exchangeToken.js'
@@ -17,7 +15,8 @@ import { signExchangeToken } from './lib/server/exchangeToken.js'
 export const prefersHtml = (accept: string | undefined): boolean => {
   if (!accept) return false
   if (accept.includes('text/html')) return true
-  if (accept.includes('*/*') && !accept.includes('application/json')) return true
+  if (accept.includes('*/*') && !accept.includes('application/json'))
+    return true
   return false
 }
 
@@ -35,30 +34,29 @@ const getUiHtml = async (): Promise<string> => {
   return cachedHtml
 }
 
-export const handleInteraction = async (c: Context) => {
-  const accept = c.req.header('accept')
+export type InteractionResult =
+  | { kind: 'html'; html: string; token: string; maxAge: number }
+  | { kind: 'json'; protocols: ReturnType<typeof getProtocols> }
 
+export const resolveInteraction = async (
+  exchangeId: string,
+  accept: string | undefined
+): Promise<InteractionResult> => {
   if (prefersHtml(accept)) {
-    const exchangeData = await getExchangeDataById(c.req.param('exchangeId'))
+    const exchangeData = await getExchangeDataById(exchangeId)
     const token = await signExchangeToken({
       exchangeId: exchangeData.exchangeId,
       workflowId: exchangeData.workflowId,
       expiresAt: exchangeData.expires
     })
-    setCookie(c, 'exchange_token', token, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: c.req.url.startsWith('https'),
-      path: '/',
-      maxAge: Math.floor(
-        (new Date(exchangeData.expires).getTime() - Date.now()) / 1000
-      )
-    })
+    const maxAge = Math.floor(
+      (new Date(exchangeData.expires).getTime() - Date.now()) / 1000
+    )
     const html = await getUiHtml()
-    return c.html(html)
+    return { kind: 'html', html, token, maxAge }
   }
 
-  const exchangeData = await getExchangeDataById(c.req.param('exchangeId'))
+  const exchangeData = await getExchangeDataById(exchangeId)
   const protocols = getProtocols(exchangeData)
-  return c.json({ protocols })
+  return { kind: 'json', protocols }
 }

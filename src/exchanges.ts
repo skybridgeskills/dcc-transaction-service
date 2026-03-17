@@ -16,8 +16,6 @@ import {
   participateInVerifyExchange,
   validateExchangeVerify
 } from './workflows/verifyWorkflow.js'
-import type { Context } from 'hono'
-
 import { getWalletInteractionUrl } from './lib/wallets/index.js'
 import { HTTPException } from 'hono/http-exception'
 
@@ -247,18 +245,17 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   return protocols
 }
 
-export const getInteractionsForExchange = async (c: Context) => {
-  const exchangeData = await getExchangeData(
-    c.req.param('exchangeId'),
-    c.req.param('workflowId')
-  )
-  if (!exchangeData) {
-    c.status(404)
-    return c.json({
-      code: 404,
-      message: 'Exchange not found'
-    })
+export const getInteractionsForExchange = async (
+  exchangeId: string,
+  workflowId: string
+) => {
+  try {
+    const exchangeData = await getExchangeData(exchangeId, workflowId)
+    return { protocols: getProtocols(exchangeData) }
+  } catch (e) {
+    if (e instanceof HTTPException && e.status === 404) {
+      return null
+    }
+    throw e
   }
-  const protocols = getProtocols(exchangeData)
-  return c.json({ protocols })
 }

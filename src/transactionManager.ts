@@ -23,7 +23,8 @@ export const initializeTransactionManager = () => {
           expiredCheckDelay: config.keyvExpiredCheckDelayMs, // How often to check for and remove expired records
           writeDelay: config.keyvWriteDelayMs, // ms, batch write to disk in a specific duration, enhance write performance.
           serialize: JSON.stringify, // serialize function
-          deserialize: JSON.parse // deserialize function
+          deserialize: (val: string | Buffer<ArrayBufferLike>) =>
+            JSON.parse(val.toString()) // deserialize function
         })
       })
     } else if (config.redisUri) {

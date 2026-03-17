@@ -27,10 +27,7 @@ export const verifyExchangeToken = async (
   token: string
 ): Promise<ExchangeTokenPayload | null> => {
   try {
-    const payload = (await verify(
-      token,
-      secret
-    )) as unknown as ExchangeTokenPayload
+    const payload = (await verify(token, secret, 'HS256')) as unknown as ExchangeTokenPayload
     return payload
   } catch {
     return null

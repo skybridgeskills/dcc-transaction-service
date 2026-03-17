@@ -106,12 +106,9 @@ describe('GET /interactions/:exchangeId', () => {
   })
 
   test('returns 404 for unknown exchangeId with JSON accept', async () => {
-    const response = await app.request(
-      '/interactions/nonexistent-id?iuv=1',
-      {
-        headers: { Accept: 'application/json' }
-      }
-    )
+    const response = await app.request('/interactions/nonexistent-id?iuv=1', {
+      headers: { Accept: 'application/json' }
+    })
     expect(response.status).toBe(404)
   })
 
@@ -158,8 +155,8 @@ describe('Exchange-scoped JWT cookie auth', () => {
         headers: { Cookie: `exchange_token=${token}` }
       }
     )
-    expect(response.status).toBe(200)
     const body = await response.json()
+    expect(response.status).toBe(200)
     expect(body.exchangeId).toBe('cookie-auth-test-id')
   })
 

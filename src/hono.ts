@@ -21,7 +21,8 @@ import { JSONObject } from 'hono/utils/types'
 import { getWorkflow } from './workflows.js'
 import { getConfig } from './config.js'
 import { getExchangeData } from './transactionManager.js'
-import { handleInteraction } from './interactions.js'
+import { resolveInteraction } from './interactions.js'
+import { setCookie } from 'hono/cookie'
 import { serveStatic } from '@hono/node-server/serve-static'
 
 /**
@@ -269,9 +270,34 @@ export const app = new Hono()
   interact with this exchange. Eventually we'll use this URL as QR code contents for wallet to scan.
   VC-API 0.7 as of 2025-06-08: https://w3c-ccg.github.io/vc-api/#interaction-url-format
   */
-  .get(routes.protocols, getInteractionsForExchange)
+  .get(routes.protocols, async (c) => {
+    const result = await getInteractionsForExchange(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (!result) {
+      return c.json({ code: 404, message: 'Exchange not found' }, 404)
+    }
+    return c.json(result)
+  })
 
   // VCALM interaction URL — content-negotiated endpoint for browser and API access
-  .get(routes.interaction, handleInteraction)
+  .get(routes.interaction, async (c) => {
+    const result = await resolveInteraction(
+      c.req.param('exchangeId')!,
+      c.req.header('accept')
+    )
+    if (result.kind === 'html') {
+      setCookie(c, 'exchange_token', result.token, {
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: c.req.url.startsWith('https'),
+        path: '/',
+        maxAge: result.maxAge
+      })
+      return c.html(result.html)
+    }
+    return c.json({ protocols: result.protocols })
+  })
 
 export type AppType = typeof app

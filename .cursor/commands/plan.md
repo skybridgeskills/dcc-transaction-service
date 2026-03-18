@@ -190,7 +190,7 @@ For each phase:
 3. Ensure code compiles (run build commands)
 4. Fix warnings (except unused code that will be used in later phases)
 5. Run relevant tests and ensure they pass
-6. Suggest a possible commit message: `<type>(<scope>): <plan-name> - phase <N>: <phase-title>`
+6. DO NOT COMMIT, but suggest a possible commit message: `<type>(<scope>): <plan-name> - phase <N>: <phase-title>`
 
 ### Final Phase
 

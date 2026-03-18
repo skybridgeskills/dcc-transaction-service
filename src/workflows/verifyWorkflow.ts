@@ -13,7 +13,14 @@ const CONTEXT_URL_V1 =
   named.get('v1')?.id || 'https://www.w3.org/2018/credentials/v1'
 const CONTEXT_URL_V2 =
   named.get('v2')?.id || 'https://www.w3.org/ns/credentials/v2'
-import { verifiablePresentationSchema } from '../verifiableCredentialSchema.js'
+import { verifiablePresentationSchema } from '../lib/data/verifiable-presentation/schema.js'
+import { credentialSchema } from '../lib/data/verifiable-credential/schema.js'
+import {
+  zodProblemDetails,
+  problemDetailResponse,
+  MALFORMED_VALUE_ERROR
+} from '../lib/errors/problem-details.js'
+import { HTTPException } from 'hono/http-exception'
 
 export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -106,9 +113,7 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
             vprClaims
           })
         ]
-      : vprContext.some((c) =>
-            [CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c)
-          )
+      : vprContext.some((c) => [CONTEXT_URL_V1, CONTEXT_URL_V2].includes(c))
         ? [
             getCredentialQuery({
               vprContext,
@@ -134,13 +139,22 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
             })
           ]
 
-  const vpr = {
-    query: [
-      {
-        type: 'QueryByExample',
-        credentialQuery: credentialQueries
-      }
+  const queryByExampleEntries = credentialQueries.map((cq) => ({
+    type: 'QueryByExample' as const,
+    credentialQuery: cq
+  }))
+
+  const didAuthQuery = {
+    type: 'DIDAuthentication' as const,
+    acceptedCryptosuites: [
+      { cryptosuite: 'ecdsa-rdfc-2019' },
+      { cryptosuite: 'eddsa-rdfc-2022' }
     ],
+    acceptedMethods: [{ method: 'did:key' }, { method: 'did:web' }]
+  }
+
+  const vpr = {
+    query: [...queryByExampleEntries, didAuthQuery],
     interact: {
       service: [
         {
@@ -152,7 +166,9 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
           serviceEndpoint
         }
       ]
-    }
+    },
+    challenge: exchange.variables.challenge,
+    domain: serviceEndpoint
   }
   return vpr
 }
@@ -446,11 +462,57 @@ export const participateInVerifyExchange = async ({
 }) => {
   const presentation = preparePresentation(data)
 
-  // Validate structure, then cast for verifier-core (its TS interface declares
-  // `type: string` but it accepts `string[]` at runtime per W3C spec)
-  const validatedPresentation = verifiablePresentationSchema.parse(
-    presentation
-  ) as Parameters<typeof verifyPresentation>[0]['presentation']
+  // 1. VP safeParse
+  const vpResult = verifiablePresentationSchema.safeParse(presentation)
+  if (!vpResult.success) {
+    console.error('VP validation failed:', vpResult.error.issues)
+    throw new HTTPException(400, {
+      message: 'Invalid Verifiable Presentation',
+      cause: problemDetailResponse(
+        'Invalid Verifiable Presentation',
+        zodProblemDetails(vpResult.error.issues, 'verifiablePresentation')
+      )
+    })
+  }
+
+  // 2. Holder is required for verify/didAuth workflows
+  if (!vpResult.data.holder) {
+    throw new HTTPException(400, {
+      message: 'holder is required for verification',
+      cause: problemDetailResponse('holder is required for verification', [
+        {
+          type: `https://www.w3.org/TR/vc-data-model#${MALFORMED_VALUE_ERROR}`,
+          status: 400,
+          title: MALFORMED_VALUE_ERROR,
+          detail:
+            'at verifiablePresentation.holder: holder is required for verification'
+        }
+      ])
+    })
+  }
+
+  // 3. Per-credential VC validation
+  const credentials = vpResult.data.verifiableCredential
+  const vcErrors = credentials.flatMap((vc, i) => {
+    const vcResult = credentialSchema.safeParse(vc)
+    if (!vcResult.success) {
+      return zodProblemDetails(vcResult.error.issues, `credential[${i}]`)
+    }
+    return []
+  })
+  if (vcErrors.length > 0) {
+    console.error('VC validation failed:', vcErrors)
+    throw new HTTPException(400, {
+      message: 'Invalid Verifiable Credential(s)',
+      cause: problemDetailResponse('Invalid Verifiable Credential(s)', vcErrors)
+    })
+  }
+
+  // Cast for verifier-core (its TS interface declares `type: string` but
+  // it accepts `string[]` at runtime per W3C spec)
+  const validatedPresentation = vpResult.data as unknown as Parameters<
+    typeof verifyPresentation
+  >[0]['presentation']
 
   // Determine which registries to use
   const knownDIDRegistries =

@@ -1,23 +1,22 @@
 import * as config from '../config.js'
-import { expect, test, describe, beforeAll, afterAll, vi } from 'vitest'
+import { expect, test, describe } from 'vitest'
 import { getWorkflow } from '../workflows.js'
 import {
   createExchangeVerify,
   validateExchangeVerify,
   applyVerificationResults,
-  participateInVerifyExchange,
-  getVerifyVPR
+  getVerifyVPR,
+  participateInVerifyExchange
 } from './verifyWorkflow.js'
 import {
   createMockExchange,
   createMockCredential,
-  createMockPresentation,
-  createMockVerifierCoreResult,
-  createMockExpiredCredential,
-  createMockRevokedCredential
+  createMockVerifierCoreResult
 } from '../test-fixtures/testData.js'
 import { getWalletInteractionUrl } from '../lib/wallets/index.js'
 import { participateInExchange } from '../exchanges.js'
+import { HTTPException } from 'hono/http-exception'
+import type { ProblemDetailResponse } from '../lib/errors/problem-details.js'
 
 const testData = {
   workflowId: 'verify',
@@ -274,6 +273,11 @@ describe('participateInExchange - Empty Body Handling', function () {
     expect(result.verifiablePresentationRequest.query[0].type).toBe(
       'QueryByExample'
     )
+    expect(
+      result.verifiablePresentationRequest.query.some(
+        (q: { type: string }) => q.type === 'DIDAuthentication'
+      )
+    ).toBe(true)
   })
 
   test('handles empty object body ({}) correctly for verify workflow', async function () {
@@ -294,6 +298,11 @@ describe('participateInExchange - Empty Body Handling', function () {
     expect(result.verifiablePresentationRequest.query[0].type).toBe(
       'QueryByExample'
     )
+    expect(
+      result.verifiablePresentationRequest.query.some(
+        (q: { type: string }) => q.type === 'DIDAuthentication'
+      )
+    ).toBe(true)
   })
 
   test('handles null body correctly for verify workflow', async function () {
@@ -314,6 +323,11 @@ describe('participateInExchange - Empty Body Handling', function () {
     expect(result.verifiablePresentationRequest.query[0].type).toBe(
       'QueryByExample'
     )
+    expect(
+      result.verifiablePresentationRequest.query.some(
+        (q: { type: string }) => q.type === 'DIDAuthentication'
+      )
+    ).toBe(true)
   })
 })
 
@@ -344,13 +358,29 @@ describe('LCW Protocol URL Generation', function () {
 
     expect(vpr).toHaveProperty('query')
     expect(vpr).toHaveProperty('interact')
+    expect(vpr).toHaveProperty('challenge')
+    expect(vpr).toHaveProperty('domain')
 
-    expect(vpr.query).toEqual([
-      {
-        type: 'QueryByExample',
-        credentialQuery: expect.any(Array)
-      }
-    ])
+    expect(vpr.query).toHaveLength(2)
+    expect(vpr.query[0]).toEqual({
+      type: 'QueryByExample',
+      credentialQuery: expect.objectContaining({
+        example: expect.any(Object)
+      })
+    })
+    expect(vpr.query[1]).toEqual({
+      type: 'DIDAuthentication',
+      acceptedCryptosuites: [
+        { cryptosuite: 'ecdsa-rdfc-2019' },
+        { cryptosuite: 'eddsa-rdfc-2022' }
+      ],
+      acceptedMethods: [{ method: 'did:key' }, { method: 'did:web' }]
+    })
+
+    expect(vpr.challenge).toBe(exchange.variables.challenge)
+    expect(vpr.domain).toBe(
+      'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
+    )
 
     expect(vpr.interact).toEqual({
       service: [
@@ -366,5 +396,103 @@ describe('LCW Protocol URL Generation', function () {
         }
       ]
     })
+  })
+})
+
+const validProof = {
+  type: 'Ed25519Signature2020',
+  created: '2024-01-01T00:00:00Z',
+  verificationMethod:
+    'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK#z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+  proofPurpose: 'authentication',
+  proofValue: 'zTestProofValue',
+  challenge: 'test-challenge'
+}
+
+const validVCObject = {
+  '@context': ['https://www.w3.org/2018/credentials/v1'],
+  type: ['VerifiableCredential', 'OpenBadgeCredential'],
+  issuer: 'did:key:z6MkissuerExample',
+  issuanceDate: '2024-01-01T00:00:00Z',
+  credentialSubject: { id: 'did:key:z6MkholderExample' }
+}
+
+describe('participateInVerifyExchange - VP validation', function () {
+  const baseArgs = () => ({
+    exchange: createMockExchange({ state: 'active' }),
+    workflow: getWorkflow('verify'),
+    config: config.getConfig()
+  })
+
+  test('rejects invalid VP structure with problemDetails', async function () {
+    try {
+      await participateInVerifyExchange({
+        data: { invalid: 'not a VP' },
+        ...baseArgs()
+      })
+      expect.unreachable('should have thrown')
+    } catch (e) {
+      expect(e).toBeInstanceOf(HTTPException)
+      const err = e as HTTPException
+      expect(err.status).toBe(400)
+      const cause = err.cause as ProblemDetailResponse
+      expect(cause.message).toBe('Invalid Verifiable Presentation')
+      expect(cause.problemDetails.length).toBeGreaterThan(0)
+      expect(cause.problemDetails[0]).toHaveProperty('type')
+      expect(cause.problemDetails[0]).toHaveProperty('detail')
+    }
+  })
+
+  test('rejects VP missing holder with MALFORMED_VALUE_ERROR', async function () {
+    const vpWithoutHolder = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+
+    try {
+      await participateInVerifyExchange({
+        data: vpWithoutHolder,
+        ...baseArgs()
+      })
+      expect.unreachable('should have thrown')
+    } catch (e) {
+      expect(e).toBeInstanceOf(HTTPException)
+      const err = e as HTTPException
+      expect(err.status).toBe(400)
+      const cause = err.cause as ProblemDetailResponse
+      expect(cause.message).toBe('holder is required for verification')
+      expect(cause.problemDetails[0].title).toBe('MALFORMED_VALUE_ERROR')
+    }
+  })
+
+  test('rejects VP with invalid credential and returns per-credential errors', async function () {
+    const vpWithBadCredential = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: [
+        { notACredential: true },
+        validVCObject
+      ],
+      proof: validProof
+    }
+
+    try {
+      await participateInVerifyExchange({
+        data: vpWithBadCredential,
+        ...baseArgs()
+      })
+      expect.unreachable('should have thrown')
+    } catch (e) {
+      expect(e).toBeInstanceOf(HTTPException)
+      const err = e as HTTPException
+      expect(err.status).toBe(400)
+      const cause = err.cause as ProblemDetailResponse
+      expect(cause.message).toBe('Invalid Verifiable Credential(s)')
+      expect(cause.problemDetails.length).toBeGreaterThan(0)
+      expect(cause.problemDetails[0].detail).toContain('credential[0]')
+    }
   })
 })

@@ -1,7 +1,8 @@
-import type {
-  ExchangeClient,
-  ExchangeProtocols,
-  ExchangeStatusResponse
+import {
+  type ExchangeClient,
+  type ExchangeProtocols,
+  type ExchangeStatusResponse,
+  HttpNotOkResponseError
 } from './exchange-client'
 
 export class HttpExchangeClient implements ExchangeClient {
@@ -13,7 +14,9 @@ export class HttpExchangeClient implements ExchangeClient {
     this.authToken = authToken
   }
 
-  private buildHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  private buildHeaders(
+    extra: Record<string, string> = {}
+  ): Record<string, string> {
     const headers: Record<string, string> = { ...extra }
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`
@@ -63,7 +66,8 @@ export class HttpExchangeClient implements ExchangeClient {
   async fetchExchangeStatus(vcapiUrl: string): Promise<ExchangeStatusResponse> {
     const headers = this.buildHeaders({ Accept: 'application/json' })
     const res = await fetch(vcapiUrl, this.fetchOptions(headers))
-    if (!res.ok) throw new Error(`Status ${res.status}`)
+    if (!res.ok)
+      throw new HttpNotOkResponseError(`Status ${res.status}`, res.status)
     return res.json()
   }
 }

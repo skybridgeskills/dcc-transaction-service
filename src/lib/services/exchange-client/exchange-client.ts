@@ -1,5 +1,17 @@
 export type ExchangeState = 'pending' | 'active' | 'complete' | 'invalid'
 
+/** Thrown when an HTTP request returns a non-2xx status. */
+export class HttpNotOkResponseError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message)
+    this.name = 'HttpNotOkResponseError'
+    Object.setPrototypeOf(this, HttpNotOkResponseError.prototype)
+  }
+}
+
 export interface ExchangeStatusResponse {
   state: ExchangeState
   [key: string]: unknown

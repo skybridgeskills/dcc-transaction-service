@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { ExchangeClient, ExchangeState } from '../lib/services/exchange-client/exchange-client'
+import {
+  type ExchangeClient,
+  type ExchangeState,
+  HttpNotOkResponseError
+} from '../lib/services/exchange-client/exchange-client'
 
 interface ExchangeStatusResult {
   state: ExchangeState | null
@@ -38,6 +42,17 @@ export function useExchangeStatus(
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Polling failed')
+      // 4xx = unrecoverable; stop polling
+      if (
+        e instanceof HttpNotOkResponseError &&
+        e.status >= 400 &&
+        e.status < 500
+      ) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
+      }
     }
   }, [vcapiUrl, client])
 

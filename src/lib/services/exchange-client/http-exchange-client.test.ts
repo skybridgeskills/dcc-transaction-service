@@ -1,4 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { HttpNotOkResponseError } from './exchange-client'
 import { HttpExchangeClient } from './http-exchange-client'
 
 const mockFetch = vi.fn()
@@ -143,11 +144,14 @@ describe('HttpExchangeClient', () => {
       await expect(client.fetchProtocols('bad-id')).rejects.toThrow('HTTP 404')
     })
 
-    test('fetchExchangeStatus throws on non-ok response', async () => {
+    test('fetchExchangeStatus throws HttpNotOkResponseError on non-ok response', async () => {
       mockFetch.mockResolvedValue({ ok: false, status: 401 })
-      await expect(
-        client.fetchExchangeStatus('https://example.com/bad')
-      ).rejects.toThrow('Status 401')
+      const err = await client
+        .fetchExchangeStatus('https://example.com/bad')
+        .catch((e) => e)
+      expect(err).toBeInstanceOf(HttpNotOkResponseError)
+      expect((err as HttpNotOkResponseError).status).toBe(401)
+      expect((err as HttpNotOkResponseError).message).toBe('Status 401')
     })
   })
 })

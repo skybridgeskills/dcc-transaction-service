@@ -24,6 +24,7 @@ import { getExchangeData } from './transactionManager.js'
 import { resolveInteraction } from './interactions.js'
 import { setCookie } from 'hono/cookie'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { handleOAuthTokenPost } from './oauth/token.js'
 
 /**
  * Wraps a Hono handler with error handling
@@ -124,6 +125,9 @@ export const app = new Hono()
 
   // Extended health check
   .get(routes.healthz, healthCheck)
+
+  // OAuth 2.0 client_credentials (M2M access JWT for tenant API)
+  .post('/oauth/token', async (c) => handleOAuthTokenPost(c))
 
   /*
   This is step 1 in an exchange. Creates a new exchange and stores the provided data for later use

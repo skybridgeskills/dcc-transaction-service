@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory'
 import { getCookie } from 'hono/cookie'
 import { getConfig } from './config.js'
 import { HTTPException } from 'hono/http-exception'
+import { verifyAccessToken } from './oauth/accessJwt.js'
 import { verifyExchangeToken } from './lib/server/exchangeToken.js'
 
 export const getTenant = async ({
@@ -46,6 +47,11 @@ export const authenticateTenant = async (
   // without authentication.
   if (tenantToken === undefined && config.tenants[config.defaultTenantName]) {
     return config.tenants[config.defaultTenantName]
+  }
+
+  const accessPayload = await verifyAccessToken(tenantToken)
+  if (accessPayload) {
+    return config.tenants[accessPayload.sub.toLowerCase()]
   }
 
   const tenant = await getTenant({ tenantToken })
@@ -102,7 +108,9 @@ export const authenticateExchangeOrTenantMiddleware = createMiddleware<{
       await next()
       return
     }
-    throw new HTTPException(401, { message: 'Invalid exchange token' })
+    throw new HTTPException(401, {
+      message: 'Invalid or insufficient exchange token'
+    })
   }
 
   const config = getConfig()

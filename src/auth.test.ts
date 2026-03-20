@@ -295,4 +295,49 @@ describe('tenant authentication in http', function () {
       expect(body.exchangeId).toBe('123')
     })
   })
+
+  describe('OAuth access JWT bearer', function () {
+    const accessSecret = 'oauth-access-test-secret-min-32-characters!!'
+
+    beforeAll(() => {
+      const currentConfig = config.getConfig()
+      vi.spyOn(config, 'getConfig').mockImplementation(() => {
+        return {
+          ...currentConfig,
+          accessJwtSecret: accessSecret,
+          statusService: '',
+          tenantAuthenticationEnabled: true,
+          tenants: {
+            tenant1: {
+              tenantName: 'tenant1',
+              tenantToken: 'tenant1token'
+            }
+          }
+        }
+      })
+    })
+
+    afterAll(() => {
+      vi.restoreAllMocks()
+    })
+
+    test('batch exchange works with access_token from /oauth/token', async function () {
+      const tokRes = await app.request('/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: 'tenant1',
+          client_secret: 'tenant1token'
+        }).toString()
+      })
+      expect(tokRes.status).toBe(200)
+      const { access_token } = (await tokRes.json()) as { access_token: string }
+      const response = await client.exchange.$post(
+        { json: getDataForExchangeSetupPost('tenant1') },
+        { headers: { Authorization: `Bearer ${access_token}` } }
+      )
+      expect(response.status).toBe(200)
+    })
+  })
 })

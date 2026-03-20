@@ -51,7 +51,9 @@ const parseConfig = (): App.Config => {
     // Verification workflow configuration
     defaultTrustedRegistries: process.env.DEFAULT_TRUSTED_REGISTRIES
       ? process.env.DEFAULT_TRUSTED_REGISTRIES.split(',').map((r) => r.trim())
-      : ['DCC Sandbox Registry', 'DCC Issuer Registry']
+      : ['DCC Sandbox Registry', 'DCC Issuer Registry'],
+
+    accessJwtSecret: process.env.ACCESS_JWT_SECRET ?? ''
   }
 
   // Only if no tenants are configured, use the default tenant

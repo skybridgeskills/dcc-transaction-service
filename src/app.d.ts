@@ -14,6 +14,8 @@ declare global {
       signingService: string
       defaultWorkflow: string
       defaultTenantName: string
+      /** HS256 secret for OAuth access JWTs (client_credentials). Empty disables issuance. */
+      accessJwtSecret: string
       keyvFilePath?: string
       redisUri?: string
       keyvWriteDelayMs: number

@@ -2,7 +2,7 @@ import { describe, test, expect } from 'vitest'
 import {
   credentialV1Schema,
   credentialV2Schema,
-  credentialSchema
+  parseCredential
 } from './schema.js'
 
 const baseV2 = {
@@ -90,14 +90,79 @@ describe('credentialV1Schema', () => {
   })
 })
 
-describe('credentialSchema (V1/V2 union)', () => {
-  test('parses V2 credential', () => {
-    const result = credentialSchema.parse(baseV2)
-    expect(result.type).toEqual(['VerifiableCredential', 'OpenBadgeCredential'])
+describe('parseCredential', () => {
+  test('parses valid V1 credential', () => {
+    const result = parseCredential(baseV1)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.type).toEqual([
+        'VerifiableCredential',
+        'OpenBadgeCredential'
+      ])
+      expect('issuanceDate' in result.data).toBe(true)
+    }
   })
 
-  test('parses V1 credential', () => {
-    const result = credentialSchema.parse(baseV1)
-    expect(result.type).toEqual(['VerifiableCredential', 'OpenBadgeCredential'])
+  test('parses valid V2 credential', () => {
+    const result = parseCredential(baseV2)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.type).toEqual([
+        'VerifiableCredential',
+        'OpenBadgeCredential'
+      ])
+    }
+  })
+
+  test('rejects @context as string with clear error', () => {
+    const vc = {
+      '@context': 'https://www.w3.org/2018/credentials/v1',
+      type: 'VerifiableCredential',
+      issuer: 'did:key:z6Mkexample'
+    }
+    const result = parseCredential(vc)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.problemDetails).toHaveLength(1)
+      expect(result.problemDetails[0].detail).toContain('@context must be an array')
+    }
+  })
+
+  test('rejects unsupported version with clear error', () => {
+    const vc = {
+      '@context': ['https://example.com/custom-context'],
+      type: 'VerifiableCredential',
+      issuer: 'did:key:z6Mkexample'
+    }
+    const result = parseCredential(vc)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.problemDetails).toHaveLength(1)
+      expect(result.problemDetails[0].detail).toContain(
+        'Unsupported VC Data Model version'
+      )
+    }
+  })
+
+  test('rejects non-object with clear error', () => {
+    const result = parseCredential(null)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.problemDetails[0].detail).toContain('Credential must be an object')
+    }
+  })
+
+  test('returns schema errors for valid @context but invalid schema', () => {
+    const vc = {
+      '@context': ['https://www.w3.org/ns/credentials/v2'],
+      type: 'NotAVC',
+      issuer: 42
+    }
+    const result = parseCredential(vc, 'credential[0]')
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.problemDetails.length).toBeGreaterThan(0)
+      expect(result.problemDetails[0].detail).toContain('credential[0]')
+    }
   })
 })

@@ -96,7 +96,7 @@ export const participateInDidAuthExchange = async ({
     state: 'complete',
     variables: {
       ...exchange.variables,
-      result: { holder: data.holder }
+      results: { default: { holder: data.holder } }
     }
   }
   await saveExchange(updatedExchange)

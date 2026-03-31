@@ -81,7 +81,7 @@ declare global {
       exchangeHost: string
       metadata?: Record<string, unknown>
       challenge: string // Used to authenticate presentations
-      result?: any
+      results?: Record<string, unknown>
     }
 
     interface ExchangeDetailBase {
@@ -106,11 +106,15 @@ declare global {
       workflowId: 'claim'
       variables: BaseVariables & {
         vc: string
+        results?: { default: { verifiableCredential: any[] } }
       }
     }
 
     interface ExchangeDetailDidAuth extends ExchangeDetailBase {
       workflowId: 'didAuth'
+      variables: BaseVariables & {
+        results?: { default: { holder: string } }
+      }
     }
 
     interface VerificationStepResult {
@@ -126,7 +130,7 @@ declare global {
     }
 
     interface VerificationResult {
-      presentationResult: {
+      verifiablePresentation: {
         signature: 'VALID' | 'INVALID' | 'UNSIGNED'
         errors?: Array<{
           name: string
@@ -134,7 +138,7 @@ declare global {
           stackTrace?: any
         }>
       }
-      credentialResults: Array<{
+      verifiableCredential: Array<{
         credential: any
         log: VerificationStepResult[]
         errors?: Array<{
@@ -167,7 +171,7 @@ declare global {
         trustedIssuers: string[]
         trustedRegistries?: string[]
         vprClaims: DcqlClaim[]
-        verificationResult?: VerificationResult
+        results?: { default: VerificationResult }
       }
     }
 

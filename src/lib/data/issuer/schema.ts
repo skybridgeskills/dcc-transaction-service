@@ -1,16 +1,9 @@
 import { z } from 'zod'
-
-export const imageObjectSchema = z.object({
-  id: z.string(),
-  type: z.string()
-})
+import { JsonLdField } from '../jsonld-field'
 
 export const issuerObjectSchema = z.object({
   id: z.string(),
-  type: z.string().optional(),
-  name: z.string().optional(),
-  url: z.string().optional(),
-  image: z.union([z.string(), imageObjectSchema]).optional()
+  type: JsonLdField(z.string()).optional()
 })
 
 /** VC issuer: a DID string or an issuer object with at least an `id`. */

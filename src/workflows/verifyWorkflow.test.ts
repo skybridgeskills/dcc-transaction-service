@@ -95,8 +95,8 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(updatedExchange.state).toBe('complete')
-    expect(updatedExchange.variables.verificationResult).toBeDefined()
-    expect(updatedExchange.variables.verificationResult!.overallOutcome).toBe(
+    expect(updatedExchange.variables.results).toBeDefined()
+    expect(updatedExchange.variables.results!.default.overallOutcome).toBe(
       'complete'
     )
   })
@@ -108,7 +108,7 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(updatedExchange.state).toBe('invalid')
-    expect(updatedExchange.variables.verificationResult!.overallOutcome).toBe(
+    expect(updatedExchange.variables.results!.default.overallOutcome).toBe(
       'invalid'
     )
   })
@@ -120,7 +120,7 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(updatedExchange.state).toBe('invalid')
-    expect(updatedExchange.variables.verificationResult!.overallOutcome).toBe(
+    expect(updatedExchange.variables.results!.default.overallOutcome).toBe(
       'invalid'
     )
   })
@@ -139,10 +139,10 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(
-      updatedExchange.variables.verificationResult!.issuerValidation
+      updatedExchange.variables.results!.default.issuerValidation
     ).toBeDefined()
     expect(
-      updatedExchange.variables.verificationResult!.issuerValidation!
+      updatedExchange.variables.results!.default.issuerValidation!
         .issuerFound
     ).toBe(true)
   })
@@ -164,14 +164,14 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(
-      updatedExchange.variables.verificationResult!.claimsValidation
+      updatedExchange.variables.results!.default.claimsValidation
     ).toBeDefined()
 
     expect(
-      updatedExchange.variables.verificationResult!.claimsValidation!.matched
+      updatedExchange.variables.results!.default.claimsValidation!.matched
     ).toBe(true)
     expect(
-      updatedExchange.variables.verificationResult!.claimsValidation!
+      updatedExchange.variables.results!.default.claimsValidation!
         .extractedClaims
     ).toHaveProperty('credentialSubject.achievement.id')
   })
@@ -193,13 +193,13 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(
-      updatedExchange.variables.verificationResult!.claimsValidation
+      updatedExchange.variables.results!.default.claimsValidation
     ).toBeDefined()
     expect(
-      updatedExchange.variables.verificationResult!.claimsValidation!.matched
+      updatedExchange.variables.results!.default.claimsValidation!.matched
     ).toBe(false)
     expect(
-      updatedExchange.variables.verificationResult!.claimsValidation!
+      updatedExchange.variables.results!.default.claimsValidation!
         .missingClaims
     ).toBeDefined()
   })
@@ -245,10 +245,10 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(
-      updatedExchange.variables.verificationResult!.matchedCredentials
+      updatedExchange.variables.results!.default.matchedCredentials
     ).toHaveLength(1)
     expect(
-      updatedExchange.variables.verificationResult!.matchedCredentials[0]
+      updatedExchange.variables.results!.default.matchedCredentials[0]
         .credentialSubject.achievement.id
     ).toBe('urn:uuid:achievement-1')
   })

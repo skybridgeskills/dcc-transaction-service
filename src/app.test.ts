@@ -558,7 +558,7 @@ describe('single-use exchange enforcement', function () {
     expect(body.message).toBe('Exchange has already been completed.')
   })
 
-  test('didAuth completion stores holder in result', async function () {
+  test('didAuth completion stores holder in variables.results', async function () {
     const walletQuery = await doSetup(app)
     const url = walletQuery?.vprDeepLink ?? ''
     const serviceEndpoint = extractServiceEndpoint(url)
@@ -581,10 +581,13 @@ describe('single-use exchange enforcement', function () {
     })
 
     const exchangeId = path.split('/exchanges/')[1]
-    const exchange = await getExchangeData(exchangeId, 'didAuth')
+    const exchange = (await getExchangeData(
+      exchangeId,
+      'didAuth'
+    )) as App.ExchangeDetailDidAuth
     expect(exchange.state).toBe('complete')
-    expect(exchange.variables.result).toBeDefined()
-    expect(exchange.variables.result.holder).toBe(holderId)
+    expect(exchange.variables.results).toBeDefined()
+    expect(exchange.variables.results!.default.holder).toBe(holderId)
   })
 
   test('claim completion stores credential and sets complete', async function () {
@@ -609,11 +612,16 @@ describe('single-use exchange enforcement', function () {
     })
 
     const exchangeId = path.split('/exchanges/')[1]
-    const exchange = await getExchangeData(exchangeId, 'claim')
+    const exchange = (await getExchangeData(
+      exchangeId,
+      'claim'
+    )) as App.ExchangeDetailClaim
     expect(exchange.state).toBe('complete')
-    expect(exchange.variables.result).toBeDefined()
-    expect(exchange.variables.result.default).toBeDefined()
-    expect(exchange.variables.result.default.verifiableCredential).toBeDefined()
+    expect(exchange.variables.results).toBeDefined()
+    expect(exchange.variables.results!.default).toBeDefined()
+    expect(
+      exchange.variables.results!.default.verifiableCredential
+    ).toBeDefined()
   })
 
   test('completed claim exchange returns 400 on second attempt', async function () {

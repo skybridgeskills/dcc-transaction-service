@@ -127,8 +127,8 @@ export const participateInClaimExchange = async ({
     state: 'complete',
     variables: {
       ...exchange.variables,
-      result: {
-        default: { verifiableCredential: signedCredential }
+      results: {
+        default: { verifiableCredential: [signedCredential] }
       }
     }
   }

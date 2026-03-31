@@ -7,7 +7,7 @@ import {
   MALFORMED_VALUE_ERROR,
   RANGE_ERROR
 } from './problem-details.js'
-import { credentialSchema } from '../data/verifiable-credential/schema.js'
+import { parseCredential } from '../data/verifiable-credential/schema.js'
 
 function issuesFrom(schema: z.ZodType, value: unknown) {
   const result = schema.safeParse(value)
@@ -196,19 +196,21 @@ describe('zodProblemDetails — union traversal', () => {
     )
   })
 
-  test('real-world credentialSchema union produces labeled output', () => {
+  test('parseCredential returns clear error for invalid credential', () => {
     const badCred = { type: 'NotAVC', issuer: 42 }
-    const result = credentialSchema.safeParse(badCred)
-    if (result.success) throw new Error('Expected parse to fail')
-
-    const details = zodProblemDetails(result.error.issues, 'credential[0]')
-
-    expect(details[0]).toMatchObject({
-      title: PARSING_ERROR,
-      detail: '(A) at credential[0]: Input did not match any available schema'
-    })
-    const branchDetails = details.filter((d) => d.detail.match(/^\(A\.\d/))
-    expect(branchDetails.length).toBeGreaterThan(0)
+    const result = parseCredential(badCred, 'credential[0]')
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.problemDetails).toHaveLength(1)
+      expect(result.problemDetails[0]).toMatchObject({
+        title: PARSING_ERROR,
+        status: 400
+      })
+      expect(result.problemDetails[0].detail).toContain('credential[0]')
+      expect(result.problemDetails[0].detail).toContain(
+        '@context is required and must be an array'
+      )
+    }
   })
 
   test('multiple unions in same array get sequential labels', () => {

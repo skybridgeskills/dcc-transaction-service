@@ -5,22 +5,22 @@ import { verifyPresentation } from '@digitalcredentials/verifier-core'
 import { z } from 'zod'
 import {
   named
-  // @ts-ignore
+  // @ts-ignore no type definitions for this package
 } from '@digitalbazaar/credentials-context'
-
-// Extract context URLs from the named Map using short names
-const CONTEXT_URL_V1 =
-  named.get('v1')?.id || 'https://www.w3.org/2018/credentials/v1'
-const CONTEXT_URL_V2 =
-  named.get('v2')?.id || 'https://www.w3.org/ns/credentials/v2'
 import { verifiablePresentationSchema } from '../lib/data/verifiable-presentation/schema.js'
-import { credentialSchema } from '../lib/data/verifiable-credential/schema.js'
+import { parseCredential } from '../lib/data/verifiable-credential/schema.js'
 import {
   zodProblemDetails,
   problemDetailResponse,
   MALFORMED_VALUE_ERROR
 } from '../lib/errors/problem-details.js'
 import { HTTPException } from 'hono/http-exception'
+
+// Extract context URLs from the named Map using short names
+const CONTEXT_URL_V1 =
+  named.get('v1')?.id || 'https://www.w3.org/2018/credentials/v1'
+const CONTEXT_URL_V2 =
+  named.get('v2')?.id || 'https://www.w3.org/ns/credentials/v2'
 
 export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -418,8 +418,8 @@ export const applyVerificationResults = async ({
 
   // Build structured verification result
   const verificationResult: App.VerificationResult = {
-    presentationResult,
-    credentialResults,
+    verifiablePresentation: presentationResult,
+    verifiableCredential: credentialResults,
     overallOutcome,
     matchedCredentials,
     ...(claimsValidation && { claimsValidation }),
@@ -432,7 +432,9 @@ export const applyVerificationResults = async ({
     state: overallOutcome === 'complete' ? 'complete' : 'invalid',
     variables: {
       ...exchange.variables,
-      verificationResult
+      results: {
+        default: verificationResult
+      }
     }
   }
 
@@ -494,10 +496,8 @@ export const participateInVerifyExchange = async ({
   // 3. Per-credential VC validation
   const credentials = vpResult.data.verifiableCredential
   const vcErrors = credentials.flatMap((vc, i) => {
-    const vcResult = credentialSchema.safeParse(vc)
-    if (!vcResult.success) {
-      return zodProblemDetails(vcResult.error.issues, `credential[${i}]`)
-    }
+    const result = parseCredential(vc, `credential[${i}]`)
+    if (!result.success) return result.problemDetails
     return []
   })
   if (vcErrors.length > 0) {
@@ -521,7 +521,8 @@ export const participateInVerifyExchange = async ({
       ? exchange.variables.trustedRegistries
       : config.defaultTrustedRegistries
 
-  // Verify presentation using verifier-core
+  // Parsed VP matches what we send; verifier-core's VP type requires fields our
+  // Zod VP shape does not model (e.g. issuer).
   const result = await verifyPresentation({
     presentation: validatedPresentation,
     challenge: exchange.variables.challenge,

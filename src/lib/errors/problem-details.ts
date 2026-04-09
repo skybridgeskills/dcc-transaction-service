@@ -30,6 +30,25 @@ export type ProblemDetail = {
   detail: string
 }
 
+/** Custom ProblemDetails type URLs (fragment is SCREAMING_SNAKE_CASE). */
+export function vcalmProblemType(code: string): string {
+  return `${VC_DM_BASE_URL}#${code}`
+}
+
+export function vcalmProblemDetail(
+  code: string,
+  title: string,
+  detail: string,
+  status = 400
+): ProblemDetail {
+  return {
+    type: vcalmProblemType(code),
+    status,
+    title,
+    detail
+  }
+}
+
 export type ProblemDetailResponse = {
   message: string
   problemDetails: ProblemDetail[]
@@ -120,15 +139,15 @@ function isUnionIssue(
   return issue.code === 'invalid_union' && 'unionErrors' in issue
 }
 
-function joinLocation(
-  prefix: string | undefined,
-  path: string
-): string {
+function joinLocation(prefix: string | undefined, path: string): string {
   if (prefix && path) return `${prefix}.${path}`
   return prefix || path
 }
 
-function makeProblemDetail(code: ProblemDetailCode, detail: string): ProblemDetail {
+function makeProblemDetail(
+  code: ProblemDetailCode,
+  detail: string
+): ProblemDetail {
   return {
     type: codeUrl(code),
     status: 400,
@@ -139,6 +158,19 @@ function makeProblemDetail(code: ProblemDetailCode, detail: string): ProblemDeta
 
 function codeUrl(code: string): string {
   return `${VC_DM_BASE_URL}#${code}`
+}
+
+/** VC Data Model cryptographic / verification failure (RFC 9457 extension). */
+export function cryptographicVerificationProblemDetail(
+  detail: string,
+  status = 401
+): ProblemDetail {
+  return {
+    type: codeUrl(CRYPTOGRAPHIC_SECURITY_ERROR),
+    status,
+    title: CRYPTOGRAPHIC_SECURITY_ERROR,
+    detail
+  }
 }
 
 function formatPath(path: (string | number)[]): string {

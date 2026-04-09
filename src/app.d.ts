@@ -1,9 +1,18 @@
 declare global {
   namespace App {
+    /** Issuer identity + cryptosuite + signing-service tenant for one issuance line. */
+    interface IssuerInstance {
+      id: string
+      cryptosuite: string
+      signingServiceTenant: string
+    }
+
     interface Tenant {
       tenantName: string
       tenantToken: string
       origin?: string
+      /** When set, signing uses these rows; otherwise legacy behavior uses exchange tenant name. */
+      issuerInstances?: IssuerInstance[]
     }
 
     interface Config {
@@ -208,6 +217,8 @@ declare global {
       }
       challenge: string
       domain: string
+      /** What this endpoint can verify on incoming presentations (not issuance policy). */
+      acceptedCryptosuites?: Array<{ cryptosuite: string }>
     }
 
     interface Protocols {

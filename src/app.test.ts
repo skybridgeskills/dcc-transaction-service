@@ -355,6 +355,7 @@ describe('api', function () {
       expect(body).toBeDefined()
       expect(body.code).toBe(401)
       expect(body.message).toBe('Invalid DIDAuth or unsupported options.')
+      expect(Array.isArray(body.problemDetails)).toBe(true)
     })
 
     test('does the VPR exchange for DID Auth', async function () {

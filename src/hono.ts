@@ -35,10 +35,20 @@ import { oauthAuthorizationServerMetadata } from './oauth/metadata.js'
 const handleErrors = (err: unknown, c: Context) => {
   if (err instanceof HTTPException) {
     c.status(err.status)
-    return c.json({
+    const body: Record<string, unknown> = {
       code: err.status,
       message: err.message
-    })
+    }
+    const cause = err.cause as { problemDetails?: unknown } | undefined
+    if (
+      cause &&
+      typeof cause === 'object' &&
+      'problemDetails' in cause &&
+      Array.isArray((cause as { problemDetails: unknown }).problemDetails)
+    ) {
+      body.problemDetails = (cause as { problemDetails: unknown[] }).problemDetails
+    }
+    return c.json(body)
   } else if (err instanceof z.ZodError) {
     c.status(400)
     return c.json({

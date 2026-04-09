@@ -371,11 +371,17 @@ describe('LCW Protocol URL Generation', function () {
     expect(vpr.query[1]).toEqual({
       type: 'DIDAuthentication',
       acceptedCryptosuites: [
+        { cryptosuite: 'eddsa-rdfc-2022' },
         { cryptosuite: 'ecdsa-rdfc-2019' },
-        { cryptosuite: 'eddsa-rdfc-2022' }
+        { cryptosuite: 'ed25519-signature-2020' }
       ],
       acceptedMethods: [{ method: 'did:key' }, { method: 'did:web' }]
     })
+    expect(vpr.acceptedCryptosuites).toEqual([
+      { cryptosuite: 'eddsa-rdfc-2022' },
+      { cryptosuite: 'ecdsa-rdfc-2019' },
+      { cryptosuite: 'ed25519-signature-2020' }
+    ])
 
     expect(vpr.challenge).toBe(exchange.variables.challenge)
     expect(vpr.domain).toBe(

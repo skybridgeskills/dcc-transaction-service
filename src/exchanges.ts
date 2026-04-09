@@ -19,8 +19,6 @@ import {
 import { getWalletInteractionUrl } from './lib/wallets/index.js'
 import { HTTPException } from 'hono/http-exception'
 
-import { verifyDIDAuth } from './didAuth.js'
-
 /** Allows the creation of one or a batch of exchanges for a particular tenant. */
 export const createExchangeBatch = async ({
   data,

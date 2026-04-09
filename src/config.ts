@@ -8,16 +8,39 @@ const defaultTenantName = 'default'
 const defaultTenantToken = 'default'
 const defaultTtlSeconds = 60 * 10 // exchange expires after ten minutes
 
+const parseIssuerInstancesForTenant = (
+  env: typeof process.env,
+  tenantNameLower: string
+): App.IssuerInstance[] => {
+  const suffix = tenantNameLower.toUpperCase()
+  const instances: App.IssuerInstance[] = []
+  for (let n = 1; ; n++) {
+    const idKey = `TENANT_ISSUER_${n}_ID_${suffix}`
+    const id = env[idKey]
+    if (!id) {
+      break
+    }
+    const cryptosuite =
+      env[`TENANT_ISSUER_${n}_CRYPTOSUITE_${suffix}`] ?? 'eddsa-rdfc-2022'
+    const signingServiceTenant =
+      env[`TENANT_ISSUER_${n}_SIGNING_TENANT_${suffix}`] ?? tenantNameLower
+    instances.push({ id, cryptosuite, signingServiceTenant })
+  }
+  return instances
+}
+
 const parseTenantsFromEnv = (env: typeof process.env) => {
   const tenants: Record<string, App.Tenant> = {}
   for (const [key, value] of Object.entries(env)) {
     if (key.startsWith('TENANT_TOKEN_') && value) {
       const tenantName = key.slice(13).toLowerCase()
+      const issuerInstances = parseIssuerInstancesForTenant(env, tenantName)
       tenants[tenantName] = {
         tenantName,
-        tenantToken: value
+        tenantToken: value,
+        ...(issuerInstances.length > 0 ? { issuerInstances } : {})
       }
-      if (env[`TENANT_DOMAIN_${tenantName}`]) {
+      if (env[`TENANT_ORIGIN_${tenantName}`]) {
         tenants[tenantName].origin = env[`TENANT_ORIGIN_${tenantName}`]
       }
     }
@@ -58,9 +81,14 @@ const parseConfig = (): App.Config => {
 
   // Only if no tenants are configured, use the default tenant
   if (Object.keys(config.tenants).length === 0) {
+    const issuerInstances = parseIssuerInstancesForTenant(
+      process.env,
+      defaultTenantName
+    )
     config.tenants[defaultTenantName] = {
       tenantName: defaultTenantName,
-      tenantToken: defaultTenantToken
+      tenantToken: defaultTenantToken,
+      ...(issuerInstances.length > 0 ? { issuerInstances } : {})
     }
   }
 

@@ -15,6 +15,7 @@ import {
   MALFORMED_VALUE_ERROR
 } from '../lib/errors/problem-details.js'
 import { HTTPException } from 'hono/http-exception'
+import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 
 // Extract context URLs from the named Map using short names
 const CONTEXT_URL_V1 =
@@ -146,10 +147,7 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
 
   const didAuthQuery = {
     type: 'DIDAuthentication' as const,
-    acceptedCryptosuites: [
-      { cryptosuite: 'ecdsa-rdfc-2019' },
-      { cryptosuite: 'eddsa-rdfc-2022' }
-    ],
+    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES],
     acceptedMethods: [{ method: 'did:key' }, { method: 'did:web' }]
   }
 
@@ -168,7 +166,8 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
       ]
     },
     challenge: exchange.variables.challenge,
-    domain: serviceEndpoint
+    domain: serviceEndpoint,
+    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES]
   }
   return vpr
 }

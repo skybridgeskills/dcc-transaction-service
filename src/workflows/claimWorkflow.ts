@@ -8,6 +8,11 @@ import { verifyDIDAuth } from '../didAuth.js'
 import { saveExchange } from '../transactionManager.js'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
+import {
+  extractWalletCryptosuitesFromPresentation,
+  selectIssuerInstance
+} from '../lib/issuer-selection.js'
+import { problemDetailResponse } from '../lib/errors/problem-details.js'
 
 export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -75,14 +80,18 @@ export const participateInClaimExchange = async ({
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
-  const didAuthVerified = await verifyDIDAuth({
+  const didAuthResult = await verifyDIDAuth({
     presentation: data,
     challenge: exchange.variables.challenge
   })
 
-  if (!didAuthVerified) {
+  if (!didAuthResult.verified) {
     throw new HTTPException(401, {
-      message: 'Invalid DIDAuth or unsupported options.'
+      message: 'Invalid DIDAuth or unsupported options.',
+      cause: problemDetailResponse(
+        'Invalid DIDAuth or unsupported options.',
+        didAuthResult.problemDetails
+      )
     })
   }
 
@@ -110,6 +119,20 @@ export const participateInClaimExchange = async ({
     })
   }
 
+  const tenantKey = exchange.tenantName.toLowerCase()
+  const tenant = config.tenants[tenantKey]
+  const walletCryptosuites =
+    extractWalletCryptosuitesFromPresentation(data)
+  const issuerInstance = tenant
+    ? selectIssuerInstance(tenant, walletCryptosuites)
+    : null
+  const signingTenant =
+    issuerInstance?.signingServiceTenant ?? exchange.tenantName
+
+  if (issuerInstance?.id) {
+    credential.issuer = issuerInstance.id
+  }
+
   // add credential status if enabled
   if (config.statusService) {
     credential = await callService(
@@ -118,7 +141,7 @@ export const participateInClaimExchange = async ({
     )
   }
   const signedCredential = await callService(
-    `${config.signingService}/instance/${exchange.tenantName}/credentials/sign`,
+    `${config.signingService}/instance/${signingTenant}/credentials/sign`,
     credential
   )
 

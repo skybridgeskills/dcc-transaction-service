@@ -3,6 +3,8 @@ import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { HTTPException } from 'hono/http-exception'
 import { verifyDIDAuth } from '../didAuth.js'
 import { saveExchange } from '../transactionManager.js'
+import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
+import { problemDetailResponse } from '../lib/errors/problem-details.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
 
@@ -63,7 +65,8 @@ export const getDIDAuthVPR = (exchange: App.ExchangeDetailBase) => {
       ]
     },
     challenge: exchange.variables.challenge,
-    domain: exchange.variables.exchangeHost
+    domain: exchange.variables.exchangeHost,
+    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES]
   }
 }
 
@@ -80,14 +83,18 @@ export const participateInDidAuthExchange = async ({
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
-  const didAuthVerified = await verifyDIDAuth({
+  const didAuthResult = await verifyDIDAuth({
     presentation: data,
     challenge: exchange.variables.challenge
   })
 
-  if (!didAuthVerified) {
+  if (!didAuthResult.verified) {
     throw new HTTPException(401, {
-      message: 'Invalid DIDAuth or unsupported options.'
+      message: 'Invalid DIDAuth or unsupported options.',
+      cause: problemDetailResponse(
+        'Invalid DIDAuth or unsupported options.',
+        didAuthResult.problemDetails
+      )
     })
   }
 

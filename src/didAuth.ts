@@ -9,6 +9,10 @@ import { cryptosuite as ecdsaRdfc2019Cryptosuite } from '@digitalbazaar/ecdsa-rd
 import { cryptosuite as eddsaRdfc2022Cryptosuite } from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite'
 import { preparePresentation } from './verifiablePresentation.js'
 import { suites as verificationSuite } from './suites.js'
+import {
+  cryptographicVerificationProblemDetail,
+  type ProblemDetail
+} from './lib/errors/problem-details.js'
 
 let key: Ed25519VerificationKey2020
 let suite: Ed25519Signature2020
@@ -41,14 +45,20 @@ export const getSignedDIDAuth = async (
   })
 }
 
+export type DidAuthVerificationResult =
+  | { verified: true }
+  | { verified: false; problemDetails: ProblemDetail[] }
+
 export const verifyDIDAuth = async ({
   presentation,
   challenge
 }: {
   presentation: unknown
   challenge: string
-}) => {
-  const refinedPresentation = preparePresentation(presentation)
+}): Promise<DidAuthVerificationResult> => {
+  const refinedPresentation = preparePresentation(
+    presentation as Record<string, unknown>
+  )
 
   const result = await verify({
     presentation: refinedPresentation,
@@ -56,5 +66,23 @@ export const verifyDIDAuth = async ({
     suite: verificationSuite,
     documentLoader
   })
-  return result.verified
+  if (result.verified) {
+    return { verified: true }
+  }
+
+  const errors = (
+    result as { error?: { errors?: Array<{ name: string; message: string }> } }
+  ).error?.errors
+  const problemDetails: ProblemDetail[] =
+    errors && errors.length > 0
+      ? errors.map((e) =>
+          cryptographicVerificationProblemDetail(`${e.name}: ${e.message}`)
+        )
+      : [
+          cryptographicVerificationProblemDetail(
+            'DID Authentication presentation could not be verified.'
+          )
+        ]
+
+  return { verified: false, problemDetails }
 }

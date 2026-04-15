@@ -1,5 +1,6 @@
 import type {
   EntityIdentityRegistry,
+  OidfEntityIdentityRegistry,
   VcRecognitionEntityIdentityRegistry
 } from '@digitalcredentials/verifier-core'
 
@@ -16,7 +17,10 @@ const defaultTtlSeconds = 60 * 10 // exchange expires after ten minutes
 const VC_RECOGNITION_URL_KEY =
   /^REGISTRY_VC_RECOGNITION_([A-Z0-9_]+)_URL$/
 
-/** Built-in DCC registry entries; merged with env-driven VC recognition rows. */
+const OIDF_TRUST_ANCHOR_EC_KEY =
+  /^REGISTRY_OIDF_([A-Z0-9_]+)_TRUST_ANCHOR_EC$/
+
+/** Built-in DCC registry entries; merged with env-driven OIDF + VC recognition rows. */
 const STATIC_KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
   'DCC Sandbox Registry': {
     name: 'DCC Sandbox Registry',
@@ -87,10 +91,42 @@ export const parseVcRecognitionRegistriesFromEnv = (
   return out
 }
 
+/**
+ * Reads optional OpenID Federation registry definitions from the environment.
+ *
+ * For each `REGISTRY_OIDF_S_TRUST_ANCHOR_EC`, `S` is the slug; the value is the
+ * trust anchor entity-configuration URL (`trustAnchorEC`). The registry name for
+ * `trustedRegistries` / defaults is `OIDF_S`.
+ */
+export const parseOidfRegistriesFromEnv = (
+  env: NodeJS.ProcessEnv
+): Record<string, OidfEntityIdentityRegistry> => {
+  const out: Record<string, OidfEntityIdentityRegistry> = {}
+
+  for (const key of Object.keys(env)) {
+    const m = key.match(OIDF_TRUST_ANCHOR_EC_KEY)
+    if (!m) continue
+    const slug = m[1]
+    const raw = env[key]
+    const trustAnchorEC = typeof raw === 'string' ? raw.trim() : ''
+    if (!trustAnchorEC) continue
+
+    const registryName = `OIDF_${slug}`
+    out[registryName] = {
+      name: registryName,
+      type: 'oidf',
+      trustAnchorEC
+    }
+  }
+
+  return out
+}
+
 const buildKnownRegistries = (
   env: typeof process.env
 ): Record<string, EntityIdentityRegistry> => ({
   ...STATIC_KNOWN_REGISTRIES,
+  ...parseOidfRegistriesFromEnv(env),
   ...parseVcRecognitionRegistriesFromEnv(env)
 })
 

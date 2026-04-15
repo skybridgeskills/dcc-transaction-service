@@ -31,7 +31,7 @@ const dispatch = async (
  * Builds a {@link LookupIssuers} function backed by Keyv cache and per-type handlers.
  *
  * @param cache - Keyv store for registry payloads (namespace `registry` recommended)
- * @param handlers - Override handlers (defaults are stubs until phases 4–6)
+ * @param handlers - Override handlers (defaults: DCC legacy, OIDF, VC recognition)
  */
 export const createCachedRegistryLookup = (
   cache: Keyv,

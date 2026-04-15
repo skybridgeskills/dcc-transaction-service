@@ -34,7 +34,10 @@ declare global {
       tenants: Record<string, Tenant>
       tenantAuthenticationEnabled: boolean
       defaultTrustedRegistryNames: string[]
-      /** Static + env (`REGISTRY_VC_RECOGNITION_*`) registry definitions. */
+      /**
+       * Static DCC registries plus env-driven entries (`REGISTRY_OIDF_*`,
+       * `REGISTRY_VC_RECOGNITION_*`).
+       */
       knownRegistries: Record<string, EntityIdentityRegistry>
     }
 

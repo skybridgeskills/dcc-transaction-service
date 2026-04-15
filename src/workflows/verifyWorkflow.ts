@@ -17,6 +17,10 @@ import {
 import { HTTPException } from 'hono/http-exception'
 import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 import { mapRegistryNamesToRegistries } from '../config.js'
+import { CachedRegistryLookup } from '../registry-client/cached-registry-lookup.js'
+import { getRegistryKeyv } from '../registry-keyv-store.js'
+
+const cachedIssuerLookup = CachedRegistryLookup(getRegistryKeyv())
 
 // Extract context URLs from the named Map using short names
 const CONTEXT_URL_V1 =
@@ -537,14 +541,18 @@ export const participateInVerifyExchange = async ({
       ? exchange.variables.trustedRegistries
       : config.defaultTrustedRegistryNames
 
-  const registries = mapRegistryNamesToRegistries(registryNames)
+  const registries = mapRegistryNamesToRegistries(
+    registryNames,
+    config.knownRegistries
+  )
 
   // Parsed VP matches what we send; verifier-core's VP type requires fields our
   // Zod VP shape does not model (e.g. issuer).
   const result = await verifyPresentation({
     presentation: validatedPresentation,
     challenge: exchange.variables.challenge,
-    registries
+    registries,
+    lookupIssuers: cachedIssuerLookup
   })
 
   // Apply verification results to exchange

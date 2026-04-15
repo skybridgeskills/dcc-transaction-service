@@ -1,4 +1,7 @@
-import type { EntityIdentityRegistry } from '@digitalcredentials/verifier-core'
+import type {
+  EntityIdentityRegistry,
+  VcRecognitionEntityIdentityRegistry
+} from '@digitalcredentials/verifier-core'
 
 let CONFIG: App.Config
 
@@ -10,8 +13,11 @@ const defaultTenantName = 'default'
 const defaultTenantToken = 'default'
 const defaultTtlSeconds = 60 * 10 // exchange expires after ten minutes
 
-// Known DCC registry configurations for verifier-core
-const KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
+const VC_RECOGNITION_URL_KEY =
+  /^REGISTRY_VC_RECOGNITION_([A-Z0-9_]+)_URL$/
+
+/** Built-in DCC registry entries; merged with env-driven VC recognition rows. */
+const STATIC_KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
   'DCC Sandbox Registry': {
     name: 'DCC Sandbox Registry',
     type: 'dcc-legacy',
@@ -30,16 +36,77 @@ const KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
 }
 
 /**
+ * Reads optional VC Recognition registry definitions from the environment.
+ *
+ * For each slug `S` in `REGISTRY_VC_RECOGNITION_S_URL`, also set
+ * `REGISTRY_VC_RECOGNITION_S_ACCEPTED_ISSUERS` (comma-separated DIDs/URLs).
+ * The registry name for `trustedRegistries` / defaults is `VC_RECOGNITION_S`.
+ */
+export const parseVcRecognitionRegistriesFromEnv = (
+  env: NodeJS.ProcessEnv
+): Record<string, VcRecognitionEntityIdentityRegistry> => {
+  const out: Record<string, VcRecognitionEntityIdentityRegistry> = {}
+
+  for (const key of Object.keys(env)) {
+    const m = key.match(VC_RECOGNITION_URL_KEY)
+    if (!m) continue
+    const slug = m[1]
+    const rawUrl = env[key]
+    const url = typeof rawUrl === 'string' ? rawUrl.trim() : ''
+    if (!url) continue
+
+    const issuersKey = `REGISTRY_VC_RECOGNITION_${slug}_ACCEPTED_ISSUERS`
+    const issuersRaw = env[issuersKey]
+    const issuersStr = typeof issuersRaw === 'string' ? issuersRaw.trim() : ''
+    if (!issuersStr) {
+      console.warn(
+        `registry VC recognition ${slug}: missing or empty ${issuersKey} — skipped`
+      )
+      continue
+    }
+    const acceptedIssuers = issuersStr
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (acceptedIssuers.length === 0) {
+      console.warn(
+        `registry VC recognition ${slug}: no accepted issuers after parsing — skipped`
+      )
+      continue
+    }
+
+    const registryName = `VC_RECOGNITION_${slug}`
+    out[registryName] = {
+      name: registryName,
+      type: 'vc-recognition',
+      url,
+      acceptedIssuers
+    }
+  }
+
+  return out
+}
+
+const buildKnownRegistries = (
+  env: typeof process.env
+): Record<string, EntityIdentityRegistry> => ({
+  ...STATIC_KNOWN_REGISTRIES,
+  ...parseVcRecognitionRegistriesFromEnv(env)
+})
+
+/**
  * Map registry names to full EntityIdentityRegistry objects for verifier-core.
  * Falls back to creating a dcc-legacy registry with a default URL pattern
  * for unknown registries.
  */
 export const mapRegistryNamesToRegistries = (
-  registryNames: string[]
+  registryNames: string[],
+  knownRegistries: Record<string, EntityIdentityRegistry> = getConfig()
+    .knownRegistries
 ): EntityIdentityRegistry[] => {
   return registryNames.map((name) => {
-    if (name in KNOWN_REGISTRIES) {
-      return KNOWN_REGISTRIES[name]
+    if (name in knownRegistries) {
+      return knownRegistries[name]
     }
     // For unknown registries, try to construct a reasonable default
     // This assumes the registry name might be a URL or we use a default pattern
@@ -122,7 +189,9 @@ const parseConfig = (): App.Config => {
       ? process.env.DEFAULT_TRUSTED_REGISTRIES.split(',').map((r) => r.trim())
       : ['DCC Sandbox Registry', 'DCC Issuer Registry'],
 
-    accessJwtSecret: process.env.ACCESS_JWT_SECRET ?? ''
+    accessJwtSecret: process.env.ACCESS_JWT_SECRET ?? '',
+
+    knownRegistries: buildKnownRegistries(process.env)
   }
 
   // Only if no tenants are configured, use the default tenant

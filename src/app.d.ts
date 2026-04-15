@@ -1,3 +1,5 @@
+import type { EntityIdentityRegistry } from '@digitalcredentials/verifier-core'
+
 declare global {
   namespace App {
     /** Issuer identity + cryptosuite + signing-service tenant for one issuance line. */
@@ -32,6 +34,8 @@ declare global {
       tenants: Record<string, Tenant>
       tenantAuthenticationEnabled: boolean
       defaultTrustedRegistryNames: string[]
+      /** Static + env (`REGISTRY_VC_RECOGNITION_*`) registry definitions. */
+      knownRegistries: Record<string, EntityIdentityRegistry>
     }
 
     interface ErrorResponseBody {

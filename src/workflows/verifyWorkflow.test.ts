@@ -96,9 +96,7 @@ describe('applyVerificationResults', function () {
 
     expect(updatedExchange.state).toBe('complete')
     expect(updatedExchange.variables.results).toBeDefined()
-    expect(updatedExchange.variables.results!.default.overallOutcome).toBe(
-      'complete'
-    )
+    expect(updatedExchange.variables.results!.default.verified).toBe(true)
   })
 
   test('sets exchange state to invalid for invalid presentation signature', async function () {
@@ -108,9 +106,7 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(updatedExchange.state).toBe('invalid')
-    expect(updatedExchange.variables.results!.default.overallOutcome).toBe(
-      'invalid'
-    )
+    expect(updatedExchange.variables.results!.default.verified).toBe(false)
   })
 
   test('sets exchange state to invalid for invalid credential signature', async function () {
@@ -120,9 +116,7 @@ describe('applyVerificationResults', function () {
     const updatedExchange = await applyVerificationResults({ exchange, result })
 
     expect(updatedExchange.state).toBe('invalid')
-    expect(updatedExchange.variables.results!.default.overallOutcome).toBe(
-      'invalid'
-    )
+    expect(updatedExchange.variables.results!.default.verified).toBe(false)
   })
 
   test('validates trusted issuers when specified', async function () {
@@ -228,18 +222,34 @@ describe('applyVerificationResults', function () {
       }
     })
 
-    const result = {
-      presentationResult: { signature: 'VALID' },
+    const result: import('@digitalcredentials/verifier-core').PresentationVerificationResult = {
+      verified: true,
+      presentationResults: [
+        {
+          suite: 'proof',
+          check: 'proof.signature-valid',
+          outcome: { status: 'success', message: 'Valid' },
+          timestamp: new Date().toISOString(),
+          fatal: true
+        }
+      ],
       credentialResults: [
         {
+          verified: true,
           credential: credential1,
-          log: [{ id: 'valid_signature', valid: true }]
+          results: [
+            { suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' }, timestamp: new Date().toISOString() }
+          ]
         },
         {
+          verified: true,
           credential: credential2,
-          log: [{ id: 'valid_signature', valid: true }]
+          results: [
+            { suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' }, timestamp: new Date().toISOString() }
+          ]
         }
-      ]
+      ],
+      allResults: []
     }
 
     const updatedExchange = await applyVerificationResults({ exchange, result })

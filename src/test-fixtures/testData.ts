@@ -92,59 +92,99 @@ export const createMockVerifierCoreResult = (
   presentationValid = true,
   credentialsValid = true,
   overrides: any = {}
-): any => ({
-  presentationResult: {
-    signature: presentationValid ? 'VALID' : 'INVALID',
-    ...(presentationValid
-      ? {}
-      : {
-          errors: [
-            {
-              name: 'INVALID_SIGNATURE',
-              message: 'Invalid presentation signature'
-            }
-          ]
-        })
-  },
+): import('@digitalcredentials/verifier-core').PresentationVerificationResult => ({
+  verified: presentationValid && credentialsValid,
+  presentationResults: presentationValid
+    ? [
+        {
+          suite: 'proof',
+          check: 'proof.signature-valid',
+          outcome: { status: 'success', message: 'Presentation signature is valid' },
+          timestamp: new Date().toISOString(),
+          fatal: true
+        }
+      ]
+    : [
+        {
+          suite: 'proof',
+          check: 'proof.signature-valid',
+          outcome: {
+            status: 'failure',
+            problems: [
+              {
+                type: 'https://w3id.org/security#INVALID_SIGNATURE',
+                title: 'Invalid Signature',
+                detail: 'The presentation signature could not be verified'
+              }
+            ]
+          },
+          timestamp: new Date().toISOString(),
+          fatal: true
+        }
+      ],
   credentialResults: credentialsValid
     ? [
         {
+          verified: true,
           credential: createMockCredential(),
-          log: [
-            { id: 'valid_signature', valid: true },
-            { id: 'expiration', valid: true },
-            { id: 'revocation_status', valid: true },
+          results: [
             {
-              id: 'registered_issuer',
-              valid: true,
-              foundInRegistries: ['DCC Sandbox Registry'],
-              registriesNotLoaded: []
+              suite: 'core',
+              check: 'core.id-valid',
+              outcome: { status: 'success', message: 'Credential ID is valid' },
+              timestamp: new Date().toISOString()
+            },
+            {
+              suite: 'proof',
+              check: 'proof.signature-valid',
+              outcome: { status: 'success', message: 'Credential signature is valid' },
+              timestamp: new Date().toISOString(),
+              fatal: true
+            },
+            {
+              suite: 'registry',
+              check: 'registry.issuer-registered',
+              outcome: {
+                status: 'success',
+                message: 'Issuer found in DCC Sandbox Registry',
+                foundInRegistries: ['DCC Sandbox Registry']
+              },
+              timestamp: new Date().toISOString()
             }
           ]
         }
       ]
     : [
         {
+          verified: false,
           credential: createMockCredential(),
-          log: [
-            { id: 'valid_signature', valid: false },
-            { id: 'expiration', valid: true },
-            { id: 'revocation_status', valid: true },
+          results: [
             {
-              id: 'registered_issuer',
-              valid: false,
-              foundInRegistries: [],
-              registriesNotLoaded: ['DCC Sandbox Registry']
-            }
-          ],
-          errors: [
+              suite: 'core',
+              check: 'core.id-valid',
+              outcome: { status: 'success', message: 'Credential ID is valid' },
+              timestamp: new Date().toISOString()
+            },
             {
-              name: 'INVALID_SIGNATURE',
-              message: 'Invalid credential signature'
+              suite: 'proof',
+              check: 'proof.signature-valid',
+              outcome: {
+                status: 'failure',
+                problems: [
+                  {
+                    type: 'https://w3id.org/security#INVALID_SIGNATURE',
+                    title: 'Invalid Signature',
+                    detail: 'The credential signature could not be verified'
+                  }
+                ]
+              },
+              timestamp: new Date().toISOString(),
+              fatal: true
             }
           ]
         }
       ],
+  allResults: [],
   ...overrides
 })
 

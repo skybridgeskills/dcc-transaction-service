@@ -31,7 +31,7 @@ declare global {
       keyvExpiredCheckDelayMs: number
       tenants: Record<string, Tenant>
       tenantAuthenticationEnabled: boolean
-      defaultTrustedRegistries: string[]
+      defaultTrustedRegistryNames: string[]
     }
 
     interface ErrorResponseBody {
@@ -126,6 +126,54 @@ declare global {
       }
     }
 
+    /**
+     * Problem detail per RFC 9457.
+     * Used in CheckResult failure outcomes.
+     */
+    interface ProblemDetail {
+      type?: string
+      title?: string
+      detail?: string
+      status?: number
+      [key: string]: any
+    }
+
+    /**
+     * Check result from verifier-core suite-based verification.
+     * Replaces the legacy VerificationStepResult format.
+     */
+    interface CheckResult {
+      /** Qualified check id, e.g. "core.proof-exists" */
+      check: string
+      /** Suite id this check belongs to, e.g. "core" */
+      suite: string
+      /** Discriminated outcome */
+      outcome:
+        | { status: 'success'; message: string }
+        | { status: 'failure'; problems: ProblemDetail[] }
+        | { status: 'skipped'; reason: string }
+      /** ISO 8601 timestamp when the check was executed */
+      timestamp: string
+      /** Whether this check failure is fatal to overall verification */
+      fatal?: boolean
+    }
+
+    /**
+     * Per-credential verification result from verifier-core.
+     */
+    interface CredentialVerificationResult {
+      /** True if no check returned a failure outcome */
+      verified: boolean
+      /** The parsed credential that was verified */
+      credential: any
+      /** Flat array of results from all suites for this credential */
+      results: CheckResult[]
+    }
+
+    /**
+     * Legacy verification step result format.
+     * @deprecated Kept for backward compatibility. Use CheckResult instead.
+     */
     interface VerificationStepResult {
       id: string
       valid: boolean
@@ -138,35 +186,39 @@ declare global {
       registriesNotLoaded?: string[]
     }
 
+    /**
+     * Verification result matching the new verifier-core format.
+     * Note: This is a breaking change from the old format which used
+     * verifiablePresentation/errors/log structure.
+     */
     interface VerificationResult {
-      verifiablePresentation: {
-        signature: 'VALID' | 'INVALID' | 'UNSIGNED'
-        errors?: Array<{
-          name: string
-          message: string
-          stackTrace?: any
-        }>
-      }
-      verifiableCredential: Array<{
-        credential: any
-        log: VerificationStepResult[]
-        errors?: Array<{
-          name: string
-          message: string
-          stackTrace?: any
-        }>
-      }>
-      overallOutcome: 'complete' | 'invalid'
+      /** Overall verification status - true if no fatal failures */
+      verified: boolean
+
+      /** Presentation-level check results (VP signature verification) */
+      presentationResults: CheckResult[]
+
+      /** Per-credential verification results */
+      credentialResults: CredentialVerificationResult[]
+
+      /** All check results flattened (presentation + all credentials) */
+      allResults: CheckResult[]
+
+      /** Credentials that matched the claims requirements */
       matchedCredentials: any[]
+
+      /** Optional claims validation details */
       claimsValidation?: {
         extractedClaims: Record<string, any>
         requiredClaims: DcqlClaim[]
         matched: boolean
         missingClaims?: string[]
       }
+
+      /** Optional issuer validation details */
       issuerValidation?: {
-        trustedIssuers?: string[]
-        trustedRegistries?: string[]
+        trustedIssuers: string[]
+        trustedRegistries: string[]
         issuerFound: boolean
         registryMatch: boolean
       }

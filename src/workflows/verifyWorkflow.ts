@@ -16,6 +16,7 @@ import {
 } from '../lib/errors/problem-details.js'
 import { HTTPException } from 'hono/http-exception'
 import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
+import { mapRegistryNamesToRegistries } from '../config.js'
 
 // Extract context URLs from the named Map using short names
 const CONTEXT_URL_V1 =
@@ -243,27 +244,44 @@ const matchClaimsAgainstRequirements = (
 }
 
 /**
- * Validate trusted issuers against credential issuer
+ * Validate trusted issuers against credential issuer.
+ *
+ * Searches the credential's verification results for registry suite checks
+ * to determine if the issuer is in any trusted registries.
  */
 const validateTrustedIssuers = (
   credential: any,
   trustedIssuers: string[],
   trustedRegistries: string[],
-  credentialResult: any
+  credentialResult: App.CredentialVerificationResult
 ): { issuerFound: boolean; registryMatch: boolean } => {
   const issuer = credential.issuer?.id || credential.issuer
   const issuerFound = trustedIssuers.includes(issuer)
 
-  // Check if issuer is found in any of the trusted registries
+  // Find all registry suite checks in the results array
+  const registryChecks = credentialResult.results.filter(
+    (check) => check.suite === 'registry'
+  )
+
+  // Check if issuer was found in any trusted registry
   let registryMatch = false
-  if (credentialResult.log) {
-    const registryStep = credentialResult.log.find(
-      (step: any) => step.id === 'registered_issuer'
-    )
-    if (registryStep && registryStep.foundInRegistries) {
-      registryMatch = trustedRegistries.some((registry) =>
-        registryStep.foundInRegistries.includes(registry)
-      )
+  for (const check of registryChecks) {
+    // Look for successful issuer registration checks
+    if (check.outcome.status === 'success') {
+      // Extract registry information from outcome if available
+      // The verifier-core may include foundInRegistries in the outcome
+      const outcome = check.outcome as { status: 'success'; message: string; foundInRegistries?: string[] }
+      if (outcome.foundInRegistries && outcome.foundInRegistries.length > 0) {
+        // Check if any of the found registries match our trusted registries
+        registryMatch = trustedRegistries.some((trusted) =>
+          outcome.foundInRegistries!.includes(trusted)
+        )
+        if (registryMatch) break
+      } else if (trustedRegistries.length === 0) {
+        // No specific trusted registries required, any successful registry check passes
+        registryMatch = true
+        break
+      }
     }
   }
 
@@ -271,46 +289,44 @@ const validateTrustedIssuers = (
 }
 
 /**
- * Determine overall exchange outcome based on verification results
+ * Determine overall exchange outcome based on verification results.
+ *
+ * With the new verifier-core format, this is simplified because:
+ * - The `verified` boolean already accounts for fatal check failures
+ * - Each credential has its own `verified` status
+ *
+ * We only need additional logic if there are trusted issuer requirements
+ * that weren't enforced as fatal checks by verifier-core.
  */
 const determineExchangeOutcome = (
-  presentationResult: any,
-  credentialResults: any[],
+  verified: boolean,
+  credentialResults: App.CredentialVerificationResult[],
   exchange: App.ExchangeDetailVerify
 ): 'complete' | 'invalid' => {
-  // Check for fatal errors in presentation
-  if (presentationResult.errors && presentationResult.errors.length > 0) {
+  // If verifier-core says verification failed, it's invalid
+  if (!verified) {
     return 'invalid'
   }
 
-  // Check presentation signature
-  if (presentationResult.signature !== 'VALID') {
-    return 'invalid'
-  }
-
-  // Check each credential result
+  // Check that all credentials passed verification
   for (const credentialResult of credentialResults) {
-    // Check for fatal errors in credential
-    if (credentialResult.errors && credentialResult.errors.length > 0) {
+    if (!credentialResult.verified) {
       return 'invalid'
     }
 
-    // Check critical verification steps
-    if (credentialResult.log) {
-      for (const step of credentialResult.log) {
-        // Signature validation is critical
-        if (step.id === 'valid_signature' && !step.valid) {
-          return 'invalid'
-        }
+    // If trusted issuers are specified, verify the issuer check passed
+    if (exchange.variables.trustedIssuers.length > 0) {
+      const registryChecks = credentialResult.results.filter(
+        (check) => check.suite === 'registry'
+      )
 
-        // If trusted issuers are specified, issuer validation is critical
+      // If any registry check failed fatally, the credential is invalid
+      for (const check of registryChecks) {
         if (
-          exchange.variables.trustedIssuers.length > 0 &&
-          step.id === 'registered_issuer'
+          check.fatal &&
+          check.outcome.status === 'failure'
         ) {
-          if (!step.valid) {
-            return 'invalid'
-          }
+          return 'invalid'
         }
       }
     }
@@ -327,9 +343,9 @@ export const applyVerificationResults = async ({
   result
 }: {
   exchange: App.ExchangeDetailVerify
-  result: any
+  result: import('@digitalcredentials/verifier-core').PresentationVerificationResult
 }): Promise<App.ExchangeDetailVerify> => {
-  const { presentationResult, credentialResults } = result
+  const { verified, presentationResults, credentialResults, allResults } = result
 
   // Extract and validate claims if specified
   let claimsValidation: App.VerificationResult['claimsValidation'] | undefined
@@ -371,7 +387,7 @@ export const applyVerificationResults = async ({
   } else {
     // No claims specified, all credentials are considered valid
     matchedCredentials = credentialResults
-      .map((cr: any) => cr.credential)
+      .map((cr) => cr.credential)
       .filter(Boolean)
   }
 
@@ -410,16 +426,17 @@ export const applyVerificationResults = async ({
 
   // Determine overall outcome
   const overallOutcome = determineExchangeOutcome(
-    presentationResult,
+    verified,
     credentialResults,
     exchange
   )
 
-  // Build structured verification result
+  // Build structured verification result using new verifier-core format
   const verificationResult: App.VerificationResult = {
-    verifiablePresentation: presentationResult,
-    verifiableCredential: credentialResults,
-    overallOutcome,
+    verified,
+    presentationResults,
+    credentialResults,
+    allResults,
     matchedCredentials,
     ...(claimsValidation && { claimsValidation }),
     ...(issuerValidation && { issuerValidation })
@@ -513,20 +530,21 @@ export const participateInVerifyExchange = async ({
     typeof verifyPresentation
   >[0]['presentation']
 
-  // Determine which registries to use
-  const knownDIDRegistries =
+  // Determine which registries to use and map to full registry objects
+  const registryNames =
     exchange.variables.trustedRegistries &&
     exchange.variables.trustedRegistries.length > 0
       ? exchange.variables.trustedRegistries
-      : config.defaultTrustedRegistries
+      : config.defaultTrustedRegistryNames
+
+  const registries = mapRegistryNamesToRegistries(registryNames)
 
   // Parsed VP matches what we send; verifier-core's VP type requires fields our
   // Zod VP shape does not model (e.g. issuer).
   const result = await verifyPresentation({
     presentation: validatedPresentation,
     challenge: exchange.variables.challenge,
-    knownDIDRegistries,
-    reloadIssuerRegistry: true
+    registries
   })
 
   // Apply verification results to exchange

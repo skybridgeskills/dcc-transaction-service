@@ -29,9 +29,11 @@ export function TerminalView({
     if (state === 'complete') {
       const cr = parseClaimResults(variables?.results)
       return (
-        <div style={successPanel}>
-          <p style={titleStyle}>Credential issued</p>
-          <p style={bodyStyle}>{credentialSummaryLine(cr)}</p>
+        <>
+          <div style={successPanel}>
+            <p style={titleStyle}>Credential issued</p>
+            <p style={bodyStyle}>{credentialSummaryLine(cr)}</p>
+          </div>
           {features?.details !== false ? (
             <Details summary="Details">
               <p style={{ margin: 0, fontSize: '0.875rem', color: '#166534' }}>
@@ -40,7 +42,7 @@ export function TerminalView({
               </p>
             </Details>
           ) : null}
-        </div>
+        </>
       )
     }
     return workflowErrorPanel(
@@ -54,13 +56,15 @@ export function TerminalView({
     if (state === 'complete') {
       const holder = parseDidAuthHolder(variables?.results)
       return (
-        <div style={successPanel}>
-          <p style={titleStyle}>DID authenticated</p>
-          <p style={bodyStyle}>
-            {holder
-              ? `Holder: ${abbreviateDid(holder)}`
-              : 'Your wallet authenticated successfully.'}
-          </p>
+        <>
+          <div style={successPanel}>
+            <p style={titleStyle}>DID authenticated</p>
+            <p style={bodyStyle}>
+              {holder
+                ? `Holder: ${abbreviateDid(holder)}`
+                : 'Your wallet authenticated successfully.'}
+            </p>
+          </div>
           {features?.details !== false && holder ? (
             <Details summary="Details">
               <p
@@ -75,7 +79,7 @@ export function TerminalView({
               </p>
             </Details>
           ) : null}
-        </div>
+        </>
       )
     }
     return workflowErrorPanel(
@@ -147,18 +151,20 @@ function workflowErrorPanel(
   features?: Record<string, string | boolean>
 ) {
   return (
-    <div
-      style={{
-        padding: '24px',
-        borderRadius: '8px',
-        background: '#fef2f2',
-        border: '1px solid #fecaca',
-        color: '#991b1b',
-        textAlign: 'center' as const
-      }}
-    >
-      <p style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 8px' }}>{title}</p>
-      <p style={{ margin: 0, fontSize: '0.95rem' }}>{body}</p>
+    <>
+      <div
+        style={{
+          padding: '24px',
+          borderRadius: '8px',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          color: '#991b1b',
+          textAlign: 'center' as const
+        }}
+      >
+        <p style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 8px' }}>{title}</p>
+        <p style={{ margin: 0, fontSize: '0.95rem' }}>{body}</p>
+      </div>
       {features?.details !== false ? (
         <Details summary="Details">
           <p style={{ margin: 0, fontSize: '0.875rem', color: '#991b1b' }}>
@@ -167,7 +173,7 @@ function workflowErrorPanel(
           </p>
         </Details>
       ) : null}
-    </div>
+    </>
   )
 }
 

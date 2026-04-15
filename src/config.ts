@@ -177,6 +177,14 @@ const parseIssuerInstancesForTenant = (
   return instances
 }
 
+/** Default true; set `UI_SHOW_DETAILS=false` (or `0` / `no`) to disable. */
+const parseUiShowDetails = (raw: string | undefined): boolean => {
+  if (raw === undefined || raw === '') return true
+  const v = raw.trim().toLowerCase()
+  if (v === 'false' || v === '0' || v === 'no') return false
+  return true
+}
+
 const parseTenantsFromEnv = (env: typeof process.env) => {
   const tenants: Record<string, App.Tenant> = {}
   for (const [key, value] of Object.entries(env)) {
@@ -209,6 +217,8 @@ const parseConfig = (): App.Config => {
 
     defaultWorkflow: process.env.DEFAULT_WORKFLOW ?? defaultWorkflow,
     defaultTenantName: process.env.DEFAULT_TENANT_NAME ?? defaultTenantName,
+
+    uiShowDetails: parseUiShowDetails(process.env.UI_SHOW_DETAILS),
 
     tenants,
     tenantAuthenticationEnabled: Object.keys(tenants).length > 0,

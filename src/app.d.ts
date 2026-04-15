@@ -25,6 +25,11 @@ declare global {
       signingService: string
       defaultWorkflow: string
       defaultTenantName: string
+      /**
+       * When true (default), the interaction UI may show an expandable details
+       * section for verification and other workflows. Set `UI_SHOW_DETAILS=false` to hide.
+       */
+      uiShowDetails: boolean
       /** HS256 secret for OAuth access JWTs (client_credentials). Empty disables issuance. */
       accessJwtSecret: string
       keyvFilePath?: string
@@ -98,6 +103,11 @@ declare global {
       metadata?: Record<string, unknown>
       challenge: string // Used to authenticate presentations
       results?: Record<string, unknown>
+      /**
+       * UI and client feature flags (short keys, string or boolean values).
+       * Example: `{ details: true }` toggles advanced verification details.
+       */
+      features?: Record<string, string | boolean>
     }
 
     interface ExchangeDetailBase {

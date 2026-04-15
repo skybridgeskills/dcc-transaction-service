@@ -12,8 +12,17 @@ export class HttpNotOkResponseError extends Error {
   }
 }
 
+/** `variables` slice returned on VC-API exchange GET (used by the interaction UI). */
+export interface ExchangeStatusVariables {
+  results?: Record<string, unknown>
+  features?: Record<string, string | boolean>
+  [key: string]: unknown
+}
+
 export interface ExchangeStatusResponse {
   state: ExchangeState
+  workflowId?: string
+  variables?: ExchangeStatusVariables
   [key: string]: unknown
 }
 

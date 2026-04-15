@@ -26,14 +26,14 @@ export function CheckResultRow({ result }: { result: App.CheckResult }) {
     body = (
       <>
         <span style={{ color: '#374151', fontWeight: 500 }}>{result.check}</span>
-        <span style={{ color: '#6b7280' }}>{outcome.message}</span>
+        <div style={{ color: '#6b7280', marginTop: '2px' }}>{outcome.message}</div>
       </>
     )
   } else if (outcome.status === 'skipped') {
     body = (
       <>
         <span style={{ color: '#374151', fontWeight: 500 }}>{result.check}</span>
-        <span style={{ color: '#6b7280' }}>{outcome.reason}</span>
+        <div style={{ color: '#6b7280', marginTop: '2px' }}>{outcome.reason}</div>
       </>
     )
   } else {
@@ -42,9 +42,9 @@ export function CheckResultRow({ result }: { result: App.CheckResult }) {
       <>
         <span style={{ color: '#374151', fontWeight: 500 }}>{result.check}</span>
         {p0 && (
-          <div style={{ color: '#4b5563' }}>
+          <div style={{ color: '#6b7280', marginTop: '4px', fontSize: '0.8125rem' }}>
             <div style={{ fontWeight: 600 }}>{p0.title}</div>
-            {p0.detail ? <div style={{ marginTop: '4px' }}>{p0.detail}</div> : null}
+            {p0.detail ? <div style={{ marginTop: '6px' }}>{p0.detail}</div> : null}
             {outcome.problems.length > 1 ? (
               <div style={{ marginTop: '6px', fontSize: '0.8125rem', color: '#6b7280' }}>
                 +{outcome.problems.length - 1} more

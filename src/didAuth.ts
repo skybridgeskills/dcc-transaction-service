@@ -1,18 +1,18 @@
-// @ts-nocheck // There are no type definitions for these digitalbazaar libraries
-import { verify, signPresentation, createPresentation } from '@digitalbazaar/vc'
+// @ts-nocheck // Digital Bazaar VC signing APIs are loosely typed
+import { signPresentation, createPresentation } from '@digitalbazaar/vc'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { securityLoader } from '@digitalcredentials/security-document-loader'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
-import { DataIntegrityProof } from '@digitalbazaar/data-integrity'
-import { documentLoader } from './documentLoader.js'
-import { cryptosuite as ecdsaRdfc2019Cryptosuite } from '@digitalbazaar/ecdsa-rdfc-2019-cryptosuite'
-import { cryptosuite as eddsaRdfc2022Cryptosuite } from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite'
+import { verifyPresentation } from '@digitalcredentials/verifier-core'
+import type { CheckResult } from '@digitalcredentials/verifier-core'
 import { preparePresentation } from './verifiablePresentation.js'
-import { suites as verificationSuite } from './suites.js'
 import {
   cryptographicVerificationProblemDetail,
   type ProblemDetail
 } from './lib/errors/problem-details.js'
+import { getVerifierVerificationFetchers } from './lib/verifier-keyv-store.js'
+
+const signingDocumentLoader = securityLoader().build()
 
 let key: Ed25519VerificationKey2020
 let suite: Ed25519Signature2020
@@ -41,13 +41,27 @@ export const getSignedDIDAuth = async (
     presentation,
     suite,
     challenge,
-    documentLoader
+    documentLoader: signingDocumentLoader
   })
 }
 
 export type DidAuthVerificationResult =
   | { verified: true }
   | { verified: false; problemDetails: ProblemDetail[] }
+
+function problemDetailsFromChecks(allResults: CheckResult[]): ProblemDetail[] {
+  const out: ProblemDetail[] = []
+  for (const check of allResults) {
+    if (check.outcome.status === 'failure') {
+      for (const p of check.outcome.problems) {
+        out.push(
+          cryptographicVerificationProblemDetail(`${p.title}: ${p.detail}`)
+        )
+      }
+    }
+  }
+  return out
+}
 
 export const verifyDIDAuth = async ({
   presentation,
@@ -60,29 +74,26 @@ export const verifyDIDAuth = async ({
     presentation as Record<string, unknown>
   )
 
-  const result = await verify({
+  const { httpGet, cache } = getVerifierVerificationFetchers()
+  const result = await verifyPresentation({
     presentation: refinedPresentation,
     challenge,
-    suite: verificationSuite,
-    documentLoader
+    httpGet,
+    cache
   })
+
   if (result.verified) {
     return { verified: true }
   }
 
-  const errors = (
-    result as { error?: { errors?: Array<{ name: string; message: string }> } }
-  ).error?.errors
-  const problemDetails: ProblemDetail[] =
-    errors && errors.length > 0
-      ? errors.map((e) =>
-          cryptographicVerificationProblemDetail(`${e.name}: ${e.message}`)
-        )
-      : [
-          cryptographicVerificationProblemDetail(
-            'DID Authentication presentation could not be verified.'
-          )
-        ]
+  const problemDetails = problemDetailsFromChecks(result.allResults)
+  if (problemDetails.length === 0) {
+    problemDetails.push(
+      cryptographicVerificationProblemDetail(
+        'DID Authentication presentation could not be verified.'
+      )
+    )
+  }
 
   return { verified: false, problemDetails }
 }

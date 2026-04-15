@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
+import type { CSSProperties } from 'react'
 import { wallets } from '../lib/wallets/index'
 import { WalletInteraction } from './WalletInteraction'
+import { TerminalView } from './TerminalView'
 import { useExchangeStatus } from './useExchangeStatus'
 import type { ExchangeClient } from '../lib/services/exchange-client/exchange-client'
 import { HttpExchangeClient } from '../lib/services/exchange-client/http-exchange-client'
@@ -22,7 +24,10 @@ export function App({ exchangeClient }: AppProps) {
   const [fetchError, setFetchError] = useState<string | null>(null)
 
   const vcapiUrl = protocols?.vcapi ?? null
-  const { state, error: statusError } = useExchangeStatus(vcapiUrl, client)
+  const { state, exchange, error: statusError } = useExchangeStatus(
+    vcapiUrl,
+    client
+  )
 
   useEffect(() => {
     const exchangeId = window.location.pathname.split('/').pop()
@@ -36,8 +41,6 @@ export function App({ exchangeClient }: AppProps) {
       .then(setProtocols)
       .catch((e: Error) => setFetchError(e.message))
   }, [client])
-
-  const isTerminal = state === 'complete' || state === 'invalid'
 
   if (fetchError) {
     return (
@@ -57,26 +60,15 @@ export function App({ exchangeClient }: AppProps) {
     )
   }
 
-  if (isTerminal) {
+  if (state === 'complete' || state === 'invalid') {
     return (
       <div style={containerStyle}>
         <h1 style={headingStyle}>Credential Interaction</h1>
-        {state === 'complete' ? (
-          <div style={successStyle}>
-            <p style={{ fontSize: '1.25rem', fontWeight: 600 }}>Success</p>
-            <p>The exchange has been completed successfully.</p>
-          </div>
-        ) : (
-          <div style={errorStyle}>
-            <p style={{ fontSize: '1.25rem', fontWeight: 600 }}>
-              Exchange Invalid
-            </p>
-            <p>
-              This exchange could not be completed. Please try again or contact
-              support.
-            </p>
-          </div>
-        )}
+        <TerminalView
+          state={state}
+          workflowId={exchange?.workflowId}
+          variables={exchange?.variables}
+        />
       </div>
     )
   }
@@ -130,7 +122,7 @@ export function App({ exchangeClient }: AppProps) {
   )
 }
 
-const containerStyle: React.CSSProperties = {
+const containerStyle: CSSProperties = {
   maxWidth: '480px',
   margin: '40px auto',
   padding: '24px',
@@ -138,13 +130,13 @@ const containerStyle: React.CSSProperties = {
     '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
 }
 
-const headingStyle: React.CSSProperties = {
+const headingStyle: CSSProperties = {
   fontSize: '1.5rem',
   fontWeight: 700,
   marginBottom: '24px'
 }
 
-const selectStyle: React.CSSProperties = {
+const selectStyle: CSSProperties = {
   width: '100%',
   padding: '8px 12px',
   fontSize: '1rem',
@@ -152,7 +144,7 @@ const selectStyle: React.CSSProperties = {
   border: '1px solid #d1d5db'
 }
 
-const statusBadgeStyle: React.CSSProperties = {
+const statusBadgeStyle: CSSProperties = {
   display: 'inline-block',
   padding: '4px 12px',
   borderRadius: '12px',
@@ -161,20 +153,3 @@ const statusBadgeStyle: React.CSSProperties = {
   marginBottom: '16px'
 }
 
-const successStyle: React.CSSProperties = {
-  padding: '24px',
-  borderRadius: '8px',
-  background: '#f0fdf4',
-  border: '1px solid #bbf7d0',
-  color: '#166534',
-  textAlign: 'center'
-}
-
-const errorStyle: React.CSSProperties = {
-  padding: '24px',
-  borderRadius: '8px',
-  background: '#fef2f2',
-  border: '1px solid #fecaca',
-  color: '#991b1b',
-  textAlign: 'center'
-}

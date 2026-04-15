@@ -2,18 +2,24 @@ import type {
   ExchangeClient,
   ExchangeProtocols,
   ExchangeState,
-  ExchangeStatusResponse
+  ExchangeStatusResponse,
+  ExchangeStatusVariables
 } from './exchange-client'
 
 export interface FakeExchangeClientOptions {
   protocols: Record<string, string>
   /** A single state or a sequence that advances on each fetchExchangeStatus call. */
   states: ExchangeState | ExchangeState[]
+  /** Optional; merged into every `fetchExchangeStatus` response (e.g. for Storybook). */
+  workflowId?: string
+  variables?: ExchangeStatusVariables
 }
 
 export class FakeExchangeClient implements ExchangeClient {
   private readonly protocols: Record<string, string>
   private readonly states: ExchangeState[]
+  private readonly workflowId?: string
+  private readonly variables?: ExchangeStatusVariables
   private callIndex = 0
 
   constructor(options: FakeExchangeClientOptions) {
@@ -21,6 +27,8 @@ export class FakeExchangeClient implements ExchangeClient {
     this.states = Array.isArray(options.states)
       ? options.states
       : [options.states]
+    this.workflowId = options.workflowId
+    this.variables = options.variables
   }
 
   async createExchange(
@@ -42,6 +50,10 @@ export class FakeExchangeClient implements ExchangeClient {
     const idx = Math.min(this.callIndex, this.states.length - 1)
     const state = this.states[idx]
     this.callIndex++
-    return { state }
+    return {
+      state,
+      ...(this.workflowId !== undefined ? { workflowId: this.workflowId } : {}),
+      ...(this.variables !== undefined ? { variables: this.variables } : {})
+    }
   }
 }

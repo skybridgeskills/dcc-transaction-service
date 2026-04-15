@@ -67,5 +67,22 @@ describe('FakeExchangeClient', () => {
       const result = await client.fetchExchangeStatus('url')
       expect(result.state).toBe('complete')
     })
+
+    test('includes workflowId and variables when configured', async () => {
+      const variables = {
+        features: { details: true },
+        results: { default: { verified: true } }
+      }
+      const client = new FakeExchangeClient({
+        protocols: mockProtocols,
+        states: 'complete',
+        workflowId: 'verify',
+        variables
+      })
+
+      const result = await client.fetchExchangeStatus('url')
+      expect(result.workflowId).toBe('verify')
+      expect(result.variables).toEqual(variables)
+    })
   })
 })

@@ -2,12 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   type ExchangeClient,
   type ExchangeState,
+  type ExchangeStatusResponse,
   HttpNotOkResponseError
 } from '../lib/services/exchange-client/exchange-client'
 
-interface ExchangeStatusResult {
+export interface ExchangeStatusResult {
   state: ExchangeState | null
-  exchange: Record<string, unknown> | null
+  /** Full VC-API exchange payload from polling (workflowId, variables, state, …). */
+  exchange: ExchangeStatusResponse | null
   loading: boolean
   error: string | null
 }
@@ -20,7 +22,7 @@ export function useExchangeStatus(
   client: ExchangeClient
 ): ExchangeStatusResult {
   const [state, setState] = useState<ExchangeState | null>(null)
-  const [exchange, setExchange] = useState<Record<string, unknown> | null>(null)
+  const [exchange, setExchange] = useState<ExchangeStatusResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -29,7 +31,7 @@ export function useExchangeStatus(
     if (!vcapiUrl) return
     try {
       const data = await client.fetchExchangeStatus(vcapiUrl)
-      setExchange(data as Record<string, unknown>)
+      setExchange(data)
       setState(data.state ?? null)
       setError(null)
       setLoading(false)

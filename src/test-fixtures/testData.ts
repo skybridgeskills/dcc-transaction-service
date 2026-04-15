@@ -29,6 +29,7 @@ export const createMockExchange = (
   variables: {
     exchangeHost: 'http://localhost:4004',
     challenge: 'test-challenge',
+    features: { details: true },
     vprContext: ['https://www.w3.org/2018/credentials/v1'],
     vprCredentialType: ['VerifiableCredential'],
     trustedIssuers: [],

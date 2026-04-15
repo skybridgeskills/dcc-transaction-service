@@ -84,6 +84,9 @@ describe('verifyWorkflow', function () {
     expect(exchange.variables.trustedRegistries).toEqual([
       'DCC Sandbox Registry'
     ])
+    expect(exchange.variables.features).toEqual({
+      details: config.getConfig().uiShowDetails
+    })
   })
 })
 

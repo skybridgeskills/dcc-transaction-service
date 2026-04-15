@@ -19,6 +19,7 @@ import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 import { mapRegistryNamesToRegistries } from '../config.js'
 import { CachedRegistryLookup } from '../registry-client/cached-registry-lookup.js'
 import { getRegistryKeyv } from '../registry-keyv-store.js'
+import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
 const cachedIssuerLookup = CachedRegistryLookup(getRegistryKeyv())
 
@@ -67,6 +68,7 @@ export const createExchangeVerify = ({
     variables: {
       ...data.variables,
       challenge: crypto.randomUUID(),
+      features: variablesFeaturesFromConfig(config),
       vprContext: data.variables.vprContext,
       vprCredentialType: data.variables.vprCredentialType,
       trustedIssuers: data.variables.trustedIssuers ?? [],

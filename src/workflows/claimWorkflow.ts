@@ -13,6 +13,7 @@ import {
   selectIssuerInstance
 } from '../lib/issuer-selection.js'
 import { problemDetailResponse } from '../lib/errors/problem-details.js'
+import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
 export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -57,7 +58,8 @@ export const createExchangeClaim = ({
     tenantName: data.variables.tenantName,
     variables: {
       ...data.variables,
-      challenge: crypto.randomUUID()
+      challenge: crypto.randomUUID(),
+      features: variablesFeaturesFromConfig(config)
     },
     expires:
       data.expires ??

@@ -5,6 +5,7 @@ import { verifyDIDAuth } from '../didAuth.js'
 import { saveExchange } from '../transactionManager.js'
 import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 import { problemDetailResponse } from '../lib/errors/problem-details.js'
+import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
 
@@ -28,7 +29,8 @@ export const createExchangeDidAuth = ({
     exchangeId: crypto.randomUUID(),
     variables: {
       ...data.variables,
-      challenge: crypto.randomUUID()
+      challenge: crypto.randomUUID(),
+      features: variablesFeaturesFromConfig(config)
     },
     expires:
       data.expires ??

@@ -1,50 +1,21 @@
 /*!
  * Copyright (c) 2023 Digital Credentials Consortium. All rights reserved.
  */
-import KeyvRedis from '@keyv/redis'
 import { HTTPException } from 'hono/http-exception'
 import Keyv from 'keyv'
-import { KeyvFile } from 'keyv-file'
-import { getConfig } from './config.js'
+import { createKeyvStore } from './keyv-store.js'
 
-// The key value store used for transaction data.
 let keyv: Keyv<App.ExchangeDetailBase>
 
 /**
- * Intializes the keyv store either in-memory or in file system, according to env.
+ * Initializes the keyv store for exchange transaction data.
  */
 export const initializeTransactionManager = () => {
-  const config = getConfig()
   if (!keyv) {
-    if (config.keyvFilePath) {
-      keyv = new Keyv<App.ExchangeDetailBase>({
-        store: new KeyvFile({
-          filename: config.keyvFilePath,
-          expiredCheckDelay: config.keyvExpiredCheckDelayMs, // How often to check for and remove expired records
-          writeDelay: config.keyvWriteDelayMs, // ms, batch write to disk in a specific duration, enhance write performance.
-          serialize: JSON.stringify, // serialize function
-          deserialize: (val: string | Buffer<ArrayBufferLike>) =>
-            JSON.parse(val.toString()) // deserialize function
-        })
-      })
-    } else if (config.redisUri) {
-      console.log('Using redis backend for Keyv: ' + config.redisUri)
-      const hasPort = config.redisUri.includes('6379')
-      keyv = new Keyv<App.ExchangeDetailBase>(
-        new KeyvRedis(
-          {
-            url: hasPort ? config.redisUri : `rediss://${config.redisUri}:6379`,
-            socket: { tls: hasPort ? false : true }
-          },
-          { namespace: 'exchange' }
-        )
-      )
-    } else {
-      keyv = new Keyv<App.ExchangeDetailBase>()
-    }
+    keyv = createKeyvStore<App.ExchangeDetailBase>('exchange')
   }
 }
-initializeTransactionManager() // call immediately to ensure keyv is initialized
+initializeTransactionManager()
 
 /**
  * @throws {} Unknown exchangeID

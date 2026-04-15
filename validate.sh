@@ -8,6 +8,8 @@ echo "==> dcc-transaction-service: lint"
 pnpm lint
 echo "==> dcc-transaction-service: build"
 pnpm build
+echo "==> dcc-transaction-service: build:ui"
+pnpm build:ui
 echo "==> dcc-transaction-service: test"
 pnpm test
 

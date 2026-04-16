@@ -74,12 +74,12 @@ export const verifyDIDAuth = async ({
     presentation as Record<string, unknown>
   )
 
-  const { httpGet, cache } = getVerifierVerificationFetchers()
+  const { httpGetService, cacheService } = getVerifierVerificationFetchers()
   const result = await verifyPresentation({
     presentation: refinedPresentation,
     challenge,
-    httpGet,
-    cache
+    httpGetService,
+    cacheService
   })
 
   if (result.verified) {

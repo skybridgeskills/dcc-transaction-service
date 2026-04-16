@@ -44,6 +44,10 @@ declare global {
        * `REGISTRY_VC_RECOGNITION_*`).
        */
       knownRegistries: Record<string, EntityIdentityRegistry>
+      /**
+       * When false, verifier-core skips the OBv3 schema suite. Set env `VERIFY_OBV3_SCHEMA=false`.
+       */
+      verifyObv3Schema: boolean
     }
 
     interface ErrorResponseBody {

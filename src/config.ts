@@ -237,7 +237,10 @@ const parseConfig = (): App.Config => {
 
     accessJwtSecret: process.env.ACCESS_JWT_SECRET ?? '',
 
-    knownRegistries: buildKnownRegistries(process.env)
+    knownRegistries: buildKnownRegistries(process.env),
+
+    /** Set `VERIFY_OBV3_SCHEMA=false` to skip OBv3 JSON Schema checks (faster verification). */
+    verifyObv3Schema: process.env.VERIFY_OBV3_SCHEMA !== 'false'
   }
 
   // Only if no tenants are configured, use the default tenant

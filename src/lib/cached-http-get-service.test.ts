@@ -1,18 +1,18 @@
 import Keyv from 'keyv'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import type { CacheStore } from '@digitalcredentials/verifier-core'
+import type { CacheService } from '@digitalcredentials/verifier-core'
 import { DEFAULT_TTL_MS } from '@digitalcredentials/verifier-core'
-import { cachedHttpGet } from './cached-http-get.js'
-import { keyvCacheStore } from './keyv-cache-store.js'
+import { CachedHttpGetService } from './cached-http-get-service.js'
+import { KeyvCacheService } from './keyv-cache-service.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('cachedHttpGet', () => {
+describe('CachedHttpGetService', () => {
   test('second call uses cache for OK JSON', async () => {
-    const store = keyvCacheStore(new Keyv())
-    const httpGet = cachedHttpGet(store)
+    const cacheService = KeyvCacheService(new Keyv())
+    const httpGetService = CachedHttpGetService(cacheService)
     let fetches = 0
     vi.stubGlobal(
       'fetch',
@@ -26,8 +26,8 @@ describe('cachedHttpGet', () => {
     )
 
     const url = 'https://example.com/r'
-    const a = await httpGet(url)
-    const b = await httpGet(url)
+    const a = await httpGetService.get(url)
+    const b = await httpGetService.get(url)
 
     expect(fetches).toBe(1)
     expect(a.body).toEqual({ x: 1 })
@@ -36,8 +36,8 @@ describe('cachedHttpGet', () => {
   })
 
   test('does not cache non-OK responses', async () => {
-    const store = keyvCacheStore(new Keyv())
-    const httpGet = cachedHttpGet(store)
+    const cacheService = KeyvCacheService(new Keyv())
+    const httpGetService = CachedHttpGetService(cacheService)
     let fetches = 0
     vi.stubGlobal(
       'fetch',
@@ -48,20 +48,20 @@ describe('cachedHttpGet', () => {
     )
 
     const url = 'https://example.com/missing'
-    await httpGet(url)
-    await httpGet(url)
+    await httpGetService.get(url)
+    await httpGetService.get(url)
     expect(fetches).toBe(2)
   })
 
   test('uses Cache-Control max-age for TTL when recording to cache', async () => {
     const ttlMs: number[] = []
-    const store: CacheStore = {
+    const cacheService: CacheService = {
       get: async () => undefined,
       set: async (_k, _v, ttl) => {
         if (ttl !== undefined) ttlMs.push(ttl)
       }
     }
-    const httpGet = cachedHttpGet(store)
+    const httpGetService = CachedHttpGetService(cacheService)
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -75,19 +75,19 @@ describe('cachedHttpGet', () => {
       })
     )
 
-    await httpGet('https://example.com/t')
+    await httpGetService.get('https://example.com/t')
     expect(ttlMs).toEqual([120_000])
   })
 
   test('uses default TTL when no Cache-Control', async () => {
     const ttlMs: number[] = []
-    const store: CacheStore = {
+    const cacheService: CacheService = {
       get: async () => undefined,
       set: async (_k, _v, ttl) => {
         if (ttl !== undefined) ttlMs.push(ttl)
       }
     }
-    const httpGet = cachedHttpGet(store)
+    const httpGetService = CachedHttpGetService(cacheService)
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -98,13 +98,13 @@ describe('cachedHttpGet', () => {
       })
     )
 
-    await httpGet('https://example.com/u')
+    await httpGetService.get('https://example.com/u')
     expect(ttlMs).toEqual([DEFAULT_TTL_MS])
   })
 
   test('non-JSON responses return text body', async () => {
-    const store = keyvCacheStore(new Keyv())
-    const httpGet = cachedHttpGet(store)
+    const cacheService = KeyvCacheService(new Keyv())
+    const httpGetService = CachedHttpGetService(cacheService)
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -115,7 +115,7 @@ describe('cachedHttpGet', () => {
       })
     )
 
-    const r = await httpGet('https://example.com/text')
+    const r = await httpGetService.get('https://example.com/text')
     expect(r.body).toBe('plain')
   })
 })

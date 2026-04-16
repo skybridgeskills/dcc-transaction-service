@@ -20,16 +20,22 @@ export const prefersHtml = (accept: string | undefined): boolean => {
   return false
 }
 
-const uiHtmlPath = resolve(
-  import.meta.dirname ?? new URL('.', import.meta.url).pathname,
-  '../dist/ui/index.html'
-)
+const uiDir = import.meta.dirname ?? new URL('.', import.meta.url).pathname
+const uiHtmlDistPath = resolve(uiDir, '../dist/ui/index.html')
+/** Vite source entry; used when `dist/ui` has not been built (e.g. unit tests). */
+const uiHtmlSrcPath = resolve(uiDir, 'ui/index.html')
 
 let cachedHtml: string | null = null
 
 const getUiHtml = async (): Promise<string> => {
   if (!cachedHtml) {
-    cachedHtml = await readFile(uiHtmlPath, 'utf-8')
+    try {
+      cachedHtml = await readFile(uiHtmlDistPath, 'utf-8')
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      if (err.code !== 'ENOENT') throw e
+      cachedHtml = await readFile(uiHtmlSrcPath, 'utf-8')
+    }
   }
   return cachedHtml
 }

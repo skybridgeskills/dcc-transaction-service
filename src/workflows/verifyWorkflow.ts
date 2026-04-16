@@ -20,8 +20,7 @@ import { mapRegistryNamesToRegistries } from '../config.js'
 import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 import { getVerifierVerificationFetchers } from '../lib/verifier-keyv-store.js'
 
-const { httpGet: verifierHttpGet, cache: verifierCache } =
-  getVerifierVerificationFetchers()
+const { httpGetService, cacheService } = getVerifierVerificationFetchers()
 
 // Extract context URLs from the named Map using short names
 const CONTEXT_URL_V1 =
@@ -554,8 +553,9 @@ export const participateInVerifyExchange = async ({
     presentation: validatedPresentation,
     challenge: exchange.variables.challenge,
     registries,
-    httpGet: verifierHttpGet,
-    cache: verifierCache
+    httpGetService,
+    cacheService,
+    verifyObv3Schema: config.verifyObv3Schema
   })
 
   // Apply verification results to exchange

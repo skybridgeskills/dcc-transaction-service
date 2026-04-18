@@ -94,6 +94,13 @@ export const baseVariablesSchema = z.object({
   retrievalId: z.string().optional(),
   metadata: z.any().optional(),
 
+  /**
+   * When true, the workflow attaches compatibility-fix log entries (and
+   * any other debug-only diagnostics) to `variables.results`. Falls back
+   * to `Config.defaultExchangeDebug` (env `EXCHANGE_DEBUG_DEFAULT`).
+   */
+  debug: z.boolean().optional(),
+
   // claim
   vc: z.string().optional(),
 

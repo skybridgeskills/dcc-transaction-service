@@ -14,11 +14,9 @@ const defaultTenantName = 'default'
 const defaultTenantToken = 'default'
 const defaultTtlSeconds = 60 * 10 // exchange expires after ten minutes
 
-const VC_RECOGNITION_URL_KEY =
-  /^REGISTRY_VC_RECOGNITION_([A-Z0-9_]+)_URL$/
+const VC_RECOGNITION_URL_KEY = /^REGISTRY_VC_RECOGNITION_([A-Z0-9_]+)_URL$/
 
-const OIDF_TRUST_ANCHOR_EC_KEY =
-  /^REGISTRY_OIDF_([A-Z0-9_]+)_TRUST_ANCHOR_EC$/
+const OIDF_TRUST_ANCHOR_EC_KEY = /^REGISTRY_OIDF_([A-Z0-9_]+)_TRUST_ANCHOR_EC$/
 
 /** Built-in DCC registry entries; merged with env-driven OIDF + VC recognition rows. */
 const STATIC_KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
@@ -240,7 +238,11 @@ const parseConfig = (): App.Config => {
     knownRegistries: buildKnownRegistries(process.env),
 
     /** Set `VERIFY_OBV3_SCHEMA=false` to skip OBv3 JSON Schema checks (faster verification). */
-    verifyObv3Schema: process.env.VERIFY_OBV3_SCHEMA !== 'false'
+    verifyObv3Schema: process.env.VERIFY_OBV3_SCHEMA !== 'false',
+
+    /** Set `EXCHANGE_DEBUG_DEFAULT=true` to attach compatibility-fix and other debug log entries
+     * to `variables.results` by default. */
+    defaultExchangeDebug: process.env.EXCHANGE_DEBUG_DEFAULT === 'true'
   }
 
   // Only if no tenants are configured, use the default tenant

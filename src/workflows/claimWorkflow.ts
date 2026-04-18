@@ -82,9 +82,11 @@ export const participateInClaimExchange = async ({
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
+  const debug = exchange.variables.debug ?? config.defaultExchangeDebug
   const didAuthResult = await verifyDIDAuth({
     presentation: data,
-    challenge: exchange.variables.challenge
+    challenge: exchange.variables.challenge,
+    debug
   })
 
   if (!didAuthResult.verified) {
@@ -153,7 +155,12 @@ export const participateInClaimExchange = async ({
     variables: {
       ...exchange.variables,
       results: {
-        default: { verifiableCredential: [signedCredential] }
+        default: {
+          verifiableCredential: [signedCredential],
+          ...(didAuthResult.allResults
+            ? { allResults: didAuthResult.allResults }
+            : {})
+        }
       }
     }
   }

@@ -5,12 +5,14 @@ import { securityLoader } from '@digitalcredentials/security-document-loader'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
 import { verifyPresentation } from '@digitalcredentials/verifier-core'
 import type { CheckResult } from '@digitalcredentials/verifier-core'
-import { preparePresentation } from './verifiablePresentation.js'
 import {
   cryptographicVerificationProblemDetail,
   type ProblemDetail
 } from './lib/errors/problem-details.js'
 import { getVerifierVerificationFetchers } from './lib/verifier-keyv-store.js'
+import { applyFix } from './compatibility/apply.js'
+import { prepareVcalmParticipationMessage } from './compatibility/vcalm-participation-message/index.js'
+import { prepareVerifiableEntity } from './compatibility/verifiable-entity/index.js'
 
 const signingDocumentLoader = securityLoader().build()
 
@@ -46,8 +48,12 @@ export const getSignedDIDAuth = async (
 }
 
 export type DidAuthVerificationResult =
-  | { verified: true }
-  | { verified: false; problemDetails: ProblemDetail[] }
+  | { verified: true; allResults?: CheckResult[] }
+  | {
+      verified: false
+      problemDetails: ProblemDetail[]
+      allResults?: CheckResult[]
+    }
 
 function problemDetailsFromChecks(allResults: CheckResult[]): ProblemDetail[] {
   const out: ProblemDetail[] = []
@@ -63,15 +69,38 @@ function problemDetailsFromChecks(allResults: CheckResult[]): ProblemDetail[] {
   return out
 }
 
+/**
+ * Verify a wallet-submitted DID Authentication presentation.
+ *
+ * Applies the same per-object compatibility fixes used by the verify
+ * workflow (envelope wrapping, Ed25519Signature2020 context injection) and
+ * passes the **raw** post-compat presentation to verifier-core so the
+ * cryptographic proof verifies against the byte-equivalent payload the
+ * wallet signed.
+ *
+ * When `debug === true`, the returned object includes `allResults`:
+ * compatibility-fix log entries followed by verifier-core's check results.
+ * When `debug` is false (the default), `allResults` is omitted.
+ */
 export const verifyDIDAuth = async ({
   presentation,
-  challenge
+  challenge,
+  debug = false
 }: {
   presentation: unknown
   challenge: string
+  debug?: boolean
 }): Promise<DidAuthVerificationResult> => {
-  const refinedPresentation = preparePresentation(
-    presentation as Record<string, unknown>
+  const compatLog: CheckResult[] = []
+  const message = applyFix(
+    prepareVcalmParticipationMessage(presentation as Record<string, unknown>),
+    compatLog
+  )
+  const refinedPresentation = applyFix(
+    prepareVerifiableEntity(
+      (message.verifiablePresentation ?? message) as Record<string, unknown>
+    ),
+    compatLog
   )
 
   const { httpGetService, cacheService } = getVerifierVerificationFetchers()
@@ -82,8 +111,12 @@ export const verifyDIDAuth = async ({
     cacheService
   })
 
+  const allResults = debug
+    ? [...compatLog, ...result.allResults]
+    : undefined
+
   if (result.verified) {
-    return { verified: true }
+    return allResults ? { verified: true, allResults } : { verified: true }
   }
 
   const problemDetails = problemDetailsFromChecks(result.allResults)
@@ -95,5 +128,7 @@ export const verifyDIDAuth = async ({
     )
   }
 
-  return { verified: false, problemDetails }
+  return allResults
+    ? { verified: false, problemDetails, allResults }
+    : { verified: false, problemDetails }
 }

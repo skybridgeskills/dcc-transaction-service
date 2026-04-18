@@ -148,14 +148,26 @@ declare global {
       workflowId: 'claim'
       variables: BaseVariables & {
         vc: string
-        results?: { default: { verifiableCredential: any[] } }
+        results?: {
+          default: {
+            verifiableCredential: any[]
+            /** Compatibility-fix log + verifier-core checks; populated only when `variables.debug === true`. */
+            allResults?: CheckResult[]
+          }
+        }
       }
     }
 
     interface ExchangeDetailDidAuth extends ExchangeDetailBase {
       workflowId: 'didAuth'
       variables: BaseVariables & {
-        results?: { default: { holder: string } }
+        results?: {
+          default: {
+            holder: string
+            /** Compatibility-fix log + verifier-core checks; populated only when `variables.debug === true`. */
+            allResults?: CheckResult[]
+          }
+        }
       }
     }
 

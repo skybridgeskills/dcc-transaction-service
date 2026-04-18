@@ -85,9 +85,11 @@ export const participateInDidAuthExchange = async ({
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
+  const debug = exchange.variables.debug ?? config.defaultExchangeDebug
   const didAuthResult = await verifyDIDAuth({
     presentation: data,
-    challenge: exchange.variables.challenge
+    challenge: exchange.variables.challenge,
+    debug
   })
 
   if (!didAuthResult.verified) {
@@ -105,7 +107,14 @@ export const participateInDidAuthExchange = async ({
     state: 'complete',
     variables: {
       ...exchange.variables,
-      results: { default: { holder: data.holder } }
+      results: {
+        default: {
+          holder: data.holder,
+          ...(didAuthResult.allResults
+            ? { allResults: didAuthResult.allResults }
+            : {})
+        }
+      }
     }
   }
   await saveExchange(updatedExchange)

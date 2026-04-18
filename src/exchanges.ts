@@ -189,34 +189,38 @@ export const participateInExchange = async ({
     })
   }
 
+  // If there is no body, this is the initial step of the exchange.
   if (!data || !Object.keys(data).length) {
-    // If there is no body, this is the initial step of the exchange.
     return participateWithEmptyBody({ config, workflow, exchange })
   }
-  if (workflow.id === 'didAuth') {
-    return participateInDidAuthExchange({
-      data,
-      exchange: exchange as App.ExchangeDetailDidAuth,
-      workflow,
-      config
-    })
-  }
-  // TODO: add "OID4VCI" support (claim workflow)
-  if (workflow.id === 'claim') {
-    return participateInClaimExchange({
-      data,
-      exchange: exchange as App.ExchangeDetailClaim,
-      workflow,
-      config
-    })
-  }
-  if (workflow.id === 'verify') {
-    return participateInVerifyExchange({
-      data,
-      exchange: exchange as App.ExchangeDetailVerify,
-      workflow,
-      config
-    })
+
+  // Otherwise, the user is submitting data to participate and potentially
+  // complete the exchange.
+  switch (workflow.id) {
+    case 'didAuth':
+      return participateInDidAuthExchange({
+        data,
+        exchange: exchange as App.ExchangeDetailDidAuth,
+        workflow,
+        config
+      })
+    // TODO: add "OID4VCI" support (claim workflow)
+    case 'claim':
+      return participateInClaimExchange({
+        data,
+        exchange: exchange as App.ExchangeDetailClaim,
+        workflow,
+        config
+      })
+    case 'verify':
+      return participateInVerifyExchange({
+        data,
+        exchange: exchange as App.ExchangeDetailVerify,
+        workflow,
+        config
+      })
+    default:
+      throw new HTTPException(404, { message: 'Workflow not found' })
   }
 }
 

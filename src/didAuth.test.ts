@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { HTTPException } from 'hono/http-exception'
 import { getSignedDIDAuth, verifyDIDAuth } from './didAuth.js'
 
 describe('verifyDIDAuth', function () {
@@ -70,6 +71,35 @@ describe('verifyDIDAuth', function () {
     expect(
       (result.allResults ?? []).some((c) => c.check.startsWith('compatibility.'))
     ).toBe(true)
+  })
+
+  test('throws HTTPException(400) when the body is not a valid VP structure', async function () {
+    await expect(
+      verifyDIDAuth({
+        presentation: { not: 'a presentation' },
+        challenge: 'whatever'
+      })
+    ).rejects.toBeInstanceOf(HTTPException)
+
+    try {
+      await verifyDIDAuth({
+        presentation: { not: 'a presentation' },
+        challenge: 'whatever'
+      })
+    } catch (e) {
+      expect(e).toBeInstanceOf(HTTPException)
+      expect((e as HTTPException).status).toBe(400)
+    }
+  })
+
+  test('throws HTTPException(400) when type is not VerifiablePresentation', async function () {
+    const challenge = crypto.randomUUID()
+    const presentation = await getSignedDIDAuth(challenge)
+    const malformed = { ...presentation, type: 'NotAPresentation' }
+
+    await expect(
+      verifyDIDAuth({ presentation: malformed, challenge })
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   test('does not mutate the input presentation', async function () {

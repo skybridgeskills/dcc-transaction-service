@@ -99,10 +99,10 @@ describe('verifiablePresentationSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  test('rejects VP missing verifiableCredential', () => {
+  test('VP without verifiableCredential parses (optional per W3C VCDM)', () => {
     const { verifiableCredential: _, ...vpWithout } = baseVP
-    const result = verifiablePresentationSchema.safeParse(vpWithout)
-    expect(result.success).toBe(false)
+    const result = verifiablePresentationSchema.parse(vpWithout)
+    expect(result.verifiableCredential).toBeUndefined()
   })
 
   test('preserves extra properties via passthrough', () => {

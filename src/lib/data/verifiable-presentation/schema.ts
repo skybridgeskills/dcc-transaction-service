@@ -15,7 +15,12 @@ export const verifiablePresentationSchema = z
       (arr) => arr.includes('VerifiablePresentation'),
       { message: "type must include 'VerifiablePresentation'" }
     ),
-    verifiableCredential: JsonLdField(z.record(z.unknown())),
+    /**
+     * Optional per W3C VC Data Model — a Verifiable Presentation may carry
+     * zero credentials (e.g. a DID-Authentication-only VP). Workflows that
+     * require credentials enforce presence themselves.
+     */
+    verifiableCredential: JsonLdField(z.record(z.unknown())).optional(),
     holder: holderSchema.optional(),
     proof: proofSchema
   })

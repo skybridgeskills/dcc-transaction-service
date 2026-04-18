@@ -13,6 +13,7 @@ import { getVerifierVerificationFetchers } from './lib/verifier-keyv-store.js'
 import { applyFix } from './compatibility/apply.js'
 import { prepareVcalmParticipationMessage } from './compatibility/vcalm-participation-message/index.js'
 import { prepareVerifiableEntity } from './compatibility/verifiable-entity/index.js'
+import { assertValidVerifiablePresentationStructure } from './lib/data/verifiable-presentation/assert.js'
 
 const signingDocumentLoader = securityLoader().build()
 
@@ -78,6 +79,12 @@ function problemDetailsFromChecks(allResults: CheckResult[]): ProblemDetail[] {
  * cryptographic proof verifies against the byte-equivalent payload the
  * wallet signed.
  *
+ * Throws `HTTPException(400)` when the post-compat object isn't a
+ * structurally valid Verifiable Presentation. Cryptographic verification
+ * failures are returned as `{ verified: false, problemDetails }` rather
+ * than thrown, so callers can map them to the appropriate response code
+ * (e.g. `401` for the DID-Auth and claim flows).
+ *
  * When `debug === true`, the returned object includes `allResults`:
  * compatibility-fix log entries followed by verifier-core's check results.
  * When `debug` is false (the default), `allResults` is omitted.
@@ -102,6 +109,12 @@ export const verifyDIDAuth = async ({
     ),
     compatLog
   )
+
+  // Defensive structural validation — THROWS HTTPException(400) on bad
+  // shape; the parsed value is intentionally discarded so it cannot be
+  // passed to verifier-core in place of the raw signed object (see
+  // assert.ts JSDoc on JsonLdField mutation and signature canonicalization).
+  assertValidVerifiablePresentationStructure(refinedPresentation)
 
   const { httpGetService, cacheService } = getVerifierVerificationFetchers()
   const result = await verifyPresentation({

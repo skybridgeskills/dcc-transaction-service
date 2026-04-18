@@ -551,6 +551,26 @@ export const preparePresentationForVerify = ({
     })
   }
 
+  // The schema permits zero credentials (DID-Auth-only VPs); the verify
+  // workflow specifically requires at least one credential to operate on.
+  if (presentation.verifiableCredential === undefined) {
+    throw new HTTPException(400, {
+      message: 'verifiableCredential is required for verification',
+      cause: problemDetailResponse(
+        'verifiableCredential is required for verification',
+        [
+          {
+            type: `https://www.w3.org/TR/vc-data-model#${MALFORMED_VALUE_ERROR}`,
+            status: 400,
+            title: MALFORMED_VALUE_ERROR,
+            detail:
+              'at verifiablePresentation.verifiableCredential: verifiableCredential is required for verification'
+          }
+        ]
+      )
+    })
+  }
+
   // Per-credential structural validation. Parsed VC values are discarded;
   // verifier-core extracts credentials directly from the raw VP.
   const credentials = arrayOf(

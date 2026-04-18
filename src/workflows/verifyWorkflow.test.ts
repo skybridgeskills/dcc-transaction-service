@@ -1,12 +1,14 @@
 import * as config from '../config.js'
 import { expect, test, describe } from 'vitest'
+import type { CheckResult } from '@digitalcredentials/verifier-core'
 import { getWorkflow } from '../workflows.js'
 import {
   createExchangeVerify,
   validateExchangeVerify,
   applyVerificationResults,
   getVerifyVPR,
-  participateInVerifyExchange
+  participateInVerifyExchange,
+  preparePresentationForVerify
 } from './verifyWorkflow.js'
 import {
   createMockExchange,
@@ -513,5 +515,239 @@ describe('participateInVerifyExchange - VP validation', function () {
       expect(cause.problemDetails.length).toBeGreaterThan(0)
       expect(cause.problemDetails[0].detail).toContain('credential[0]')
     }
+  })
+})
+
+describe('preparePresentationForVerify', function () {
+  const baseConfig = () => config.getConfig()
+
+  /**
+   * Regression for the signature-breaking bug: verifier-core MUST receive
+   * the raw, post-compatibility presentation object — not a Zod-normalized
+   * derivative. JsonLdField widens single values into arrays
+   * (`type: 'VerifiablePresentation'` → `['VerifiablePresentation']`),
+   * which alters canonicalized n-quads and invalidates the proof.
+   */
+  test('preserves raw single-string `type` (signature regression)', function () {
+    const presentation = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+
+    const out = preparePresentationForVerify({
+      data: presentation,
+      exchange: createMockExchange({ state: 'active' }),
+      config: baseConfig()
+    })
+
+    expect(out.presentation.type).toBe('VerifiablePresentation')
+    expect(Array.isArray(out.presentation.type)).toBe(false)
+  })
+
+  test('preserves raw single-object `verifiableCredential` (signature regression)', function () {
+    const presentation = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+
+    const out = preparePresentationForVerify({
+      data: presentation,
+      exchange: createMockExchange({ state: 'active' }),
+      config: baseConfig()
+    })
+
+    expect(out.presentation.verifiableCredential).toBe(validVCObject)
+    expect(Array.isArray(out.presentation.verifiableCredential)).toBe(false)
+  })
+
+  test('accepts a bare VP body (no { verifiablePresentation } envelope)', function () {
+    const bareVp = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+
+    const out = preparePresentationForVerify({
+      data: bareVp,
+      exchange: createMockExchange({ state: 'active' }),
+      config: baseConfig()
+    })
+
+    expect(out.presentation.holder).toBe('did:key:z6MkholderExample')
+    // wrap-bare-presentation should have fired; log records the wrap.
+    const wrapEntry = out.compatLog.find(
+      (e) => e.check === 'compatibility.vcalm-participation-message:wrap-bare-presentation'
+    )
+    expect(wrapEntry).toBeDefined()
+    expect(wrapEntry!.outcome.status).toBe('success')
+  })
+
+  test('accepts a wrapped envelope and produces no compat-log entries', function () {
+    const wrapped = {
+      verifiablePresentation: {
+        '@context': ['https://www.w3.org/2018/credentials/v1'],
+        type: 'VerifiablePresentation',
+        holder: 'did:key:z6MkholderExample',
+        verifiableCredential: validVCObject,
+        proof: validProof
+      }
+    }
+
+    const out = preparePresentationForVerify({
+      data: wrapped,
+      exchange: createMockExchange({ state: 'active' }),
+      config: baseConfig()
+    })
+
+    expect(out.presentation.holder).toBe('did:key:z6MkholderExample')
+    expect(out.compatLog).toEqual([])
+  })
+
+  test('debug resolves from variables.debug when set (true)', function () {
+    const presentation = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+    const exchange = createMockExchange({
+      state: 'active',
+      variables: { ...createMockExchange().variables, debug: true }
+    })
+
+    const out = preparePresentationForVerify({
+      data: presentation,
+      exchange,
+      config: baseConfig()
+    })
+
+    expect(out.debug).toBe(true)
+  })
+
+  test('debug resolves from variables.debug when set (false), overriding env default', function () {
+    const presentation = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+    const exchange = createMockExchange({
+      state: 'active',
+      variables: { ...createMockExchange().variables, debug: false }
+    })
+
+    const out = preparePresentationForVerify({
+      data: presentation,
+      exchange,
+      config: baseConfig()
+    })
+
+    expect(out.debug).toBe(false)
+  })
+
+  test('debug falls back to config.defaultExchangeDebug when variables.debug is unset', function () {
+    const presentation = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: 'VerifiablePresentation',
+      holder: 'did:key:z6MkholderExample',
+      verifiableCredential: validVCObject,
+      proof: validProof
+    }
+
+    const out = preparePresentationForVerify({
+      data: presentation,
+      exchange: createMockExchange({ state: 'active' }),
+      config: { ...baseConfig(), defaultExchangeDebug: true }
+    })
+
+    expect(out.debug).toBe(true)
+  })
+})
+
+describe('applyVerificationResults - debug + compatLog', function () {
+  const compatEntry = (id: string): CheckResult => ({
+    check: `compatibility.${id}`,
+    suite: 'compatibility',
+    outcome: { status: 'success', message: `applied ${id}` },
+    timestamp: new Date().toISOString(),
+    fatal: false
+  })
+
+  test('prepends compatLog entries to allResults when debug=true', async function () {
+    const exchange = createMockExchange()
+    const result = createMockVerifierCoreResult(true, true, {
+      allResults: [
+        {
+          suite: 'proof',
+          check: 'proof.signature-valid',
+          outcome: { status: 'success', message: 'ok' },
+          timestamp: new Date().toISOString()
+        }
+      ]
+    })
+    const compatLog = [compatEntry('vcalm-participation-message:wrap-bare-presentation')]
+
+    const updated = await applyVerificationResults({
+      exchange,
+      result,
+      compatLog,
+      debug: true
+    })
+
+    const all = updated.variables.results!.default.allResults
+    expect(all).toHaveLength(2)
+    expect(all[0].suite).toBe('compatibility')
+    expect(all[0].check).toBe(
+      'compatibility.vcalm-participation-message:wrap-bare-presentation'
+    )
+    expect(all[1].suite).toBe('proof')
+  })
+
+  test('omits compatLog entries when debug=false', async function () {
+    const exchange = createMockExchange()
+    const result = createMockVerifierCoreResult(true, true, {
+      allResults: [
+        {
+          suite: 'proof',
+          check: 'proof.signature-valid',
+          outcome: { status: 'success', message: 'ok' },
+          timestamp: new Date().toISOString()
+        }
+      ]
+    })
+    const compatLog = [compatEntry('vcalm-participation-message:wrap-bare-presentation')]
+
+    const updated = await applyVerificationResults({
+      exchange,
+      result,
+      compatLog,
+      debug: false
+    })
+
+    const all = updated.variables.results!.default.allResults
+    expect(all).toHaveLength(1)
+    expect(all[0].suite).toBe('proof')
+    expect(all.some((e) => e.suite === 'compatibility')).toBe(false)
+  })
+
+  test('compatLog and debug are optional (default: empty + false)', async function () {
+    const exchange = createMockExchange()
+    const result = createMockVerifierCoreResult(true, true)
+
+    const updated = await applyVerificationResults({ exchange, result })
+
+    expect(updated.variables.results!.default.allResults).toEqual(
+      result.allResults
+    )
   })
 })

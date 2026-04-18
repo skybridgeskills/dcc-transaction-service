@@ -1,16 +1,17 @@
-import { preparePresentation } from '../verifiablePresentation.js'
 import { saveExchange } from '../transactionManager.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
-import { verifyPresentation } from '@digitalcredentials/verifier-core'
+import {
+  verifyPresentation,
+  type CheckResult
+} from '@digitalcredentials/verifier-core'
 import { z } from 'zod'
 import {
   named
   // @ts-ignore no type definitions for this package
 } from '@digitalbazaar/credentials-context'
-import { verifiablePresentationSchema } from '../lib/data/verifiable-presentation/schema.js'
+import { assertValidVerifiablePresentationStructure } from '../lib/data/verifiable-presentation/assert.js'
 import { parseCredential } from '../lib/data/verifiable-credential/schema.js'
 import {
-  zodProblemDetails,
   problemDetailResponse,
   MALFORMED_VALUE_ERROR
 } from '../lib/errors/problem-details.js'
@@ -19,6 +20,10 @@ import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 import { mapRegistryNamesToRegistries } from '../config.js'
 import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 import { getVerifierVerificationFetchers } from '../lib/verifier-keyv-store.js'
+import { applyFix } from '../compatibility/apply.js'
+import { prepareVcalmParticipationMessage } from '../compatibility/vcalm-participation-message/index.js'
+import { prepareVerifiableEntity } from '../compatibility/verifiable-entity/index.js'
+import { arrayOf } from '../utils.js'
 
 const { httpGetService, cacheService } = getVerifierVerificationFetchers()
 
@@ -275,7 +280,11 @@ const validateTrustedIssuers = (
     if (check.outcome.status === 'success') {
       // Extract registry information from outcome if available
       // The verifier-core may include foundInRegistries in the outcome
-      const outcome = check.outcome as { status: 'success'; message: string; foundInRegistries?: string[] }
+      const outcome = check.outcome as {
+        status: 'success'
+        message: string
+        foundInRegistries?: string[]
+      }
       if (outcome.foundInRegistries && outcome.foundInRegistries.length > 0) {
         // Check if any of the found registries match our trusted registries
         registryMatch = trustedRegistries.some((trusted) =>
@@ -327,10 +336,7 @@ const determineExchangeOutcome = (
 
       // If any registry check failed fatally, the credential is invalid
       for (const check of registryChecks) {
-        if (
-          check.fatal &&
-          check.outcome.status === 'failure'
-        ) {
+        if (check.fatal && check.outcome.status === 'failure') {
           return 'invalid'
         }
       }
@@ -341,16 +347,28 @@ const determineExchangeOutcome = (
 }
 
 /**
- * Apply verification results to exchange and determine state
+ * Apply verification results to exchange and determine state.
+ *
+ * When `debug=true`, `compatLog` entries are prepended to `allResults` so
+ * operators can see compatibility-fix annotations alongside verifier-core's
+ * own check results in the UI. When `debug=false`, compat entries are
+ * silently dropped.
  */
 export const applyVerificationResults = async ({
   exchange,
-  result
+  result,
+  compatLog = [],
+  debug = false
 }: {
   exchange: App.ExchangeDetailVerify
   result: import('@digitalcredentials/verifier-core').PresentationVerificationResult
+  compatLog?: CheckResult[]
+  debug?: boolean
 }): Promise<App.ExchangeDetailVerify> => {
-  const { verified, presentationResults, credentialResults, allResults } = result
+  const { verified, presentationResults, credentialResults } = result
+  const allResults = debug
+    ? [...compatLog, ...result.allResults]
+    : result.allResults
 
   // Extract and validate claims if specified
   let claimsValidation: App.VerificationResult['claimsValidation'] | undefined
@@ -472,34 +490,53 @@ const buildVerificationResponse = (exchange: App.ExchangeDetailVerify): any => {
   return {}
 }
 
-export const participateInVerifyExchange = async ({
+/**
+ * Apply per-object compatibility fixes to an inbound verify-workflow request body, then perform
+ * structural validation. Returns the **raw** post-compat presentation object (suitable for
+ * cryptographic verification by verifier-core), the accumulated compatibility log, and the resolved
+ * debug flag.
+ *
+ * The returned `presentation` is intentionally NOT a Zod-parsed value.
+ * `verifiablePresentationSchema` may manipulate input to break canonicalization. Passing the raw
+ * post-compat object through to `verifyPresentation` preserves the byte-equivalent payload the
+ * wallet signed.
+ *
+ * Throws `HTTPException(400)` on structural failure (invalid VP, missing holder, or invalid
+ * credential structure). Compatibility fix functions themselves never throw.
+ */
+export const preparePresentationForVerify = ({
   data,
   exchange,
-  workflow,
   config
 }: {
   data: any
   exchange: App.ExchangeDetailVerify
-  workflow: App.Workflow
   config: App.Config
-}) => {
-  const presentation = preparePresentation(data)
+}): {
+  presentation: Record<string, unknown>
+  compatLog: CheckResult[]
+  debug: boolean
+} => {
+  const debug = exchange.variables.debug ?? config.defaultExchangeDebug
 
-  // 1. VP safeParse
-  const vpResult = verifiablePresentationSchema.safeParse(presentation)
-  if (!vpResult.success) {
-    console.error('VP validation failed:', vpResult.error.issues)
-    throw new HTTPException(400, {
-      message: 'Invalid Verifiable Presentation',
-      cause: problemDetailResponse(
-        'Invalid Verifiable Presentation',
-        zodProblemDetails(vpResult.error.issues, 'verifiablePresentation')
-      )
-    })
-  }
+  const compatLog: CheckResult[] = []
+  const message = applyFix(
+    prepareVcalmParticipationMessage(data as Record<string, unknown>),
+    compatLog
+  )
+  const presentation = applyFix(
+    prepareVerifiableEntity(
+      (message.verifiablePresentation ?? message) as Record<string, unknown>
+    ),
+    compatLog
+  )
 
-  // 2. Holder is required for verify/didAuth workflows
-  if (!vpResult.data.holder) {
+  // Structural validation — THROWS on bad shape; the parsed value is
+  // intentionally discarded so it cannot be passed to verifier-core in
+  // place of the raw signed object (see assert.ts JSDoc).
+  assertValidVerifiablePresentationStructure(presentation)
+
+  if (!(presentation as { holder?: unknown }).holder) {
     throw new HTTPException(400, {
       message: 'holder is required for verification',
       cause: problemDetailResponse('holder is required for verification', [
@@ -514,43 +551,59 @@ export const participateInVerifyExchange = async ({
     })
   }
 
-  // 3. Per-credential VC validation
-  const credentials = vpResult.data.verifiableCredential
+  // Per-credential structural validation. Parsed VC values are discarded;
+  // verifier-core extracts credentials directly from the raw VP.
+  const credentials = arrayOf(
+    presentation.verifiableCredential as
+      | Record<string, unknown>
+      | Record<string, unknown>[]
+  )
   const vcErrors = credentials.flatMap((vc, i) => {
     const result = parseCredential(vc, `credential[${i}]`)
     if (!result.success) return result.problemDetails
     return []
   })
   if (vcErrors.length > 0) {
-    console.error('VC validation failed:', vcErrors)
     throw new HTTPException(400, {
       message: 'Invalid Verifiable Credential(s)',
       cause: problemDetailResponse('Invalid Verifiable Credential(s)', vcErrors)
     })
   }
 
-  // Cast for verifier-core (its TS interface declares `type: string` but
-  // it accepts `string[]` at runtime per W3C spec)
-  const validatedPresentation = vpResult.data as unknown as Parameters<
-    typeof verifyPresentation
-  >[0]['presentation']
+  return { presentation, compatLog, debug }
+}
 
-  // Determine which registries to use and map to full registry objects
-  const registryNames =
-    exchange.variables.trustedRegistries &&
-    exchange.variables.trustedRegistries.length > 0
-      ? exchange.variables.trustedRegistries
-      : config.defaultTrustedRegistryNames
+export const participateInVerifyExchange = async ({
+  data,
+  exchange,
+  workflow,
+  config
+}: {
+  data: any
+  exchange: App.ExchangeDetailVerify
+  workflow: App.Workflow
+  config: App.Config
+}) => {
+  const { presentation, compatLog, debug } = preparePresentationForVerify({
+    data,
+    exchange,
+    config
+  })
 
   const registries = mapRegistryNamesToRegistries(
-    registryNames,
+    exchange.variables.trustedRegistries &&
+      exchange.variables.trustedRegistries.length > 0
+      ? exchange.variables.trustedRegistries
+      : config.defaultTrustedRegistryNames,
     config.knownRegistries
   )
 
-  // Parsed VP matches what we send; verifier-core's VP type requires fields our
-  // Zod VP shape does not model (e.g. issuer).
+  // Pass the RAW post-compat presentation. verifier-core's TS interface
+  // declares `type: string` but accepts `string[]` at runtime per W3C spec.
   const result = await verifyPresentation({
-    presentation: validatedPresentation,
+    presentation: presentation as unknown as Parameters<
+      typeof verifyPresentation
+    >[0]['presentation'],
     challenge: exchange.variables.challenge,
     registries,
     httpGetService,
@@ -558,12 +611,14 @@ export const participateInVerifyExchange = async ({
     verifyObv3Schema: config.verifyObv3Schema
   })
 
-  // Apply verification results to exchange
-  const updatedExchange = await applyVerificationResults({ exchange, result })
+  const updatedExchange = await applyVerificationResults({
+    exchange,
+    result,
+    compatLog,
+    debug
+  })
 
-  // Save updated exchange
   await saveExchange(updatedExchange)
 
-  // Return appropriate response
   return buildVerificationResponse(updatedExchange)
 }

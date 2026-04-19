@@ -54,6 +54,19 @@ declare global {
        * to enable globally.
        */
       defaultExchangeDebug: boolean
+      /**
+       * Per-attempt deadline (ms) for asynchronous Open Badges verification
+       * tasks. A task whose `deadlineAt` has lapsed is eligible for retry on
+       * the next GET-driven sweep. Override with `VERIFY_TASK_DEADLINE_MS`.
+       */
+      verifyTaskDeadlineMs: number
+      /**
+       * Maximum number of attempts (initial + retries) for an async verify
+       * task before it is marked `gave-up` and the exchange transitions to
+       * `'invalid'` with a synthetic timeout CheckResult. Override with
+       * `VERIFY_TASK_MAX_ATTEMPTS`.
+       */
+      verifyTaskMaxAttempts: number
     }
 
     interface ErrorResponseBody {
@@ -274,6 +287,56 @@ declare global {
       }
     }
 
+    /** Lifecycle status of the asynchronous verify-task pass for a verify exchange. */
+    type VerifyTaskStatus =
+      | 'queued'
+      | 'running'
+      | 'succeeded'
+      | 'failed'
+      | 'gave-up'
+
+    /**
+     * Metadata for the asynchronous Open Badges verification pass attached
+     * to a verify exchange's `variables`.
+     *
+     * The synchronous POST handler runs the default verifier-core suites
+     * inline and persists the partial result; if any embedded credential is
+     * an Open Badges credential, it also persists a `VerifyTask` and
+     * enqueues a background worker that re-verifies those credentials with
+     * the OB suite. Workers commit through `saveExchangeWithCAS` keyed on
+     * `attemptId`, so a stale worker whose attempt was superseded by a
+     * sweep cannot overwrite a newer commit.
+     */
+    interface VerifyTask {
+      /**
+       * Generation token for the *current attempt*. Bumped on retry so
+       * stale workers detect they were superseded.
+       */
+      attemptId: string
+      /** ISO 8601 wall-clock when the current attempt was queued. */
+      queuedAt: string
+      /** ISO 8601 wall-clock when the current attempt began executing. */
+      startedAt?: string
+      /**
+       * ISO 8601 wall-clock by which this attempt must finish; otherwise it
+       * is eligible for retry on the next GET-driven sweep.
+       */
+      deadlineAt: string
+      /** 1-indexed attempt counter (initial attempt is `1`). */
+      attempt: number
+      /** Maximum attempts (initial + retries) before giving up. */
+      maxAttempts: number
+      /**
+       * Indices into `variables.results.default.credentialResults` that
+       * still need OB processing on this attempt.
+       */
+      openBadgesCredentialIndices: number[]
+      /** Lifecycle status. */
+      status: VerifyTaskStatus
+      /** Optional summary of the most recent failure for diagnostics. */
+      lastError?: { message: string; at: string }
+    }
+
     interface ExchangeDetailVerify extends ExchangeDetailBase {
       workflowId: 'verify'
       variables: BaseVariables & {
@@ -283,6 +346,7 @@ declare global {
         trustedRegistries?: string[]
         vprClaims: DcqlClaim[]
         results?: { default: VerificationResult }
+        verifyTask?: VerifyTask
       }
     }
 

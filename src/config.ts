@@ -242,7 +242,21 @@ const parseConfig = (): App.Config => {
 
     /** Set `EXCHANGE_DEBUG_DEFAULT=true` to attach compatibility-fix and other debug log entries
      * to `variables.results` by default. */
-    defaultExchangeDebug: process.env.EXCHANGE_DEBUG_DEFAULT === 'true'
+    defaultExchangeDebug: process.env.EXCHANGE_DEBUG_DEFAULT === 'true',
+
+    /**
+     * Per-attempt deadline for asynchronous verify tasks. Override with
+     * `VERIFY_TASK_DEADLINE_MS`; defaults to 60s.
+     */
+    verifyTaskDeadlineMs:
+      parseInt(process.env.VERIFY_TASK_DEADLINE_MS ?? '0') || 60_000,
+
+    /**
+     * Maximum attempts (initial + retries) for an async verify task.
+     * Override with `VERIFY_TASK_MAX_ATTEMPTS`; defaults to 2.
+     */
+    verifyTaskMaxAttempts:
+      parseInt(process.env.VERIFY_TASK_MAX_ATTEMPTS ?? '0') || 2
   }
 
   // Only if no tenants are configured, use the default tenant

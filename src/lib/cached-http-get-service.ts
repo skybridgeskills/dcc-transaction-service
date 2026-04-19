@@ -1,10 +1,11 @@
 import {
-  parseCacheControlMaxAge,
-  resolveTtl,
   type CacheService,
   type HttpGetResult,
   type HttpGetService
 } from '@digitalcredentials/verifier-core'
+
+/** Default cache TTL for HTTP GET responses without `Cache-Control: max-age`. */
+export const DEFAULT_TTL_MS = 5 * 60 * 1000
 
 type CachedHttpEntry = Pick<HttpGetResult, 'body' | 'status'>
 
@@ -49,7 +50,7 @@ export function CachedHttpGetService(cacheService: CacheService): HttpGetService
       }
 
       if (response.ok) {
-        const ttl = resolveTtl(parseCacheControlMaxAge(response.headers))
+        const ttl = parseCacheControlMaxAge(response.headers) ?? DEFAULT_TTL_MS
         await cacheService.set(
           cacheKeyForUrl(url),
           { body, status: response.status } satisfies CachedHttpEntry,
@@ -60,4 +61,22 @@ export function CachedHttpGetService(cacheService: CacheService): HttpGetService
       return result
     }
   }
+}
+
+/**
+ * Parse the `max-age` directive from a `Cache-Control` header into ms.
+ * Returns `undefined` when the header is missing, malformed, or the
+ * value is non-positive.
+ *
+ * Inlined here after `parseCacheControlMaxAge`/`resolveTtl` were demoted
+ * from verifier-core's public surface in 1.0.
+ */
+function parseCacheControlMaxAge(headers: Headers): number | undefined {
+  const value = headers.get('cache-control')
+  if (!value) return undefined
+  const match = /(?:^|[,\s])max-age\s*=\s*(\d+)/i.exec(value)
+  if (!match) return undefined
+  const seconds = Number.parseInt(match[1], 10)
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined
+  return seconds * 1000
 }

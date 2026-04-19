@@ -205,12 +205,17 @@ declare global {
 
     /**
      * Per-credential verification result from verifier-core.
+     *
+     * Field name `verifiableCredential` mirrors verifier-core's public
+     * shape (post-1.0) and the W3C / VCALM property name, so the result
+     * object can be spread into a VCALM exchange's per-step variables and
+     * accessed via `results.<step>.credentialResults[i].verifiableCredential.…`.
      */
     interface CredentialVerificationResult {
       /** True if no check returned a failure outcome */
       verified: boolean
       /** The parsed credential that was verified */
-      credential: any
+      verifiableCredential: any
       /** Flat array of results from all suites for this credential */
       results: CheckResult[]
     }

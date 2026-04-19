@@ -1,7 +1,7 @@
 import { saveExchange } from '../transactionManager.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import {
-  verifyPresentation,
+  flattenPresentationResults,
   type CheckResult
 } from '@digitalcredentials/verifier-core'
 import { z } from 'zod'
@@ -19,13 +19,11 @@ import { HTTPException } from 'hono/http-exception'
 import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 import { mapRegistryNamesToRegistries } from '../config.js'
 import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
-import { getVerifierVerificationFetchers } from '../lib/verifier-keyv-store.js'
+import { getVerifier } from '../lib/verifier.js'
 import { applyFix } from '../compatibility/apply.js'
 import { prepareVcalmParticipationMessage } from '../compatibility/vcalm-participation-message/index.js'
 import { prepareVerifiableEntity } from '../compatibility/verifiable-entity/index.js'
 import { arrayOf } from '../utils.js'
-
-const { httpGetService, cacheService } = getVerifierVerificationFetchers()
 
 // Extract context URLs from the named Map using short names
 const CONTEXT_URL_V1 =
@@ -366,9 +364,12 @@ export const applyVerificationResults = async ({
   debug?: boolean
 }): Promise<App.ExchangeDetailVerify> => {
   const { verified, presentationResults, credentialResults } = result
+  const flattenedResults = flattenPresentationResults(result).map(
+    (entry) => entry.result
+  )
   const allResults = debug
-    ? [...compatLog, ...result.allResults]
-    : result.allResults
+    ? [...compatLog, ...flattenedResults]
+    : flattenedResults
 
   // Extract and validate claims if specified
   let claimsValidation: App.VerificationResult['claimsValidation'] | undefined
@@ -379,9 +380,9 @@ export const applyVerificationResults = async ({
     const validCredentials: any[] = []
 
     for (const credentialResult of credentialResults) {
-      if (credentialResult.credential) {
+      if (credentialResult.verifiableCredential) {
         const extractedClaims = extractCredentialClaims(
-          credentialResult.credential,
+          credentialResult.verifiableCredential,
           exchange.variables.vprClaims
         )
         const claimsMatch = matchClaimsAgainstRequirements(
@@ -390,7 +391,7 @@ export const applyVerificationResults = async ({
         )
 
         if (claimsMatch.matched) {
-          validCredentials.push(credentialResult.credential)
+          validCredentials.push(credentialResult.verifiableCredential)
           Object.assign(allExtractedClaims, extractedClaims)
         }
       }
@@ -410,7 +411,7 @@ export const applyVerificationResults = async ({
   } else {
     // No claims specified, all credentials are considered valid
     matchedCredentials = credentialResults
-      .map((cr) => cr.credential)
+      .map((cr) => cr.verifiableCredential)
       .filter(Boolean)
   }
 
@@ -424,9 +425,9 @@ export const applyVerificationResults = async ({
     let allIssuersValid = true
 
     for (const credentialResult of credentialResults) {
-      if (credentialResult.credential) {
+      if (credentialResult.verifiableCredential) {
         const validation = validateTrustedIssuers(
-          credentialResult.credential,
+          credentialResult.verifiableCredential,
           exchange.variables.trustedIssuers,
           exchange.variables.trustedRegistries || [],
           credentialResult
@@ -620,15 +621,12 @@ export const participateInVerifyExchange = async ({
 
   // Pass the RAW post-compat presentation. verifier-core's TS interface
   // declares `type: string` but accepts `string[]` at runtime per W3C spec.
-  const result = await verifyPresentation({
+  const result = await getVerifier().verifyPresentation({
     presentation: presentation as unknown as Parameters<
-      typeof verifyPresentation
+      ReturnType<typeof getVerifier>['verifyPresentation']
     >[0]['presentation'],
     challenge: exchange.variables.challenge,
-    registries,
-    httpGetService,
-    cacheService,
-    verifyObv3Schema: config.verifyObv3Schema
+    registries
   })
 
   const updatedExchange = await applyVerificationResults({

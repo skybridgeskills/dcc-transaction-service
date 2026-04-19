@@ -241,20 +241,20 @@ describe('applyVerificationResults', function () {
       credentialResults: [
         {
           verified: true,
-          credential: credential1,
+          verifiableCredential: credential1,
           results: [
             { suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' }, timestamp: new Date().toISOString() }
           ]
         },
         {
           verified: true,
-          credential: credential2,
+          verifiableCredential: credential2,
           results: [
             { suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' }, timestamp: new Date().toISOString() }
           ]
         }
       ],
-      allResults: []
+      verifiablePresentation: {} as any
     }
 
     const updatedExchange = await applyVerificationResults({ exchange, result })
@@ -683,18 +683,26 @@ describe('applyVerificationResults - debug + compatLog', function () {
     fatal: false
   })
 
+  // Minimal verifier-core result with a single proof check on the
+  // presentation and no credentials, so the derived allResults has
+  // exactly one entry — making the compatLog merge assertions simple.
+  const singleProofResult = (): import('@digitalcredentials/verifier-core').PresentationVerificationResult => ({
+    verified: true,
+    verifiablePresentation: {} as any,
+    presentationResults: [
+      {
+        suite: 'proof',
+        check: 'proof.signature-valid',
+        outcome: { status: 'success', message: 'ok' },
+        timestamp: new Date().toISOString()
+      }
+    ],
+    credentialResults: []
+  })
+
   test('prepends compatLog entries to allResults when debug=true', async function () {
     const exchange = createMockExchange()
-    const result = createMockVerifierCoreResult(true, true, {
-      allResults: [
-        {
-          suite: 'proof',
-          check: 'proof.signature-valid',
-          outcome: { status: 'success', message: 'ok' },
-          timestamp: new Date().toISOString()
-        }
-      ]
-    })
+    const result = singleProofResult()
     const compatLog = [compatEntry('vcalm-participation-message:wrap-bare-presentation')]
 
     const updated = await applyVerificationResults({
@@ -715,16 +723,7 @@ describe('applyVerificationResults - debug + compatLog', function () {
 
   test('omits compatLog entries when debug=false', async function () {
     const exchange = createMockExchange()
-    const result = createMockVerifierCoreResult(true, true, {
-      allResults: [
-        {
-          suite: 'proof',
-          check: 'proof.signature-valid',
-          outcome: { status: 'success', message: 'ok' },
-          timestamp: new Date().toISOString()
-        }
-      ]
-    })
+    const result = singleProofResult()
     const compatLog = [compatEntry('vcalm-participation-message:wrap-bare-presentation')]
 
     const updated = await applyVerificationResults({
@@ -746,8 +745,10 @@ describe('applyVerificationResults - debug + compatLog', function () {
 
     const updated = await applyVerificationResults({ exchange, result })
 
-    expect(updated.variables.results!.default.allResults).toEqual(
-      result.allResults
-    )
+    const expected = [
+      ...result.presentationResults,
+      ...result.credentialResults.flatMap((cr) => cr.results)
+    ]
+    expect(updated.variables.results!.default.allResults).toEqual(expected)
   })
 })

@@ -232,7 +232,7 @@ function verificationResultFromPresentation(
     presentationResults: p.presentationResults as App.CheckResult[],
     credentialResults: p.credentialResults as App.CredentialVerificationResult[],
     allResults,
-    matchedCredentials: p.credentialResults.map((c) => c.credential)
+    matchedCredentials: p.credentialResults.map((c) => c.verifiableCredential)
   }
 }
 
@@ -251,7 +251,7 @@ function mixedRegistryFailureResult(): App.VerificationResult {
   const credentialResults: App.CredentialVerificationResult[] = [
     {
       verified: false,
-      credential,
+      verifiableCredential: credential,
       results: [
         {
           check: 'proof.signature',

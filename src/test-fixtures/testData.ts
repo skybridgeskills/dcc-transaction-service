@@ -95,6 +95,9 @@ export const createMockVerifierCoreResult = (
   overrides: any = {}
 ): import('@digitalcredentials/verifier-core').PresentationVerificationResult => ({
   verified: presentationValid && credentialsValid,
+  verifiablePresentation: createMockPresentation([
+    createMockCredential()
+  ]) as unknown as import('@digitalcredentials/verifier-core').VerifiablePresentation,
   presentationResults: presentationValid
     ? [
         {
@@ -127,7 +130,7 @@ export const createMockVerifierCoreResult = (
     ? [
         {
           verified: true,
-          credential: createMockCredential(),
+          verifiableCredential: createMockCredential(),
           results: [
             {
               suite: 'core',
@@ -158,7 +161,7 @@ export const createMockVerifierCoreResult = (
     : [
         {
           verified: false,
-          credential: createMockCredential(),
+          verifiableCredential: createMockCredential(),
           results: [
             {
               suite: 'core',
@@ -185,7 +188,6 @@ export const createMockVerifierCoreResult = (
           ]
         }
       ],
-  allResults: [],
   ...overrides
 })
 

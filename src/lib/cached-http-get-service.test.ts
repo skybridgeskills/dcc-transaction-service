@@ -1,8 +1,7 @@
 import Keyv from 'keyv'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { CacheService } from '@digitalcredentials/verifier-core'
-import { DEFAULT_TTL_MS } from '@digitalcredentials/verifier-core'
-import { CachedHttpGetService } from './cached-http-get-service.js'
+import { CachedHttpGetService, DEFAULT_TTL_MS } from './cached-http-get-service.js'
 import { KeyvCacheService } from './keyv-cache-service.js'
 
 afterEach(() => {

@@ -3,13 +3,13 @@ import { signPresentation, createPresentation } from '@digitalbazaar/vc'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { securityLoader } from '@digitalcredentials/security-document-loader'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
-import { verifyPresentation } from '@digitalcredentials/verifier-core'
+import { flattenPresentationResults } from '@digitalcredentials/verifier-core'
 import type { CheckResult } from '@digitalcredentials/verifier-core'
 import {
   cryptographicVerificationProblemDetail,
   type ProblemDetail
 } from './lib/errors/problem-details.js'
-import { getVerifierVerificationFetchers } from './lib/verifier-keyv-store.js'
+import { getVerifier } from './lib/verifier.js'
 import { applyFix } from './compatibility/apply.js'
 import { prepareVcalmParticipationMessage } from './compatibility/vcalm-participation-message/index.js'
 import { prepareVerifiableEntity } from './compatibility/verifiable-entity/index.js'
@@ -116,23 +116,23 @@ export const verifyDIDAuth = async ({
   // assert.ts JSDoc on JsonLdField mutation and signature canonicalization).
   assertValidVerifiablePresentationStructure(refinedPresentation)
 
-  const { httpGetService, cacheService } = getVerifierVerificationFetchers()
-  const result = await verifyPresentation({
+  const result = await getVerifier().verifyPresentation({
     presentation: refinedPresentation,
-    challenge,
-    httpGetService,
-    cacheService
+    challenge
   })
 
+  const verifierAllResults = flattenPresentationResults(result).map(
+    (entry) => entry.result
+  )
   const allResults = debug
-    ? [...compatLog, ...result.allResults]
+    ? [...compatLog, ...verifierAllResults]
     : undefined
 
   if (result.verified) {
     return allResults ? { verified: true, allResults } : { verified: true }
   }
 
-  const problemDetails = problemDetailsFromChecks(result.allResults)
+  const problemDetails = problemDetailsFromChecks(verifierAllResults)
   if (problemDetails.length === 0) {
     problemDetails.push(
       cryptographicVerificationProblemDetail(

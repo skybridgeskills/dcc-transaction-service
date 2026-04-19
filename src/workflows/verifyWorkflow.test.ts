@@ -1,12 +1,18 @@
 import * as config from '../config.js'
-import { expect, test, describe } from 'vitest'
-import type { CheckResult } from '@digitalcredentials/verifier-core'
+import { afterEach, beforeEach, expect, test, describe } from 'vitest'
+import type {
+  CheckResult,
+  CredentialVerificationResult,
+  PresentationVerificationResult,
+  Verifier
+} from '@digitalcredentials/verifier-core'
 import { getWorkflow } from '../workflows.js'
 import {
   createExchangeVerify,
   validateExchangeVerify,
   applyVerificationResults,
   getVerifyVPR,
+  identifyOpenBadgesCredentialIndices,
   participateInVerifyExchange,
   preparePresentationForVerify
 } from './verifyWorkflow.js'
@@ -19,6 +25,19 @@ import { getWalletInteractionUrl } from '../lib/wallets/index.js'
 import { participateInExchange } from '../exchanges.js'
 import { HTTPException } from 'hono/http-exception'
 import type { ProblemDetailResponse } from '../lib/errors/problem-details.js'
+import { resetVerifier } from '../lib/verifier.js'
+import {
+  peekVerifyTaskQueueForTests,
+  resetVerifyTaskQueueForTests,
+  setVerifyTaskProcessorForTests
+} from '../lib/verify-task/enqueue-verify-task.js'
+import { processVerifyTask } from '../lib/verify-task/verify-task-worker.js'
+import {
+  clearKeyv,
+  getExchangeData,
+  initializeTransactionManager,
+  saveExchange
+} from '../transactionManager.js'
 
 const testData = {
   workflowId: 'verify',
@@ -750,5 +769,280 @@ describe('applyVerificationResults - debug + compatLog', function () {
       ...result.credentialResults.flatMap((cr) => cr.results)
     ]
     expect(updated.variables.results!.default.allResults).toEqual(expected)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Async OB pass — sync/async branching + end-to-end worker drain
+// ---------------------------------------------------------------------------
+
+const OBV3_CONTEXT =
+  'https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json'
+
+/**
+ * Inline minimal credentials for the async-pass tests. We keep them
+ * separate from `createMockCredential` because that fixture's nested
+ * `issuer` object includes a `name` field which `issuerObjectSchema`
+ * (no `.passthrough()`) rejects in `parseCredential`. A bare string
+ * issuer keeps structural validation happy without leaking those
+ * details into every assertion.
+ *
+ * `obCredential` differs from `nonObCredential` only in the OBv3
+ * context entry; both declare the `OpenBadgeCredential` type so the
+ * recognizer's binary "context AND type" gate is the sole switch.
+ */
+const nonObCredential = (id = 'urn:uuid:non-ob-credential') => ({
+  '@context': ['https://www.w3.org/2018/credentials/v1'],
+  id,
+  type: ['VerifiableCredential', 'OpenBadgeCredential'],
+  issuer: 'did:key:z6MkissuerExample',
+  issuanceDate: '2024-01-01T00:00:00Z',
+  credentialSubject: { id: 'did:key:z6MkholderExample' }
+})
+
+const obCredential = (id = 'urn:uuid:ob-credential-id') => ({
+  '@context': ['https://www.w3.org/2018/credentials/v1', OBV3_CONTEXT],
+  id,
+  type: ['VerifiableCredential', 'OpenBadgeCredential'],
+  issuer: 'did:key:z6MkissuerExample',
+  issuanceDate: '2024-01-01T00:00:00Z',
+  credentialSubject: { id: 'did:key:z6MkholderExample' }
+})
+
+/**
+ * Minimal {@link CredentialVerificationResult} suitable for stuffing
+ * into a fake `verifyPresentation` return — one passing proof check.
+ */
+const passingCredentialResult = (
+  vc: unknown
+): CredentialVerificationResult => ({
+  verified: true,
+  verifiableCredential: vc as CredentialVerificationResult['verifiableCredential'],
+  results: [
+    {
+      suite: 'proof',
+      check: 'proof.signature-valid',
+      outcome: { status: 'success', message: 'ok' },
+      timestamp: new Date().toISOString()
+    }
+  ]
+})
+
+const fakeVerifier = (
+  result: PresentationVerificationResult,
+  credentialResultFor?: (
+    vc: unknown
+  ) => Promise<CredentialVerificationResult>
+): Verifier => ({
+  verifyPresentation: async () => result,
+  verifyCredential: async ({ credential }) =>
+    credentialResultFor
+      ? credentialResultFor(credential)
+      : passingCredentialResult(credential)
+})
+
+/**
+ * Inline-friendly minimal VP body. We never sign it — the fake
+ * verifier short-circuits cryptographic checks — but it must clear
+ * `preparePresentationForVerify`'s structural validation. Holder is
+ * supplied; verifiableCredential is provided per-test.
+ */
+const buildVpBody = (vc: unknown) => ({
+  '@context': ['https://www.w3.org/2018/credentials/v1'],
+  type: 'VerifiablePresentation',
+  holder: 'did:key:z6MkholderExample',
+  verifiableCredential: vc,
+  proof: {
+    type: 'Ed25519Signature2020',
+    created: '2024-01-01T00:00:00Z',
+    verificationMethod:
+      'did:key:z6MkholderExample#z6MkholderExample',
+    proofPurpose: 'authentication',
+    proofValue: 'zTestProofValue',
+    challenge: 'test-challenge'
+  }
+})
+
+const buildPresentationResult = (
+  credentials: unknown[]
+): PresentationVerificationResult => ({
+  verified: true,
+  verifiablePresentation: {} as never,
+  presentationResults: [
+    {
+      suite: 'proof',
+      check: 'proof.signature-valid',
+      outcome: { status: 'success', message: 'ok' },
+      timestamp: new Date().toISOString()
+    }
+  ],
+  credentialResults: credentials.map(passingCredentialResult)
+})
+
+describe('identifyOpenBadgesCredentialIndices', () => {
+  test('returns empty array when no credential is OB', () => {
+    const result = buildPresentationResult([
+      nonObCredential(),
+      nonObCredential('urn:uuid:another')
+    ])
+    expect(
+      identifyOpenBadgesCredentialIndices(result.credentialResults)
+    ).toEqual([])
+  })
+
+  test('returns indices of OB credentials, skipping non-OB ones', () => {
+    const result = buildPresentationResult([
+      nonObCredential(),
+      obCredential('urn:uuid:ob-1'),
+      nonObCredential('urn:uuid:plain-2'),
+      obCredential('urn:uuid:ob-3')
+    ])
+    expect(
+      identifyOpenBadgesCredentialIndices(result.credentialResults)
+    ).toEqual([1, 3])
+  })
+})
+
+describe('participateInVerifyExchange — sync/async branching', function () {
+  const baseArgs = () => ({
+    exchange: createMockExchange({ state: 'active' }),
+    workflow: getWorkflow('verify'),
+    config: config.getConfig()
+  })
+
+  beforeEach(() => {
+    clearKeyv()
+    initializeTransactionManager()
+    resetVerifyTaskQueueForTests()
+    // Default to a no-op recording processor so the real worker
+    // never runs against test data unless a test asks for it.
+    setVerifyTaskProcessorForTests(async () => {})
+  })
+
+  afterEach(() => {
+    resetVerifier(undefined)
+    resetVerifyTaskQueueForTests()
+    clearKeyv()
+  })
+
+  test('non-OB VP: finalizes inline, no verifyTask, queue empty', async () => {
+    const vc = nonObCredential()
+    resetVerifier(fakeVerifier(buildPresentationResult([vc])))
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    const stored = (await getExchangeData(
+      args.exchange.exchangeId,
+      'verify'
+    )) as App.ExchangeDetailVerify
+    expect(stored.state).toBe('complete')
+    expect(stored.variables.verifyTask).toBeUndefined()
+    expect(peekVerifyTaskQueueForTests()).toEqual([])
+  })
+
+  test('OB VP: state stays active, verifyTask queued, enqueued', async () => {
+    const vc = obCredential()
+    resetVerifier(fakeVerifier(buildPresentationResult([vc])))
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    const stored = (await getExchangeData(
+      args.exchange.exchangeId,
+      'verify'
+    )) as App.ExchangeDetailVerify
+    expect(stored.state).toBe('active')
+    expect(stored.variables.verifyTask).toBeDefined()
+    expect(stored.variables.verifyTask!.status).toBe('queued')
+    expect(stored.variables.verifyTask!.openBadgesCredentialIndices).toEqual([0])
+    expect(stored.variables.verifyTask!.attempt).toBe(1)
+    expect(peekVerifyTaskQueueForTests()).toEqual([args.exchange.exchangeId])
+  })
+
+  test('mixed VP: only OB indices appear in the task', async () => {
+    const ob = obCredential('urn:uuid:ob-mixed')
+    const plain = nonObCredential('urn:uuid:plain-mixed')
+    resetVerifier(fakeVerifier(buildPresentationResult([plain, ob])))
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({
+      data: buildVpBody([plain, ob]),
+      ...args
+    })
+
+    const stored = (await getExchangeData(
+      args.exchange.exchangeId,
+      'verify'
+    )) as App.ExchangeDetailVerify
+    expect(stored.state).toBe('active')
+    expect(stored.variables.verifyTask!.openBadgesCredentialIndices).toEqual([1])
+  })
+})
+
+describe('participateInVerifyExchange — end-to-end worker drain', () => {
+  const baseArgs = () => ({
+    exchange: createMockExchange({ state: 'active' }),
+    workflow: getWorkflow('verify'),
+    config: config.getConfig()
+  })
+
+  beforeEach(() => {
+    clearKeyv()
+    initializeTransactionManager()
+    resetVerifyTaskQueueForTests()
+  })
+
+  afterEach(() => {
+    resetVerifier(undefined)
+    resetVerifyTaskQueueForTests()
+    clearKeyv()
+  })
+
+  test('OB pass merges and finalizes state to complete', async () => {
+    const vc = obCredential('urn:uuid:e2e-ob')
+    // Synthesize an OB-suite check that the worker will merge into
+    // `credentialResults[0].results`. The `passingCredentialResult`
+    // helper returns one proof check; we shadow it with an OB-suite
+    // check so the merge is visibly attributable to the async pass.
+    const obCheck: CheckResult = {
+      suite: 'openbadges',
+      check: 'openbadges.recognize',
+      outcome: { status: 'success', message: 'recognized' },
+      timestamp: new Date().toISOString()
+    }
+    const obWorkerResult = (): CredentialVerificationResult => ({
+      verified: true,
+      verifiableCredential: vc as CredentialVerificationResult['verifiableCredential'],
+      results: [obCheck]
+    })
+
+    resetVerifier(
+      fakeVerifier(buildPresentationResult([vc]), async () => obWorkerResult())
+    )
+
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    // Drive the worker directly (rather than waiting on setImmediate).
+    // The default deps wire to the real CAS save + the (now fake)
+    // shared verifier, so this is end-to-end through the real merge.
+    await processVerifyTask(args.exchange.exchangeId)
+
+    const stored = (await getExchangeData(
+      args.exchange.exchangeId,
+      'verify'
+    )) as App.ExchangeDetailVerify
+    expect(stored.state).toBe('complete')
+    expect(stored.variables.verifyTask!.status).toBe('succeeded')
+    const credentialChecks =
+      stored.variables.results!.default.credentialResults[0].results
+    expect(
+      credentialChecks.some((c) => c.check === 'openbadges.recognize')
+    ).toBe(true)
   })
 })

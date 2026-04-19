@@ -237,9 +237,6 @@ const parseConfig = (): App.Config => {
 
     knownRegistries: buildKnownRegistries(process.env),
 
-    /** Set `VERIFY_OBV3_SCHEMA=false` to skip OBv3 JSON Schema checks (faster verification). */
-    verifyObv3Schema: process.env.VERIFY_OBV3_SCHEMA !== 'false',
-
     /** Set `EXCHANGE_DEBUG_DEFAULT=true` to attach compatibility-fix and other debug log entries
      * to `variables.results` by default. */
     defaultExchangeDebug: process.env.EXCHANGE_DEBUG_DEFAULT === 'true',

@@ -33,7 +33,15 @@ export const getVerifier = (): Verifier => {
   return verifier
 }
 
-/** @internal Resets the singleton (e.g. for test isolation). */
-export const resetVerifierForTests = (): void => {
-  verifier = undefined
+/**
+ * @internal Test seam: directly set (or clear) the cached singleton.
+ *
+ * Pass a fake {@link Verifier} to stub `verifyPresentation` /
+ * `verifyCredential` without standing up verifier-core's real HTTP /
+ * DID / cache stack. Pass `undefined` from `afterEach` to drop the
+ * fake so it doesn't leak into unrelated tests (the next
+ * `getVerifier()` call rebuilds the production singleton).
+ */
+export const resetVerifier = (next: Verifier | undefined): void => {
+  verifier = next
 }

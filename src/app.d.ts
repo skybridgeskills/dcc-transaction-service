@@ -45,10 +45,6 @@ declare global {
        */
       knownRegistries: Record<string, EntityIdentityRegistry>
       /**
-       * When false, verifier-core skips the OBv3 schema suite. Set env `VERIFY_OBV3_SCHEMA=false`.
-       */
-      verifyObv3Schema: boolean
-      /**
        * Default value for `BaseVariables.debug` when an exchange does not
        * specify it. Set env `EXCHANGE_DEBUG_DEFAULT=true` (or `1` / `yes`)
        * to enable globally.

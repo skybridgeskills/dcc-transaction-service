@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { getVerifier, resetVerifierForTests } from './verifier.js'
+import { getVerifier, resetVerifier } from './verifier.js'
 import { resetVerifierKeyvForTests } from './verifier-keyv-store.js'
 
 describe('getVerifier', () => {
   afterEach(() => {
-    resetVerifierForTests()
+    resetVerifier(undefined)
     resetVerifierKeyvForTests()
   })
 
@@ -20,9 +20,9 @@ describe('getVerifier', () => {
     expect(typeof v.verifyPresentation).toBe('function')
   })
 
-  test('resetVerifierForTests yields a fresh instance', () => {
+  test('resetVerifier(undefined) yields a fresh instance', () => {
     const a = getVerifier()
-    resetVerifierForTests()
+    resetVerifier(undefined)
     const b = getVerifier()
     expect(a).not.toBe(b)
   })

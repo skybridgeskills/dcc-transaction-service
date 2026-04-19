@@ -2,9 +2,13 @@ import { saveExchange } from '../transactionManager.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import {
   flattenPresentationResults,
-  type CheckResult
+  type CheckResult,
+  type PresentationVerificationResult
 } from '@digitalcredentials/verifier-core'
+import { isOpenBadgeCredential } from '@digitalcredentials/verifier-core/openbadges'
 import { z } from 'zod'
+import { newVerifyTask } from '../lib/verify-task/verify-task.js'
+import { enqueueVerifyTask } from '../lib/verify-task/enqueue-verify-task.js'
 import {
   named
   // @ts-ignore no type definitions for this package
@@ -594,6 +598,20 @@ export const preparePresentationForVerify = ({
   return { presentation, compatLog, debug }
 }
 
+/**
+ * Two-phase verification entry point. The synchronous request thread
+ * runs verifier-core's default suites against the inbound
+ * presentation; if any embedded credential is an Open Badges
+ * credential the exchange stays `'active'` with a queued
+ * {@link App.VerifyTask} attached, and the heavier OB pass is
+ * dispatched to the in-process worker via {@link enqueueVerifyTask}.
+ * Otherwise the exchange is finalized to `'complete'` / `'invalid'`
+ * inline (legacy behavior).
+ *
+ * Either way the response body is the existing `{}` (or
+ * `{ redirectUrl }`) shape — clients observe the async pass purely
+ * via subsequent GETs (which hit the GET-driven sweep).
+ */
 export const participateInVerifyExchange = async ({
   data,
   exchange,
@@ -629,14 +647,110 @@ export const participateInVerifyExchange = async ({
     registries
   })
 
-  const updatedExchange = await applyVerificationResults({
+  const obIndices = identifyOpenBadgesCredentialIndices(result.credentialResults)
+
+  if (obIndices.length === 0) {
+    // No async work needed — finalize and respond as today.
+    const finalized = await applyVerificationResults({
+      exchange,
+      result,
+      compatLog,
+      debug
+    })
+    await saveExchange(finalized)
+    return buildVerificationResponse(finalized)
+  }
+
+  // OB present: persist sync results + queued task, leave state='active',
+  // hand off to the worker. The worker (or a sweep) recomputes state
+  // when the OB pass settles.
+  const intermediate = await withSyncResultsAndQueuedVerifyTask({
+    exchange,
+    result,
+    compatLog,
+    debug,
+    openBadgesCredentialIndices: obIndices,
+    deadlineMs: config.verifyTaskDeadlineMs,
+    maxAttempts: config.verifyTaskMaxAttempts
+  })
+  await saveExchange(intermediate)
+  enqueueVerifyTask(intermediate.exchangeId)
+  return buildVerificationResponse(intermediate)
+}
+
+// ---------------------------------------------------------------------------
+// Async-pass helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Indices in `credentialResults` whose `verifiableCredential` is an
+ * Open Badges credential per verifier-core's recognizer. Indices
+ * (rather than the credentials themselves) are persisted on the
+ * {@link App.VerifyTask} so the worker can re-locate each credential
+ * by position when it merges OB checks back into
+ * `variables.results.default.credentialResults[i].results`.
+ *
+ * Credentials that failed sync verification are still included — the
+ * OB suite may surface independently useful diagnostics even when
+ * the signature was bad.
+ */
+export const identifyOpenBadgesCredentialIndices = (
+  credentialResults: PresentationVerificationResult['credentialResults']
+): number[] => {
+  const out: number[] = []
+  for (let i = 0; i < credentialResults.length; i++) {
+    if (isOpenBadgeCredential(credentialResults[i].verifiableCredential)) {
+      out.push(i)
+    }
+  }
+  return out
+}
+
+/**
+ * Build the intermediate exchange persisted between the sync pass
+ * and the async OB pass: sync results live in
+ * `variables.results.default` (same shape `applyVerificationResults`
+ * produces), state is forced back to `'active'`, and a fresh queued
+ * {@link App.VerifyTask} is attached for the worker to consume.
+ *
+ * Composing on top of `applyVerificationResults` keeps a single
+ * source of truth for the sync-results shape (claims validation,
+ * issuer validation, allResults / compatLog merging, etc.) — we just
+ * override the two fields that differ when an OB pass is pending.
+ */
+export const withSyncResultsAndQueuedVerifyTask = async ({
+  exchange,
+  result,
+  compatLog,
+  debug,
+  openBadgesCredentialIndices,
+  deadlineMs,
+  maxAttempts
+}: {
+  exchange: App.ExchangeDetailVerify
+  result: PresentationVerificationResult
+  compatLog?: CheckResult[]
+  debug?: boolean
+  openBadgesCredentialIndices: number[]
+  deadlineMs: number
+  maxAttempts: number
+}): Promise<App.ExchangeDetailVerify> => {
+  const finalized = await applyVerificationResults({
     exchange,
     result,
     compatLog,
     debug
   })
-
-  await saveExchange(updatedExchange)
-
-  return buildVerificationResponse(updatedExchange)
+  return {
+    ...finalized,
+    state: 'active',
+    variables: {
+      ...finalized.variables,
+      verifyTask: newVerifyTask({
+        openBadgesCredentialIndices,
+        deadlineMs,
+        maxAttempts
+      })
+    }
+  }
 }

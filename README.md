@@ -17,6 +17,7 @@ want to use the corresponding tagged repo: [https://github.com/digitalcredential
 
 - [Overview](#overview)
 - [API](#api)
+- [Verification pipeline](#verification-pipeline)
 - [Health Check](#health-check)
 - [Environment Variables](#environment-variables)
 - [Versioning](#versioning)
@@ -159,6 +160,87 @@ an `Authorization` header with a valid tenant `Bearer` token is required.
 Which is an endpoint typically meant to be called by the Docker
 [HEALTHCHECK](https://docs.docker.com/reference/dockerfile/#healthcheck) option for a specific
 service. Read more below in the [Health Check](#health-check) section.
+
+## Verification pipeline
+
+The verify workflow (`POST /workflows/verify/exchanges/:exchangeId`)
+runs in two passes. The synchronous request thread runs verifier-core's
+default suites (proof, status, registry, etc.) against the inbound
+Verifiable Presentation and persists the result. If any embedded
+credential is recognized as an Open Badges credential by
+`@digitalcredentials/verifier-core/openbadges`'s `isOpenBadgeCredential`,
+the heavier OB suite is dispatched to an in-process worker and the
+exchange remains `state: 'active'` until the worker commits. Otherwise
+the exchange is finalized inline to `'complete'` or `'invalid'` exactly
+as before.
+
+### Sync vs async split
+
+| Phase | Where it runs | What it covers |
+| ----- | ------------- | -------------- |
+| Sync  | The HTTP request handler | Default verifier-core suites: presentation proof, credential proof, registry membership, status list, schema. |
+| Async | A FIFO worker draining `enqueueVerifyTask` (one drainer per process, scheduled via `setImmediate`) | Open Badges suite (`openBadgesSuite`) per OB-recognized credential. |
+
+A successful POST returns `200 OK` once the sync pass commits — even
+when an OB pass is still pending. **Downstream consumers MUST re-check
+`state` on the exchange GET before granting any privilege**;
+`state: 'active'` plus a populated `variables.verifyTask` means async
+work is still in flight.
+
+### `variables.verifyTask` shape
+
+When the async pass is pending or has run, the exchange's
+`variables.verifyTask` is populated:
+
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `attemptId` | `string` (UUID) | CAS token for the current attempt. Bumped on every retry; lets the worker detect that a sweep superseded its in-flight commit. |
+| `attempt` | `number` | 1-indexed attempt counter. |
+| `status` | `'queued' \| 'running' \| 'succeeded' \| 'failed' \| 'gave-up'` | Lifecycle of the current attempt. `'failed'` is recoverable (next sweep may retry); `'gave-up'` is terminal and pairs with `state: 'invalid'`. |
+| `openBadgesCredentialIndices` | `number[]` | Indices into `variables.results.default.credentialResults` for credentials the OB suite should re-verify. |
+| `deadlineAt` | `string` (ISO timestamp) | When this attempt is considered timed out. Drives the GET-driven sweep. |
+| `lastError` | `string \| undefined` | Last worker error, included verbatim on the synthesized timeout `CheckResult` if attempts exhaust. |
+
+### GET-driven retry
+
+There is no scheduled sweep. The GET on a verify exchange (and on
+`/protocols` / `/interaction`) runs `sweepIfTimedOut`: if the task's
+`deadlineAt` has lapsed and attempts remain, the sweep bumps the
+attempt and re-enqueues; if attempts are exhausted, it transitions the
+exchange to `state: 'invalid'`, marks the task `'gave-up'`, and appends
+a synthetic `pipeline.timeout` `CheckResult` to `allResults` so the UI
+can surface the failure cause.
+
+The practical implication: **clients that stop polling stop driving
+recovery**. A wallet that receives `200` and walks away will never
+trigger the retry path; the exchange will simply expire under its
+existing TTL.
+
+### Caveats
+
+- **Multi-replica.** Each replica owns its own in-memory FIFO worker.
+  Two replicas can schedule the same OB pass concurrently for the same
+  exchange (e.g. one POST + one sweep landing on different pods);
+  `saveExchangeWithCAS` keyed on `attemptId` keeps the persisted state
+  coherent — the loser drops its result silently. Duplicate work is
+  bounded by `VERIFY_TASK_MAX_ATTEMPTS`.
+- **Throughput.** The worker is linear per process. A long OB pass on
+  one exchange delays subsequent OB passes on the same replica;
+  horizontal scale shifts work to other replicas but does not
+  parallelize within one. This is intentional for v1 — it keeps the
+  queue trivial to reason about and avoids spawning unbounded fan-out
+  under load.
+- **Open Badges suite policy.** v1 applies the full `openBadgesSuite`
+  unconditionally to every recognized OB credential. The
+  `openbadges-suite-resolver.ts` seam is where any future per-exchange
+  knob (e.g. opt-in/out of specific OB checks) will land.
+
+### Verify task env knobs
+
+| Key | Description | Default |
+| --- | ----------- | ------- |
+| `VERIFY_TASK_DEADLINE_MS` | Per-attempt deadline (ms). Tasks past this are eligible for retry on the next GET-driven sweep. | `60000` |
+| `VERIFY_TASK_MAX_ATTEMPTS` | Maximum total attempts (initial + retries) before the task is marked `'gave-up'` and the exchange transitions to `'invalid'`. | `2` |
 
 ## Health Check
 

@@ -3,6 +3,7 @@ import { resolve } from 'path'
 import { getExchangeDataById } from './transactionManager.js'
 import { getProtocols } from './exchanges.js'
 import { signExchangeToken } from './lib/server/exchangeToken.js'
+import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
 
 /**
  * Determines whether the request prefers an HTML response based on the Accept header.
@@ -46,9 +47,14 @@ export type InteractionResult =
 
 export const resolveInteraction = async (
   exchangeId: string,
-  accept: string | undefined
+  accept: string | undefined,
+  config: App.Config
 ): Promise<InteractionResult> => {
   if (prefersHtml(accept)) {
+    // The HTML branch returns a shell page + token; the actual
+    // exchange JSON is fetched by the SPA on a follow-up request, so
+    // there is no need to sweep here. (The follow-up request goes
+    // through the JSON branch / GET state route, which does sweep.)
     const exchangeData = await getExchangeDataById(exchangeId)
     const token = await signExchangeToken({
       exchangeId: exchangeData.exchangeId,
@@ -62,7 +68,8 @@ export const resolveInteraction = async (
     return { kind: 'html', html, token, maxAge }
   }
 
-  const exchangeData = await getExchangeDataById(exchangeId)
+  const loaded = await getExchangeDataById(exchangeId)
+  const exchangeData = await sweepIfTimedOut(loaded, config)
   const protocols = getProtocols(exchangeData)
   return { kind: 'json', protocols }
 }

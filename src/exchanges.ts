@@ -1,4 +1,5 @@
 import { saveExchange, getExchangeData } from './transactionManager.js'
+import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
 import {
   createExchangeClaim,
   participateInClaimExchange,
@@ -249,10 +250,15 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
 
 export const getInteractionsForExchange = async (
   exchangeId: string,
-  workflowId: string
+  workflowId: string,
+  config: App.Config
 ) => {
   try {
-    const exchangeData = await getExchangeData(exchangeId, workflowId)
+    const loaded = await getExchangeData(exchangeId, workflowId)
+    // Route through the sweep so a polling client picks up an
+    // expired async verify-task attempt naturally. Non-verify and
+    // healthy-verify exchanges round-trip unchanged.
+    const exchangeData = await sweepIfTimedOut(loaded, config)
     return { protocols: getProtocols(exchangeData) }
   } catch (e) {
     if (e instanceof HTTPException && e.status === 404) {

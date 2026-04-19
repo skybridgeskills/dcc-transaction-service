@@ -22,6 +22,7 @@ import { getWorkflow } from './workflows.js'
 import { getConfig } from './config.js'
 import { getExchangeData } from './transactionManager.js'
 import { resolveInteraction } from './interactions.js'
+import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
 import { setCookie } from 'hono/cookie'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { handleOAuthTokenPost } from './oauth/token.js'
@@ -46,7 +47,9 @@ const handleErrors = (err: unknown, c: Context) => {
       'problemDetails' in cause &&
       Array.isArray((cause as { problemDetails: unknown }).problemDetails)
     ) {
-      body.problemDetails = (cause as { problemDetails: unknown[] }).problemDetails
+      body.problemDetails = (
+        cause as { problemDetails: unknown[] }
+      ).problemDetails
     }
     return c.json(body)
   } else if (err instanceof z.ZodError) {
@@ -266,7 +269,7 @@ export const app = new Hono()
     authenticateExchangeOrTenantMiddleware,
     addWorkflowByParam,
     async (c) => {
-      const exchange = await getExchangeData(
+      const loaded = await getExchangeData(
         c.req.param('exchangeId')!,
         c.var.workflow.id
       )
@@ -275,12 +278,16 @@ export const app = new Hono()
         if (
           authEnabled &&
           c.var.authTenant &&
-          c.var.authTenant.tenantName !== exchange?.tenantName
+          c.var.authTenant.tenantName !== loaded?.tenantName
         ) {
           throw new HTTPException(401, { message: 'Unauthorized' })
         }
       }
 
+      // GET-driven sweep: a polling client trips the retry / give-up
+      // transitions for verify exchanges with a lapsed verifyTask.
+      // No-op for non-verify and healthy-verify exchanges.
+      const exchange = await sweepIfTimedOut(loaded, c.var.config)
       return c.json(exchange)
     }
   )
@@ -293,7 +300,8 @@ export const app = new Hono()
   .get(routes.protocols, async (c) => {
     const result = await getInteractionsForExchange(
       c.req.param('exchangeId')!,
-      c.req.param('workflowId')!
+      c.req.param('workflowId')!,
+      c.var.config
     )
     if (!result) {
       return c.json({ code: 404, message: 'Exchange not found' }, 404)
@@ -305,7 +313,8 @@ export const app = new Hono()
   .get(routes.interaction, async (c) => {
     const result = await resolveInteraction(
       c.req.param('exchangeId')!,
-      c.req.header('accept')
+      c.req.header('accept'),
+      c.var.config
     )
     if (result.kind === 'html') {
       setCookie(c, 'exchange_token', result.token, {

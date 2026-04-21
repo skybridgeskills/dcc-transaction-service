@@ -1,4 +1,8 @@
-import type { EntityIdentityRegistry } from '@digitalcredentials/verifier-core'
+import type {
+  EntityIdentityRegistry,
+  SuiteSummary as VerifierCoreSuiteSummary,
+  TaskTiming as VerifierCoreTaskTiming
+} from '@digitalcredentials/verifier-core'
 
 declare global {
   namespace App {
@@ -133,6 +137,23 @@ declare global {
        * to `Config.defaultExchangeDebug`.
        */
       debug?: boolean
+      /**
+       * Verifier-core call-time options surfaced verbatim on every
+       * `verifyPresentation` / `verifyCredential` invocation for this
+       * exchange. Workflows that don't call verifier-core ignore this
+       * field; the schema accepts it universally so a single CLI flag
+       * (`--verbose` / `--timing`) works across workflows.
+       *
+       * - `verbose`: when true, verifier-core returns every check that
+       *   ran on `results[]` (otherwise only failures + explicit
+       *   skips). Per-suite `summary[]` is populated either way.
+       * - `timing`: when true, every result carries `timing` rollups
+       *   ({@link App.TaskTiming}).
+       */
+      options?: {
+        verbose?: boolean
+        timing?: boolean
+      }
     }
 
     interface ExchangeDetailBase {
@@ -160,8 +181,8 @@ declare global {
         results?: {
           default: {
             verifiableCredential: any[]
-            /** Compatibility-fix log + verifier-core checks; populated only when `variables.debug === true`. */
-            allResults?: CheckResult[]
+            /** Compatibility-fix log entries; populated only when `variables.debug === true`. */
+            compatLog?: CheckResult[]
           }
         }
       }
@@ -173,8 +194,8 @@ declare global {
         results?: {
           default: {
             holder: string
-            /** Compatibility-fix log + verifier-core checks; populated only when `variables.debug === true`. */
-            allResults?: CheckResult[]
+            /** Compatibility-fix log entries; populated only when `variables.debug === true`. */
+            compatLog?: CheckResult[]
           }
         }
       }
@@ -185,9 +206,9 @@ declare global {
      * Used in CheckResult failure outcomes.
      */
     interface ProblemDetail {
-      type?: string
-      title?: string
-      detail?: string
+      type: string
+      title: string
+      detail: string
       status?: number
       [key: string]: any
     }
@@ -197,20 +218,29 @@ declare global {
      * Replaces the legacy VerificationStepResult format.
      */
     interface CheckResult {
-      /** Qualified check id, e.g. "core.proof-exists" */
-      check: string
-      /** Suite id this check belongs to, e.g. "core" */
-      suite: string
+      /**
+       * Dot-separated namespaced id assigned by `verifier-core`
+       * post-`runSuites` (e.g. `"cryptographic.core.proof-exists"`).
+       * Service-local synthetic checks (compat-fix log entries) use
+       * the reserved `"compat.<obj-type>.<fix-name>"` namespace so
+       * UI consumers can prefix-filter them out.
+       */
+      id: string
       /** Discriminated outcome */
       outcome:
         | { status: 'success'; message: string }
         | { status: 'failure'; problems: ProblemDetail[] }
         | { status: 'skipped'; reason: string }
-      /** ISO 8601 timestamp when the check was executed */
-      timestamp: string
       /** Whether this check failure is fatal to overall verification */
       fatal?: boolean
+      /** Per-check timing; only present when verifier-core was called with `timing: true`. */
+      timing?: TaskTiming
     }
+
+    /** Re-export of verifier-core's `SuiteSummary` for use by app code. */
+    type SuiteSummary = VerifierCoreSuiteSummary
+    /** Re-export of verifier-core's `TaskTiming` for use by app code. */
+    type TaskTiming = VerifierCoreTaskTiming
 
     /**
      * Per-credential verification result from verifier-core.
@@ -225,8 +255,38 @@ declare global {
       verified: boolean
       /** The parsed credential that was verified */
       verifiableCredential: any
-      /** Flat array of results from all suites for this credential */
+      /**
+       * Flat array of results from all suites for this credential. In
+       * non-verbose mode (the default since verifier-core 2.0.0), this
+       * carries only failures and explicit `<suite>.applies` skips;
+       * passes are folded into {@link summary}. In verbose mode it
+       * carries every check.
+       */
       results: CheckResult[]
+      /**
+       * Per-suite rollup. Always populated by verifier-core 2.x
+       * regardless of `verbose`. Primary surface for UI rendering.
+       *
+       * Optional during the multi-phase migration in the
+       * `verifier-core-2-results-consumption` plan; phase 7 makes it
+       * required.
+       */
+      summary: SuiteSummary[]
+      /**
+       * Stable id of the matched recognizer (e.g. `"obv3p0.openbadge"`)
+       * when the recognition pipeline produced a normalized form.
+       */
+      recognizedProfile?: string
+      /**
+       * Normalized view of the credential, produced by a recognizer.
+       * Cast to the recognizer-specific shape based on
+       * {@link recognizedProfile}.
+       */
+      normalizedVerifiableCredential?: unknown
+      /** Inclusive top-level timing; only present when `timing: true`. */
+      timing?: TaskTiming
+      /** True when produced under a non-default suite-phase filter. */
+      partial?: boolean
     }
 
     /**
@@ -260,11 +320,29 @@ declare global {
       /** Per-credential verification results */
       credentialResults: CredentialVerificationResult[]
 
-      /** All check results flattened (presentation + all credentials) */
-      allResults: CheckResult[]
-
       /** Credentials that matched the claims requirements */
       matchedCredentials: any[]
+
+      /**
+       * Presentation-level per-suite rollup; per-credential rollups live
+       * on each `credentialResults[i].summary`.
+       */
+      summary: SuiteSummary[]
+
+      /** The parsed VP, if available from verifier-core. */
+      verifiablePresentation?: unknown
+
+      /**
+       * Compatibility-fix log entries gated on `variables.debug === true`.
+       * Each entry has an `id` of the form `compat.<obj-type>.<fix-name>`.
+       */
+      compatLog?: CheckResult[]
+
+      /** Inclusive top-level timing; only present when `timing: true`. */
+      timing?: TaskTiming
+
+      /** True when produced under a non-default suite-phase filter. */
+      partial?: boolean
 
       /** Optional claims validation details */
       claimsValidation?: {

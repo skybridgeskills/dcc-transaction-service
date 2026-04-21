@@ -26,22 +26,57 @@ import {
 
 // ----- pure helpers -----------------------------------------------------
 
-const checkSuccess = (suite: string, check: string): CoreCheckResult => ({
-  suite,
-  check,
-  outcome: { status: 'success', message: 'ok' },
-  timestamp: '2026-04-18T00:00:00Z'
+const proofSummary: App.SuiteSummary = {
+  id: 'cryptographic.proof',
+  phase: 'cryptographic',
+  suite: 'proof',
+  status: 'success',
+  verified: true,
+  message: '1 of 1 checks passed',
+  counts: { passed: 1, failed: 0, skipped: 0 }
+}
+
+const phaseFor = (suite: string): string =>
+  suite === 'openbadges' ? 'semantic' : 'cryptographic'
+
+const idFor = (suite: string, check: string): string => {
+  const localPart = check.includes('.')
+    ? check.split('.').slice(1).join('.')
+    : check
+  return `${phaseFor(suite)}.${suite}.${localPart}`
+}
+
+/**
+ * Producer-side helpers used to build `App.CheckResult` literals
+ * for tests in this file. Tests that hand the same id values to a
+ * mocked `verifyCredential` (whose return type is verifier-core's
+ * still-`check`/`suite`-bearing `CheckResult`) call {@link toCoreCheck}
+ * to add those legacy fields back at the boundary.
+ */
+const checkSuccess = (suite: string, check: string): App.CheckResult => ({
+  id: idFor(suite, check),
+  outcome: { status: 'success', message: 'ok' }
 })
 
-const checkFailure = (suite: string, check: string): CoreCheckResult => ({
-  suite,
-  check,
+const checkFailure = (suite: string, check: string): App.CheckResult => ({
+  id: idFor(suite, check),
   outcome: {
     status: 'failure',
     problems: [{ type: 'urn:test', title: 't', detail: 'd' }]
   },
-  timestamp: '2026-04-18T00:00:00Z',
   fatal: true
+})
+
+/** Adapt an `App.CheckResult` to verifier-core's still-required `check`/`suite`. */
+const toCoreCheck = (
+  r: App.CheckResult,
+  suite: string,
+  check: string
+): CoreCheckResult => ({
+  ...r,
+  id: r.id,
+  suite,
+  check
 })
 
 const buildBaseResult = (
@@ -54,27 +89,38 @@ const buildBaseResult = (
     verifiableCredential: createMockCredential(),
     results: v
       ? [checkSuccess('proof', 'proof.signature-valid')]
-      : [checkFailure('proof', 'proof.signature-valid')]
+      : [checkFailure('proof', 'proof.signature-valid')],
+    summary: [proofSummary]
   })),
-  allResults: [checkSuccess('proof', 'proof.signature-valid')],
-  matchedCredentials: []
+  matchedCredentials: [],
+  summary: [proofSummary]
 })
 
 // ----- mergeOpenBadgesResultsAt (pure) ----------------------------------
 
 describe('mergeOpenBadgesResultsAt', () => {
-  test('appends OB results, ANDs verified, updates allResults', () => {
+  const obSummary: App.SuiteSummary = {
+    id: 'semantic.openbadges',
+    phase: 'semantic',
+    suite: 'openbadges',
+    status: 'success',
+    verified: true,
+    message: '1 of 1 checks passed',
+    counts: { passed: 1, failed: 0, skipped: 0 }
+  }
+
+  test('appends OB results, ANDs verified', () => {
     const merged = buildBaseResult([true])
     const ob = checkSuccess('openbadges', 'openbadges.result-ref')
     const next = mergeOpenBadgesResultsAt(merged, 0, {
       verified: true,
-      results: [ob]
+      results: [ob],
+      summary: [obSummary]
     })
 
     expect(next.credentialResults[0].verified).toBe(true)
     expect(next.credentialResults[0].results).toHaveLength(2)
     expect(next.credentialResults[0].results[1]).toBe(ob)
-    expect(next.allResults).toContain(ob)
     expect(next.verified).toBe(true)
   })
 
@@ -83,7 +129,8 @@ describe('mergeOpenBadgesResultsAt', () => {
     const ob = checkFailure('openbadges', 'openbadges.result-ref')
     const next = mergeOpenBadgesResultsAt(merged, 0, {
       verified: false,
-      results: [ob]
+      results: [ob],
+      summary: [{ ...obSummary, status: 'failure', verified: false }]
     })
 
     expect(next.credentialResults[0].verified).toBe(false)
@@ -93,20 +140,20 @@ describe('mergeOpenBadgesResultsAt', () => {
   test('does not mutate input', () => {
     const merged = buildBaseResult([true])
     const credResultsLen = merged.credentialResults[0].results.length
-    const allResultsLen = merged.allResults.length
     mergeOpenBadgesResultsAt(merged, 0, {
       verified: true,
-      results: [checkSuccess('openbadges', 'x')]
+      results: [checkSuccess('openbadges', 'x')],
+      summary: [obSummary]
     })
     expect(merged.credentialResults[0].results).toHaveLength(credResultsLen)
-    expect(merged.allResults).toHaveLength(allResultsLen)
   })
 
   test('out-of-range index returns input unchanged', () => {
     const merged = buildBaseResult([true])
     const next = mergeOpenBadgesResultsAt(merged, 99, {
       verified: false,
-      results: [checkFailure('openbadges', 'x')]
+      results: [checkFailure('openbadges', 'x')],
+      summary: [obSummary]
     })
     expect(next).toBe(merged)
   })
@@ -115,9 +162,24 @@ describe('mergeOpenBadgesResultsAt', () => {
     const merged = buildBaseResult([true, false])
     const next = mergeOpenBadgesResultsAt(merged, 0, {
       verified: true,
-      results: [checkSuccess('openbadges', 'x')]
+      results: [checkSuccess('openbadges', 'x')],
+      summary: [obSummary]
     })
     expect(next.verified).toBe(false)
+  })
+
+  test('concatenates per-credential summary[] from sync + OB passes', () => {
+    const merged = buildBaseResult([true])
+    const next = mergeOpenBadgesResultsAt(merged, 0, {
+      verified: true,
+      results: [checkSuccess('openbadges', 'x')],
+      summary: [obSummary]
+    })
+
+    expect(next.credentialResults[0].summary).toEqual([
+      proofSummary,
+      obSummary
+    ])
   })
 })
 
@@ -169,7 +231,24 @@ const setupWorker = async (opts: {
       ({
         verified: true,
         verifiableCredential: call.credential as VerifiableCredential,
-        results: [checkSuccess('openbadges', 'openbadges.result-ref')]
+        results: [
+          toCoreCheck(
+            checkSuccess('openbadges', 'openbadges.result-ref'),
+            'openbadges',
+            'openbadges.result-ref'
+          )
+        ],
+        summary: [
+          {
+            id: 'semantic.openbadges',
+            phase: 'semantic',
+            suite: 'openbadges',
+            status: 'success',
+            verified: true,
+            message: '1 of 1 checks passed',
+            counts: { passed: 1, failed: 0, skipped: 0 }
+          }
+        ]
       }) satisfies CredentialVerificationResult)
 
   const deps: ProcessVerifyTaskDeps = {
@@ -218,7 +297,24 @@ describe('processVerifyTask', () => {
       verifyCredential: async (call) => ({
         verified: false,
         verifiableCredential: call.credential as VerifiableCredential,
-        results: [checkFailure('openbadges', 'openbadges.result-ref')]
+        results: [
+          toCoreCheck(
+            checkFailure('openbadges', 'openbadges.result-ref'),
+            'openbadges',
+            'openbadges.result-ref'
+          )
+        ],
+        summary: [
+          {
+            id: 'semantic.openbadges',
+            phase: 'semantic',
+            suite: 'openbadges',
+            status: 'failure',
+            verified: false,
+            message: '1 of 1 checks failed (0 passed)',
+            counts: { passed: 0, failed: 1, skipped: 0 }
+          }
+        ]
       })
     })
 
@@ -270,7 +366,18 @@ describe('processVerifyTask', () => {
         return {
           verified: true,
           verifiableCredential: call.credential as VerifiableCredential,
-          results: [checkSuccess('openbadges', 'x')]
+          results: [toCoreCheck(checkSuccess('openbadges', 'x'), 'openbadges', 'x')],
+          summary: [
+            {
+              id: 'semantic.openbadges',
+              phase: 'semantic',
+              suite: 'openbadges',
+              status: 'success',
+              verified: true,
+              message: '1 of 1 checks passed',
+              counts: { passed: 1, failed: 0, skipped: 0 }
+            }
+          ]
         }
       }
     }
@@ -319,8 +426,16 @@ describe('processVerifyTask', () => {
     expect(verifyCalls).toHaveLength(1)
     const stored = await loadVerify(exchange.exchangeId)
     const merged = stored.variables.results!.default
-    expect(merged.credentialResults[0].results.some((r) => r.suite === 'openbadges')).toBe(false)
-    expect(merged.credentialResults[1].results.some((r) => r.suite === 'openbadges')).toBe(true)
+    expect(
+      merged.credentialResults[0].results.some((r) =>
+        r.id?.startsWith('semantic.openbadges.')
+      )
+    ).toBe(false)
+    expect(
+      merged.credentialResults[1].results.some((r) =>
+        r.id?.startsWith('semantic.openbadges.')
+      )
+    ).toBe(true)
   })
 
   test('empty openBadgesCredentialIndices: succeed without invoking verifier', async () => {
@@ -338,13 +453,46 @@ describe('processVerifyTask', () => {
     expect(stored.state).toBe('complete')
   })
 
+  test('forwards variables.options.{verbose,timing} to verifyCredential', async () => {
+    const { exchange, deps, verifyCalls } = await setupWorker({
+      perCredVerified: [true],
+      preCommit: (e) => ({
+        ...e,
+        variables: {
+          ...e.variables,
+          options: { verbose: true, timing: true }
+        }
+      })
+    })
+
+    const outcome = await processVerifyTask(exchange.exchangeId, deps)
+
+    expect(outcome).toBe('succeeded')
+    expect(verifyCalls).toHaveLength(1)
+    expect(verifyCalls[0]).toMatchObject({ verbose: true, timing: true })
+  })
+
+  test('omits verbose/timing keys when variables.options is unset', async () => {
+    const { exchange, deps, verifyCalls } = await setupWorker({
+      perCredVerified: [true]
+    })
+
+    const outcome = await processVerifyTask(exchange.exchangeId, deps)
+
+    expect(outcome).toBe('succeeded')
+    expect(verifyCalls).toHaveLength(1)
+    expect('verbose' in verifyCalls[0]).toBe(false)
+    expect('timing' in verifyCalls[0]).toBe(false)
+  })
+
   test('default deps wire getVerifier; only override what the test needs', async () => {
     // Smoke test: a fake loader + fake CAS + spy verifier work together.
     const { exchange } = await setupWorker({ perCredVerified: [true] })
     const spy = vi.fn().mockResolvedValue({
       verified: true,
       verifiableCredential: {} as unknown as VerifiableCredential,
-      results: []
+      results: [],
+      summary: []
     } satisfies CredentialVerificationResult)
     const outcome = await processVerifyTask(exchange.exchangeId, {
       loadExchange: loadVerify,

@@ -34,10 +34,10 @@ describe('wrapBarePresentation', () => {
     const out = wrapBarePresentation(inputVp, { enabled: true })
     expect(out.result).toEqual({ verifiablePresentation: inputVp })
     expect(out.log).toHaveLength(1)
-    expect(out.log[0].suite).toBe('compatibility')
-    expect(out.log[0].check).toBe(
-      'compatibility.vcalm-participation-message:wrap-bare-presentation'
+    expect(out.log[0].id).toBe(
+      'compat.vcalm-participation-message.wrap-bare-presentation'
     )
+    expect(out.log[0].id).toMatch(/^compat\.[a-z][a-z0-9.-]*$/)
     expect(out.log[0].outcome.status).toBe('success')
   })
 

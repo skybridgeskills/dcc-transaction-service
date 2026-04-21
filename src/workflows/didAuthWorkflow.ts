@@ -110,8 +110,8 @@ export const participateInDidAuthExchange = async ({
       results: {
         default: {
           holder: data.holder,
-          ...(didAuthResult.allResults
-            ? { allResults: didAuthResult.allResults }
+          ...(didAuthResult.compatLog
+            ? { compatLog: didAuthResult.compatLog }
             : {})
         }
       }

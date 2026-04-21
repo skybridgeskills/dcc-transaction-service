@@ -4,7 +4,7 @@ export function Details({
   summary,
   children
 }: {
-  summary: string
+  summary: ReactNode
   children: ReactNode
 }) {
   return (

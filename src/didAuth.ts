@@ -3,8 +3,6 @@ import { signPresentation, createPresentation } from '@digitalbazaar/vc'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { securityLoader } from '@digitalcredentials/security-document-loader'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
-import { flattenPresentationResults } from '@digitalcredentials/verifier-core'
-import type { CheckResult } from '@digitalcredentials/verifier-core'
 import {
   cryptographicVerificationProblemDetail,
   type ProblemDetail
@@ -48,17 +46,29 @@ export const getSignedDIDAuth = async (
   })
 }
 
+/**
+ * `compatLog` carries the synthetic CheckResult entries emitted by the
+ * compatibility-fix pipeline. With verifier-core 2.x the verifier's own
+ * folded results live in the regular `presentationResults` /
+ * `credentialResults` arrays and no longer need to be duplicated into a
+ * debug-only side-channel; this field surfaces the small set of
+ * compat-fix log entries (e.g. envelope wrapping, Ed25519Signature2020
+ * context injection) that callers may want to inspect when `debug` mode
+ * is enabled.
+ */
 export type DidAuthVerificationResult =
-  | { verified: true; allResults?: CheckResult[] }
+  | { verified: true; compatLog?: App.CheckResult[] }
   | {
       verified: false
       problemDetails: ProblemDetail[]
-      allResults?: CheckResult[]
+      compatLog?: App.CheckResult[]
     }
 
-function problemDetailsFromChecks(allResults: CheckResult[]): ProblemDetail[] {
+function problemDetailsFromChecks(
+  results: ReadonlyArray<{ outcome: App.CheckResult['outcome'] }>
+): ProblemDetail[] {
   const out: ProblemDetail[] = []
-  for (const check of allResults) {
+  for (const check of results) {
     if (check.outcome.status === 'failure') {
       for (const p of check.outcome.problems) {
         out.push(
@@ -85,9 +95,10 @@ function problemDetailsFromChecks(allResults: CheckResult[]): ProblemDetail[] {
  * than thrown, so callers can map them to the appropriate response code
  * (e.g. `401` for the DID-Auth and claim flows).
  *
- * When `debug === true`, the returned object includes `allResults`:
- * compatibility-fix log entries followed by verifier-core's check results.
- * When `debug` is false (the default), `allResults` is omitted.
+ * When `debug === true`, the returned object includes `compatLog`:
+ * the compatibility-fix log entries (verifier-core's own checks are
+ * available via the standard `presentationResults` shape). When `debug`
+ * is false (the default), `compatLog` is omitted.
  */
 export const verifyDIDAuth = async ({
   presentation,
@@ -98,7 +109,7 @@ export const verifyDIDAuth = async ({
   challenge: string
   debug?: boolean
 }): Promise<DidAuthVerificationResult> => {
-  const compatLog: CheckResult[] = []
+  const compatLog: App.CheckResult[] = []
   const message = applyFix(
     prepareVcalmParticipationMessage(presentation as Record<string, unknown>),
     compatLog
@@ -121,18 +132,14 @@ export const verifyDIDAuth = async ({
     challenge
   })
 
-  const verifierAllResults = flattenPresentationResults(result).map(
-    (entry) => entry.result
-  )
-  const allResults = debug
-    ? [...compatLog, ...verifierAllResults]
-    : undefined
+  const verifierChecks = result.presentationResults
+  const exposed = debug ? compatLog : undefined
 
   if (result.verified) {
-    return allResults ? { verified: true, allResults } : { verified: true }
+    return exposed ? { verified: true, compatLog: exposed } : { verified: true }
   }
 
-  const problemDetails = problemDetailsFromChecks(verifierAllResults)
+  const problemDetails = problemDetailsFromChecks(verifierChecks)
   if (problemDetails.length === 0) {
     problemDetails.push(
       cryptographicVerificationProblemDetail(
@@ -141,7 +148,7 @@ export const verifyDIDAuth = async ({
     )
   }
 
-  return allResults
-    ? { verified: false, problemDetails, allResults }
+  return exposed
+    ? { verified: false, problemDetails, compatLog: exposed }
     : { verified: false, problemDetails }
 }

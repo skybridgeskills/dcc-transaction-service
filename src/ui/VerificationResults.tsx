@@ -1,83 +1,111 @@
-import { Details } from './Details'
-import { CheckResultRow } from './CheckResultRow'
+import type { CSSProperties } from 'react'
+import {
+  CredentialCard,
+  PresentationCard,
+  TimingPanel,
+  anyTiming
+} from './verification'
 
+/**
+ * Top-level orchestrator for the verifier-core 2.x verification UI.
+ *
+ * Renders primarily from `result.summary[]` /
+ * `credentialResults[i].summary[]` (the per-suite rollup verifier-core
+ * always emits) and lazy-expands into `results[]` for failure detail.
+ * Mounts the timing panel only when at least one timing field is
+ * present anywhere in `result`. Mounts the compat-log panel only
+ * when the exchange was created with `variables.debug === true`.
+ *
+ * `variables.options.verbose` flips child components into "all
+ * checks" detail mode (without it, detail lists show only failures
+ * and explicit skips).
+ */
 export function VerificationResults({
   result,
-  features
+  features,
+  variables
 }: {
   result: App.VerificationResult
   features?: Record<string, string | boolean>
+  variables?: Pick<App.BaseVariables, 'options' | 'debug'>
 }) {
   const showDetails = features?.details !== false
-  const checks = effectiveAllResults(result)
-  const salient = salientProblem(checks)
-  const overallOk = result.verified
+  const verbose = variables?.options?.verbose === true
+  const debug = variables?.debug === true
 
   return (
     <div>
-      <div
-        style={{
-          padding: '24px',
-          borderRadius: '8px',
-          textAlign: 'center' as const,
-          ...(overallOk
-            ? {
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                color: '#166534'
-              }
-            : {
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#991b1b'
-              })
-        }}
-      >
-        <p style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 8px' }}>
-          {overallOk ? 'Verified' : 'Not verified'}
-        </p>
-        {overallOk ? (
-          <p style={{ margin: 0, fontSize: '0.95rem' }}>
-            This presentation passed verification for this exchange.
-          </p>
-        ) : salient ? (
-          <div style={{ textAlign: 'left' as const, marginTop: '12px' }}>
-            <p style={{ fontWeight: 600, margin: '0 0 6px' }}>{salient.title}</p>
-            {salient.detail ? (
-              <p style={{ margin: 0, fontSize: '0.95rem', opacity: 0.95 }}>{salient.detail}</p>
-            ) : null}
-          </div>
-        ) : (
-          <p style={{ margin: 0, fontSize: '0.95rem' }}>
-            Verification did not succeed. See details below if available.
-          </p>
-        )}
-      </div>
-      {showDetails && checks.length > 0 ? (
-        <Details summary="Details — all checks">
-          <div>
-            {checks.map((c, i) => (
-              <CheckResultRow key={`${c.check}-${c.timestamp}-${i}`} result={c} />
-            ))}
-          </div>
-        </Details>
+      <PresentationCard result={result} />
+      {result.credentialResults.map((cr, i) => (
+        <CredentialCard
+          key={i}
+          cr={cr}
+          index={i}
+          showDetails={showDetails}
+          verbose={verbose}
+        />
+      ))}
+      {anyTiming(result) ? <TimingPanel result={result} /> : null}
+      {debug && result.compatLog && result.compatLog.length > 0 ? (
+        <CompatLogPanel log={result.compatLog} />
       ) : null}
     </div>
   )
 }
 
-function effectiveAllResults(r: App.VerificationResult): App.CheckResult[] {
-  if (Array.isArray(r.allResults) && r.allResults.length > 0) {
-    return r.allResults
-  }
-  const fromCreds = r.credentialResults.flatMap((c) => c.results ?? [])
-  return [...(r.presentationResults ?? []), ...fromCreds]
+/**
+ * Tiny inline panel listing compat-fix log entries by id + message.
+ * Not extracted to its own file per Phase 5 implementation notes;
+ * promote if it grows beyond ~20 lines.
+ */
+function CompatLogPanel({ log }: { log: App.CheckResult[] }) {
+  return (
+    <section
+      data-testid="compat-log-panel"
+      style={{
+        marginTop: '16px',
+        padding: '12px 14px',
+        borderRadius: '8px',
+        border: '1px dashed #d1d5db',
+        background: '#f9fafb'
+      }}
+    >
+      <p style={panelHeader}>Compatibility fixes applied</p>
+      <ul style={listStyle}>
+        {log.map((entry, i) => (
+          <li key={`${entry.id ?? entry.check}-${i}`} style={itemStyle}>
+            <code style={codeStyle}>{entry.id ?? entry.check}</code>
+            {entry.outcome.status === 'success' ? (
+              <span style={{ color: '#374151' }}> — {entry.outcome.message}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 }
 
-function salientProblem(checks: App.CheckResult[]): App.ProblemDetail | null {
-  const failures = checks.filter((x) => x.outcome.status === 'failure')
-  const fatalFirst = failures.find((x) => x.fatal !== false)
-  const pick = fatalFirst ?? failures[0]
-  if (!pick || pick.outcome.status !== 'failure') return null
-  return pick.outcome.problems[0] ?? null
+const panelHeader: CSSProperties = {
+  margin: '0 0 8px',
+  fontWeight: 600,
+  fontSize: '0.875rem',
+  color: '#374151'
+}
+
+const listStyle: CSSProperties = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0
+}
+
+const itemStyle: CSSProperties = {
+  padding: '4px 0',
+  fontSize: '0.8125rem'
+}
+
+const codeStyle: CSSProperties = {
+  fontFamily:
+    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+  fontSize: '0.8125rem',
+  color: '#1f2937'
 }

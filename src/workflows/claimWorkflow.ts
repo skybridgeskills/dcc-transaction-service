@@ -157,8 +157,8 @@ export const participateInClaimExchange = async ({
       results: {
         default: {
           verifiableCredential: [signedCredential],
-          ...(didAuthResult.allResults
-            ? { allResults: didAuthResult.allResults }
+          ...(didAuthResult.compatLog
+            ? { compatLog: didAuthResult.compatLog }
             : {})
         }
       }

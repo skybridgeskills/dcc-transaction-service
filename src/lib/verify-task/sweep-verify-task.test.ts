@@ -35,8 +35,8 @@ const buildResults = (): App.VerificationResult => ({
   verified: true,
   presentationResults: [],
   credentialResults: [],
-  allResults: [],
-  matchedCredentials: []
+  matchedCredentials: [],
+  summary: []
 })
 
 /**
@@ -224,11 +224,10 @@ describe('sweepIfTimedOut', () => {
     expect(result.variables.verifyTask?.status).toBe('gave-up')
     expect(result.variables.results?.default.verified).toBe(false)
 
-    // The synthetic timeout CheckResult is appended last, so `at(-1)`
-    // surfaces it without coupling to whatever entries preceded it.
-    const lastCheck = result.variables.results?.default.allResults.at(-1)!
-    expect(lastCheck.suite).toBe('verifier-pipeline')
-    expect(lastCheck.check).toBe('pipeline.timeout')
+    // The synthetic timeout CheckResult is appended to
+    // presentationResults (pipeline-level failure spans all VCs).
+    const lastCheck = result.variables.results?.default.presentationResults.at(-1)!
+    expect(lastCheck.id).toBe('pipeline.timeout')
     expect(lastCheck.outcome.status).toBe('failure')
     if (lastCheck.outcome.status === 'failure') {
       expect(lastCheck.outcome.problems[0].detail).toContain('boom')
@@ -291,7 +290,7 @@ describe('synthesizePipelineTimeoutCheckResult', () => {
     if (r.outcome.status === 'failure') {
       expect(r.outcome.problems[0].detail).not.toContain('Last error')
     }
-    expect(r.timestamp).toBe(T0.toISOString())
+    expect(r.id).toBe('pipeline.timeout')
   })
 
   test('includes lastError.message when present', () => {
@@ -306,29 +305,31 @@ describe('synthesizePipelineTimeoutCheckResult', () => {
 describe('appendAllResult', () => {
   test('fabricates a default shell when results is undefined', () => {
     const check: App.CheckResult = {
-      suite: 's',
-      check: 'c',
-      outcome: { status: 'success', message: 'ok' },
-      timestamp: T0.toISOString()
+      id: 'pipeline.timeout',
+      outcome: { status: 'success', message: 'ok' }
     }
     const r = appendAllResult(undefined, check)
-    expect(r.default.allResults).toEqual([check])
+    expect(r.default.presentationResults).toEqual([check])
     expect(r.default.verified).toBe(false)
   })
 
-  test('appends to existing allResults and forces verified=false', () => {
+  test('appends to existing presentationResults and forces verified=false', () => {
     const prior: App.CheckResult = {
-      suite: 's',
-      check: 'c1',
-      outcome: { status: 'success', message: 'ok' },
-      timestamp: T0.toISOString()
+      id: 'pipeline.s.c1',
+      outcome: { status: 'success', message: 'ok' }
     }
-    const next: App.CheckResult = { ...prior, check: 'c2' }
+    const next: App.CheckResult = { ...prior, id: 'pipeline.s.c2' }
     const r = appendAllResult(
-      { default: { ...buildResults(), verified: true, allResults: [prior] } },
+      {
+        default: {
+          ...buildResults(),
+          verified: true,
+          presentationResults: [prior]
+        }
+      },
       next
     )
-    expect(r.default.allResults).toEqual([prior, next])
+    expect(r.default.presentationResults).toEqual([prior, next])
     expect(r.default.verified).toBe(false)
   })
 })

@@ -20,7 +20,18 @@ export function TerminalView({
   if (workflowId === 'verify') {
     const vr = parseVerificationResult(variables?.results?.default)
     if (vr) {
-      return <VerificationResults result={vr} features={features} />
+      return (
+        <VerificationResults
+          result={vr}
+          features={features}
+          variables={{
+            options: variables?.options as
+              | { verbose?: boolean; timing?: boolean }
+              | undefined,
+            debug: variables?.debug as boolean | undefined
+          }}
+        />
+      )
     }
     return <GenericTerminal state={state} />
   }

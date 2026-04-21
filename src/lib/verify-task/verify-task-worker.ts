@@ -102,13 +102,20 @@ export const processVerifyTask = async (
 
   try {
     const registries = deps.resolveRegistries(exchange)
+    const verifierOptions = exchange.variables.options ?? {}
     for (const i of task.openBadgesCredentialIndices) {
       const cr = merged.credentialResults[i]
       if (!cr?.verifiableCredential) continue
       const obResult = await deps.verifyCredential({
         credential: cr.verifiableCredential,
         additionalSuites: deps.openbadgesSuitesFor(cr.verifiableCredential),
-        registries
+        registries,
+        ...(verifierOptions.verbose !== undefined && {
+          verbose: verifierOptions.verbose
+        }),
+        ...(verifierOptions.timing !== undefined && {
+          timing: verifierOptions.timing
+        })
       })
       merged = mergeOpenBadgesResultsAt(merged, i, obResult)
     }
@@ -178,12 +185,21 @@ export const withVerifyTask = (
 /**
  * Replace `credentialResults[index]` in `merged` with a new entry that
  * unions the prior default-suite results with `obResult.results`,
- * recomputes the per-credential `verified` flag (logical AND), appends
- * the OB checks to `merged.allResults`, and recomputes the top-level
- * `verified` flag.
+ * concatenates the per-suite `summary[]` arrays, recomputes the
+ * per-credential `verified` flag (logical AND), and recomputes the
+ * top-level `verified` flag.
  *
  * Pure: returns a new {@link App.VerificationResult}; does not mutate
  * any input.
+ *
+ * **Why concatenation is safe for `summary[]`** — the sync pass and
+ * the async OB pass operate on disjoint suite sets (the OB pass is
+ * specifically the suites returned by `openbadgesSuitesFor`, which
+ * the sync defaults do not include). verifier-core never returns a
+ * half-run suite, so two `SuiteSummary` entries for the same `(phase,
+ * suite)` cannot appear across passes. This is a load-bearing
+ * invariant of the two-pass workflow; revisit this helper if it ever
+ * changes.
  *
  * `claimsValidation`, `issuerValidation`, and `matchedCredentials` are
  * untouched — the OB suites do not contribute claims-matching or
@@ -194,15 +210,40 @@ export const withVerifyTask = (
 export const mergeOpenBadgesResultsAt = (
   merged: App.VerificationResult,
   index: number,
-  obResult: Pick<CredentialVerificationResult, 'verified' | 'results'>
+  obResult: {
+    verified: boolean
+    /**
+     * `CheckResult`s in either shape (verifier-core's still-required-
+     * `check`/`suite` + optional-`id`, or App's id-only). The bridge
+     * normalizes to `App.CheckResult` (required `id`) before merging.
+     */
+    results: ReadonlyArray<
+      | App.CheckResult
+      | CredentialVerificationResult['results'][number]
+    >
+    summary: App.SuiteSummary[]
+  }
 ): App.VerificationResult => {
   const prev = merged.credentialResults[index]
   if (!prev) return merged
 
+  // Bridge verifier-core's still-optional-`id` `CheckResult` shape to
+  // our hard-cut `App.CheckResult` (required `id`) at the boundary,
+  // synthesizing a deterministic fallback if a producer omits `id`.
+  const obAppResults: App.CheckResult[] = obResult.results.map((r) => {
+    // Preserve referential identity when `id` is already present so
+    // tests / consumers can assert on the original object.
+    if ((r as App.CheckResult).id) return r as App.CheckResult
+    const rec = r as unknown as Record<string, unknown>
+    const id = `${rec.suite ?? 'unknown'}.${rec.check ?? 'unknown'}`
+    return { ...(r as App.CheckResult), id }
+  })
+
   const updatedCr: App.CredentialVerificationResult = {
     ...prev,
     verified: prev.verified && obResult.verified,
-    results: [...prev.results, ...obResult.results]
+    results: [...prev.results, ...obAppResults],
+    summary: [...prev.summary, ...obResult.summary]
   }
 
   const credentialResults = merged.credentialResults.map((cr, i) =>
@@ -212,8 +253,7 @@ export const mergeOpenBadgesResultsAt = (
   return {
     ...merged,
     verified: merged.verified && obResult.verified,
-    credentialResults,
-    allResults: [...merged.allResults, ...obResult.results]
+    credentialResults
   }
 }
 

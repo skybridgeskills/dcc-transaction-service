@@ -101,17 +101,18 @@ export const createMockVerifierCoreResult = (
   presentationResults: presentationValid
     ? [
         {
-          suite: 'proof',
+          id: 'cryptographic.proof.signature-valid',
           check: 'proof.signature-valid',
+          suite: 'proof',
           outcome: { status: 'success', message: 'Presentation signature is valid' },
-          timestamp: new Date().toISOString(),
           fatal: true
         }
       ]
     : [
         {
-          suite: 'proof',
+          id: 'cryptographic.proof.signature-valid',
           check: 'proof.signature-valid',
+          suite: 'proof',
           outcome: {
             status: 'failure',
             problems: [
@@ -122,8 +123,30 @@ export const createMockVerifierCoreResult = (
               }
             ]
           },
-          timestamp: new Date().toISOString(),
           fatal: true
+        }
+      ],
+  summary: presentationValid
+    ? [
+        {
+          id: 'cryptographic.proof',
+          phase: 'cryptographic',
+          suite: 'proof',
+          status: 'success',
+          verified: true,
+          message: '1 of 1 checks passed',
+          counts: { passed: 1, failed: 0, skipped: 0 }
+        }
+      ]
+    : [
+        {
+          id: 'cryptographic.proof',
+          phase: 'cryptographic',
+          suite: 'proof',
+          status: 'failure',
+          verified: false,
+          message: '1 of 1 checks failed (0 passed)',
+          counts: { passed: 0, failed: 1, skipped: 0 }
         }
       ],
   credentialResults: credentialsValid
@@ -131,29 +154,58 @@ export const createMockVerifierCoreResult = (
         {
           verified: true,
           verifiableCredential: createMockCredential(),
-          results: [
+          summary: [
             {
+              id: 'cryptographic.core',
+              phase: 'cryptographic',
               suite: 'core',
-              check: 'core.id-valid',
-              outcome: { status: 'success', message: 'Credential ID is valid' },
-              timestamp: new Date().toISOString()
+              status: 'success',
+              verified: true,
+              message: '1 of 1 checks passed',
+              counts: { passed: 1, failed: 0, skipped: 0 }
             },
             {
+              id: 'cryptographic.proof',
+              phase: 'cryptographic',
               suite: 'proof',
+              status: 'success',
+              verified: true,
+              message: '1 of 1 checks passed',
+              counts: { passed: 1, failed: 0, skipped: 0 }
+            },
+            {
+              id: 'trust.registry',
+              phase: 'trust',
+              suite: 'registry',
+              status: 'success',
+              verified: true,
+              message: '1 of 1 checks passed',
+              counts: { passed: 1, failed: 0, skipped: 0 }
+            }
+          ],
+          results: [
+            {
+              id: 'cryptographic.core.id-valid',
+              check: 'core.id-valid',
+              suite: 'core',
+              outcome: { status: 'success', message: 'Credential ID is valid' }
+            },
+            {
+              id: 'cryptographic.proof.signature-valid',
               check: 'proof.signature-valid',
+              suite: 'proof',
               outcome: { status: 'success', message: 'Credential signature is valid' },
-              timestamp: new Date().toISOString(),
               fatal: true
             },
             {
-              suite: 'registry',
+              id: 'trust.registry.issuer-registered',
               check: 'registry.issuer-registered',
+              suite: 'registry',
               outcome: {
                 status: 'success',
                 message: 'Issuer found in DCC Sandbox Registry',
                 foundInRegistries: ['DCC Sandbox Registry']
-              },
-              timestamp: new Date().toISOString()
+              }
             }
           ]
         }
@@ -162,16 +214,37 @@ export const createMockVerifierCoreResult = (
         {
           verified: false,
           verifiableCredential: createMockCredential(),
-          results: [
+          summary: [
             {
+              id: 'cryptographic.core',
+              phase: 'cryptographic',
               suite: 'core',
-              check: 'core.id-valid',
-              outcome: { status: 'success', message: 'Credential ID is valid' },
-              timestamp: new Date().toISOString()
+              status: 'success',
+              verified: true,
+              message: '1 of 1 checks passed',
+              counts: { passed: 1, failed: 0, skipped: 0 }
             },
             {
+              id: 'cryptographic.proof',
+              phase: 'cryptographic',
               suite: 'proof',
+              status: 'failure',
+              verified: false,
+              message: '1 of 1 checks failed (0 passed)',
+              counts: { passed: 0, failed: 1, skipped: 0 }
+            }
+          ],
+          results: [
+            {
+              id: 'cryptographic.core.id-valid',
+              check: 'core.id-valid',
+              suite: 'core',
+              outcome: { status: 'success', message: 'Credential ID is valid' }
+            },
+            {
+              id: 'cryptographic.proof.signature-valid',
               check: 'proof.signature-valid',
+              suite: 'proof',
               outcome: {
                 status: 'failure',
                 problems: [
@@ -182,7 +255,6 @@ export const createMockVerifierCoreResult = (
                   }
                 ]
               },
-              timestamp: new Date().toISOString(),
               fatal: true
             }
           ]

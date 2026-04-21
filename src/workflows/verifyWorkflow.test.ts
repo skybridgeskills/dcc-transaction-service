@@ -250,10 +250,10 @@ describe('applyVerificationResults', function () {
       verified: true,
       presentationResults: [
         {
+          id: 'cryptographic.proof.signature-valid',
           suite: 'proof',
           check: 'proof.signature-valid',
           outcome: { status: 'success', message: 'Valid' },
-          timestamp: new Date().toISOString(),
           fatal: true
         }
       ],
@@ -262,17 +262,20 @@ describe('applyVerificationResults', function () {
           verified: true,
           verifiableCredential: credential1,
           results: [
-            { suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' }, timestamp: new Date().toISOString() }
-          ]
+            { id: 'cryptographic.proof.signature-valid', suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' } }
+          ],
+          summary: []
         },
         {
           verified: true,
           verifiableCredential: credential2,
           results: [
-            { suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' }, timestamp: new Date().toISOString() }
-          ]
+            { id: 'cryptographic.proof.signature-valid', suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' } }
+          ],
+          summary: []
         }
       ],
+      summary: [],
       verifiablePresentation: {} as any
     }
 
@@ -603,7 +606,7 @@ describe('preparePresentationForVerify', function () {
     expect(out.presentation.holder).toBe('did:key:z6MkholderExample')
     // wrap-bare-presentation should have fired; log records the wrap.
     const wrapEntry = out.compatLog.find(
-      (e) => e.check === 'compatibility.vcalm-participation-message:wrap-bare-presentation'
+      (e) => e.id === 'compat.vcalm-participation-message.wrap-bare-presentation'
     )
     expect(wrapEntry).toBeDefined()
     expect(wrapEntry!.outcome.status).toBe('success')
@@ -694,32 +697,37 @@ describe('preparePresentationForVerify', function () {
 })
 
 describe('applyVerificationResults - debug + compatLog', function () {
-  const compatEntry = (id: string): CheckResult => ({
-    check: `compatibility.${id}`,
-    suite: 'compatibility',
-    outcome: { status: 'success', message: `applied ${id}` },
-    timestamp: new Date().toISOString(),
-    fatal: false
+  const compatEntry = (id: string): App.CheckResult => ({
+    id: `compat.${id.replace(/:/g, '.')}`,
+    outcome: { status: 'success', message: `applied ${id}` }
   })
 
-  // Minimal verifier-core result with a single proof check on the
-  // presentation and no credentials, so the derived allResults has
-  // exactly one entry — making the compatLog merge assertions simple.
   const singleProofResult = (): import('@digitalcredentials/verifier-core').PresentationVerificationResult => ({
     verified: true,
     verifiablePresentation: {} as any,
     presentationResults: [
       {
-        suite: 'proof',
+        id: 'cryptographic.proof.signature-valid',
         check: 'proof.signature-valid',
-        outcome: { status: 'success', message: 'ok' },
-        timestamp: new Date().toISOString()
+        suite: 'proof',
+        outcome: { status: 'success', message: 'ok' }
       }
     ],
-    credentialResults: []
+    credentialResults: [],
+    summary: [
+      {
+        id: 'cryptographic.proof',
+        phase: 'cryptographic',
+        suite: 'proof',
+        status: 'success',
+        verified: true,
+        message: '1 of 1 checks passed',
+        counts: { passed: 1, failed: 0, skipped: 0 }
+      }
+    ]
   })
 
-  test('prepends compatLog entries to allResults when debug=true', async function () {
+  test('persists compatLog on result when debug=true', async function () {
     const exchange = createMockExchange()
     const result = singleProofResult()
     const compatLog = [compatEntry('vcalm-participation-message:wrap-bare-presentation')]
@@ -731,16 +739,18 @@ describe('applyVerificationResults - debug + compatLog', function () {
       debug: true
     })
 
-    const all = updated.variables.results!.default.allResults
-    expect(all).toHaveLength(2)
-    expect(all[0].suite).toBe('compatibility')
-    expect(all[0].check).toBe(
-      'compatibility.vcalm-participation-message:wrap-bare-presentation'
+    const stored = updated.variables.results!.default
+    expect(stored.compatLog).toBeDefined()
+    expect(stored.compatLog).toHaveLength(1)
+    expect(stored.compatLog![0].id).toBe(
+      'compat.vcalm-participation-message.wrap-bare-presentation'
     )
-    expect(all[1].suite).toBe('proof')
+    expect(stored.presentationResults[0].id).toBe(
+      'cryptographic.proof.signature-valid'
+    )
   })
 
-  test('omits compatLog entries when debug=false', async function () {
+  test('omits compatLog when debug=false', async function () {
     const exchange = createMockExchange()
     const result = singleProofResult()
     const compatLog = [compatEntry('vcalm-participation-message:wrap-bare-presentation')]
@@ -752,10 +762,7 @@ describe('applyVerificationResults - debug + compatLog', function () {
       debug: false
     })
 
-    const all = updated.variables.results!.default.allResults
-    expect(all).toHaveLength(1)
-    expect(all[0].suite).toBe('proof')
-    expect(all.some((e) => e.suite === 'compatibility')).toBe(false)
+    expect(updated.variables.results!.default.compatLog).toBeUndefined()
   })
 
   test('compatLog and debug are optional (default: empty + false)', async function () {
@@ -764,11 +771,10 @@ describe('applyVerificationResults - debug + compatLog', function () {
 
     const updated = await applyVerificationResults({ exchange, result })
 
-    const expected = [
-      ...result.presentationResults,
-      ...result.credentialResults.flatMap((cr) => cr.results)
-    ]
-    expect(updated.variables.results!.default.allResults).toEqual(expected)
+    expect(updated.variables.results!.default.compatLog).toBeUndefined()
+    expect(updated.variables.results!.default.presentationResults).toEqual(
+      result.presentationResults
+    )
   })
 })
 
@@ -820,10 +826,21 @@ const passingCredentialResult = (
   verifiableCredential: vc as CredentialVerificationResult['verifiableCredential'],
   results: [
     {
+      id: 'cryptographic.proof.signature-valid',
       suite: 'proof',
       check: 'proof.signature-valid',
-      outcome: { status: 'success', message: 'ok' },
-      timestamp: new Date().toISOString()
+      outcome: { status: 'success', message: 'ok' }
+    }
+  ],
+  summary: [
+    {
+      id: 'cryptographic.proof',
+      phase: 'cryptographic',
+      suite: 'proof',
+      status: 'success',
+      verified: true,
+      message: '1 of 1 checks passed',
+      counts: { passed: 1, failed: 0, skipped: 0 }
     }
   ]
 })
@@ -870,10 +887,21 @@ const buildPresentationResult = (
   verifiablePresentation: {} as never,
   presentationResults: [
     {
+      id: 'cryptographic.proof.signature-valid',
       suite: 'proof',
       check: 'proof.signature-valid',
-      outcome: { status: 'success', message: 'ok' },
-      timestamp: new Date().toISOString()
+      outcome: { status: 'success', message: 'ok' }
+    }
+  ],
+  summary: [
+    {
+      id: 'cryptographic.proof',
+      phase: 'cryptographic',
+      suite: 'proof',
+      status: 'success',
+      verified: true,
+      message: '1 of 1 checks passed',
+      counts: { passed: 1, failed: 0, skipped: 0 }
     }
   ],
   credentialResults: credentials.map(passingCredentialResult)
@@ -981,6 +1009,148 @@ describe('participateInVerifyExchange — sync/async branching', function () {
     expect(stored.state).toBe('active')
     expect(stored.variables.verifyTask!.openBadgesCredentialIndices).toEqual([1])
   })
+
+  test('forwards variables.options.{verbose,timing} to verifier-core', async () => {
+    const vc = nonObCredential()
+    const seen: Array<Record<string, unknown>> = []
+    const recordingVerifier: Verifier = {
+      verifyPresentation: async (call) => {
+        seen.push(call as unknown as Record<string, unknown>)
+        return buildPresentationResult([vc])
+      },
+      verifyCredential: async ({ credential }) =>
+        passingCredentialResult(credential)
+    }
+    resetVerifier(recordingVerifier)
+    const args = baseArgs()
+    args.exchange.variables.options = { verbose: true, timing: true }
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({ verbose: true, timing: true })
+  })
+
+  test('omits verbose/timing keys when variables.options is unset', async () => {
+    const vc = nonObCredential()
+    const seen: Array<Record<string, unknown>> = []
+    const recordingVerifier: Verifier = {
+      verifyPresentation: async (call) => {
+        seen.push(call as unknown as Record<string, unknown>)
+        return buildPresentationResult([vc])
+      },
+      verifyCredential: async ({ credential }) =>
+        passingCredentialResult(credential)
+    }
+    resetVerifier(recordingVerifier)
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    expect(seen).toHaveLength(1)
+    expect('verbose' in seen[0]).toBe(false)
+    expect('timing' in seen[0]).toBe(false)
+  })
+
+  test('persists summary, verifiablePresentation, and timing from result', async () => {
+    const vc = nonObCredential()
+    const presResult: PresentationVerificationResult = {
+      ...buildPresentationResult([vc]),
+      summary: [
+        {
+          id: 'cryptographic.proof',
+          phase: 'cryptographic',
+          suite: 'proof',
+          status: 'success',
+          verified: true,
+          message: '1 of 1 checks passed',
+          counts: { passed: 1, failed: 0, skipped: 0 }
+        }
+      ],
+      verifiablePresentation: { foo: 'parsed-vp' } as never,
+      timing: {
+        startedAt: '2026-04-19T00:00:00.000Z',
+        endedAt: '2026-04-19T00:00:00.005Z',
+        durationMs: 5
+      }
+    }
+    resetVerifier(fakeVerifier(presResult))
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    const stored = (await getExchangeData(
+      args.exchange.exchangeId,
+      'verify'
+    )) as App.ExchangeDetailVerify
+    const r = stored.variables.results!.default
+    expect(r.summary).toEqual(presResult.summary)
+    expect(r.verifiablePresentation).toEqual({ foo: 'parsed-vp' })
+    expect(r.timing).toEqual(presResult.timing)
+  })
+})
+
+describe('trusted-issuer registry-check filter', function () {
+  /**
+   * Phase 4 of `verifier-core-2-results-consumption` switched the
+   * registry-check filter from the deprecated `r.suite === 'registry'`
+   * test to `r.id?.startsWith('trust.registry.')`. These tests pin the
+   * id-based behavior so a regression to the legacy field is caught.
+   */
+  test('registry checks are recognized via dotted id, not legacy suite key', async () => {
+    const exchange = createMockExchange({
+      variables: {
+        ...createMockExchange().variables,
+        trustedIssuers: ['did:key:zIssuerWithRegistryHit'],
+        trustedRegistries: ['DCC Sandbox Registry']
+      }
+    })
+    const result: PresentationVerificationResult = {
+      verified: true,
+      verifiablePresentation: {} as never,
+      presentationResults: [],
+      summary: [],
+      credentialResults: [
+        {
+          verified: true,
+          verifiableCredential: {
+            issuer: 'did:key:zIssuerWithRegistryHit'
+          } as never,
+          summary: [
+            {
+              id: 'trust.registry',
+              phase: 'trust',
+              suite: 'registry',
+              status: 'success',
+              verified: true,
+              message: '1 of 1 checks passed',
+              counts: { passed: 1, failed: 0, skipped: 0 }
+            }
+          ],
+          results: [
+            {
+              id: 'trust.registry.issuer-registered',
+              suite: 'registry',
+              check: 'registry.issuer-registered',
+              outcome: {
+                status: 'success',
+                message: 'Issuer found',
+                payload: { foundInRegistries: ['DCC Sandbox Registry'] }
+              } as never
+            }
+          ]
+        }
+      ]
+    }
+
+    const updated = await applyVerificationResults({ exchange, result })
+
+    const iv = updated.variables.results!.default.issuerValidation!
+    expect(iv.issuerFound).toBe(true)
+  })
 })
 
 describe('participateInVerifyExchange — end-to-end worker drain', () => {
@@ -1009,15 +1179,26 @@ describe('participateInVerifyExchange — end-to-end worker drain', () => {
     // helper returns one proof check; we shadow it with an OB-suite
     // check so the merge is visibly attributable to the async pass.
     const obCheck: CheckResult = {
+      id: 'semantic.openbadges.recognize',
       suite: 'openbadges',
       check: 'openbadges.recognize',
-      outcome: { status: 'success', message: 'recognized' },
-      timestamp: new Date().toISOString()
+      outcome: { status: 'success', message: 'recognized' }
     }
     const obWorkerResult = (): CredentialVerificationResult => ({
       verified: true,
       verifiableCredential: vc as CredentialVerificationResult['verifiableCredential'],
-      results: [obCheck]
+      results: [obCheck],
+      summary: [
+        {
+          id: 'semantic.openbadges',
+          phase: 'semantic',
+          suite: 'openbadges',
+          status: 'success',
+          verified: true,
+          message: '1 of 1 checks passed',
+          counts: { passed: 1, failed: 0, skipped: 0 }
+        }
+      ]
     })
 
     resetVerifier(
@@ -1042,7 +1223,7 @@ describe('participateInVerifyExchange — end-to-end worker drain', () => {
     const credentialChecks =
       stored.variables.results!.default.credentialResults[0].results
     expect(
-      credentialChecks.some((c) => c.check === 'openbadges.recognize')
+      credentialChecks.some((c) => c.id === 'semantic.openbadges.recognize')
     ).toBe(true)
   })
 })

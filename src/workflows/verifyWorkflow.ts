@@ -1,7 +1,6 @@
 import { saveExchange } from '../transactionManager.js'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import {
-  flattenPresentationResults,
   type CheckResult,
   type PresentationVerificationResult
 } from '@digitalcredentials/verifier-core'
@@ -256,6 +255,41 @@ const matchClaimsAgainstRequirements = (
 }
 
 /**
+ * True iff `r` is a verifier-core `trust.registry.*` check result.
+ *
+ * Centralized so both `validateTrustedIssuers` and
+ * `determineExchangeOutcome` agree on the namespace, and so the
+ * suite-key migration (`r.suite === 'registry'` → `r.id`) lives in
+ * exactly one place.
+ */
+const isTrustRegistryCheck = (r: App.CheckResult): boolean =>
+  r.id.startsWith('trust.registry.')
+
+/**
+ * Bridge `verifier-core`'s still-optional `CheckResult.id` to
+ * `App.CheckResult.id`, which is required.
+ *
+ * verifier-core 2.x emits a stable id (`<phase>.<suite>.<localPart>`)
+ * post-`runSuites` for every check it produces; the optional typing
+ * is purely for backwards-compat with hand-constructed literals in
+ * older callers. We assert the field is present and synthesize a
+ * deterministic fallback from `suite + check` if a producer somehow
+ * forgot, so downstream consumers can rely on `id` without
+ * widening the App type.
+ */
+const ensureCheckResultId = (r: CheckResult): App.CheckResult => {
+  const id = r.id ?? `${r.suite}.${r.check}`
+  return { ...(r as App.CheckResult), id }
+}
+
+const ensureCredentialResultIds = (
+  cr: import('@digitalcredentials/verifier-core').CredentialVerificationResult
+): App.CredentialVerificationResult => ({
+  ...(cr as unknown as App.CredentialVerificationResult),
+  results: cr.results.map(ensureCheckResultId)
+})
+
+/**
  * Validate trusted issuers against credential issuer.
  *
  * Searches the credential's verification results for registry suite checks
@@ -271,9 +305,7 @@ const validateTrustedIssuers = (
   const issuerFound = trustedIssuers.includes(issuer)
 
   // Find all registry suite checks in the results array
-  const registryChecks = credentialResult.results.filter(
-    (check) => check.suite === 'registry'
-  )
+  const registryChecks = credentialResult.results.filter(isTrustRegistryCheck)
 
   // Check if issuer was found in any trusted registry
   let registryMatch = false
@@ -332,9 +364,8 @@ const determineExchangeOutcome = (
 
     // If trusted issuers are specified, verify the issuer check passed
     if (exchange.variables.trustedIssuers.length > 0) {
-      const registryChecks = credentialResult.results.filter(
-        (check) => check.suite === 'registry'
-      )
+      const registryChecks =
+        credentialResult.results.filter(isTrustRegistryCheck)
 
       // If any registry check failed fatally, the credential is invalid
       for (const check of registryChecks) {
@@ -351,10 +382,10 @@ const determineExchangeOutcome = (
 /**
  * Apply verification results to exchange and determine state.
  *
- * When `debug=true`, `compatLog` entries are prepended to `allResults` so
- * operators can see compatibility-fix annotations alongside verifier-core's
- * own check results in the UI. When `debug=false`, compat entries are
- * silently dropped.
+ * When `debug=true`, `compatLog` entries are persisted on
+ * `verificationResult.compatLog` so operators can see compatibility-fix
+ * annotations alongside verifier-core's own check results in the UI.
+ * When `debug=false`, compat entries are silently dropped.
  */
 export const applyVerificationResults = async ({
   exchange,
@@ -364,16 +395,26 @@ export const applyVerificationResults = async ({
 }: {
   exchange: App.ExchangeDetailVerify
   result: import('@digitalcredentials/verifier-core').PresentationVerificationResult
-  compatLog?: CheckResult[]
+  compatLog?: App.CheckResult[]
   debug?: boolean
 }): Promise<App.ExchangeDetailVerify> => {
-  const { verified, presentationResults, credentialResults } = result
-  const flattenedResults = flattenPresentationResults(result).map(
-    (entry) => entry.result
+  const {
+    verified,
+    summary: presentationSummary,
+    verifiablePresentation,
+    timing: topTiming,
+    partial: topPartial
+  } = result
+  // Normalize verifier-core's optional-`id` shape onto our local
+  // required-`id` `App.CheckResult` once at the boundary, so the rest
+  // of this function (and every consumer downstream) deals only in
+  // `App.*` types.
+  const presentationResults = result.presentationResults.map(
+    ensureCheckResultId
   )
-  const allResults = debug
-    ? [...compatLog, ...flattenedResults]
-    : flattenedResults
+  const credentialResults = result.credentialResults.map(
+    ensureCredentialResultIds
+  )
 
   // Extract and validate claims if specified
   let claimsValidation: App.VerificationResult['claimsValidation'] | undefined
@@ -459,13 +500,22 @@ export const applyVerificationResults = async ({
     exchange
   )
 
-  // Build structured verification result using new verifier-core format
+  // Build structured verification result using new verifier-core format.
+  // Per-credential `summary`, `recognizedProfile`,
+  // `normalizedVerifiableCredential`, `timing`, and `partial` are
+  // already set on each `credentialResults[i]` by verifier-core; we
+  // forward them as-is so the UI can render from `summary[]` and
+  // lazy-expand into `results[]`.
   const verificationResult: App.VerificationResult = {
     verified,
     presentationResults,
     credentialResults,
-    allResults,
     matchedCredentials,
+    summary: presentationSummary,
+    ...(verifiablePresentation && { verifiablePresentation }),
+    ...(debug && compatLog.length > 0 && { compatLog }),
+    ...(topTiming && { timing: topTiming }),
+    ...(topPartial && { partial: topPartial }),
     ...(claimsValidation && { claimsValidation }),
     ...(issuerValidation && { issuerValidation })
   }
@@ -519,12 +569,12 @@ export const preparePresentationForVerify = ({
   config: App.Config
 }): {
   presentation: Record<string, unknown>
-  compatLog: CheckResult[]
+  compatLog: App.CheckResult[]
   debug: boolean
 } => {
   const debug = exchange.variables.debug ?? config.defaultExchangeDebug
 
-  const compatLog: CheckResult[] = []
+  const compatLog: App.CheckResult[] = []
   const message = applyFix(
     prepareVcalmParticipationMessage(data as Record<string, unknown>),
     compatLog
@@ -639,12 +689,24 @@ export const participateInVerifyExchange = async ({
 
   // Pass the RAW post-compat presentation. verifier-core's TS interface
   // declares `type: string` but accepts `string[]` at runtime per W3C spec.
+  //
+  // `variables.options.{verbose,timing}` are surfaced verbatim on every
+  // verifier-core call so an exchange creator (UI or CLI) can opt into
+  // the verbose / timing modes documented in
+  // `verifier-core/docs/api/verification-results.md`.
+  const verifierOptions = exchange.variables.options ?? {}
   const result = await getVerifier().verifyPresentation({
     presentation: presentation as unknown as Parameters<
       ReturnType<typeof getVerifier>['verifyPresentation']
     >[0]['presentation'],
     challenge: exchange.variables.challenge,
-    registries
+    registries,
+    ...(verifierOptions.verbose !== undefined && {
+      verbose: verifierOptions.verbose
+    }),
+    ...(verifierOptions.timing !== undefined && {
+      timing: verifierOptions.timing
+    })
   })
 
   const obIndices = identifyOpenBadgesCredentialIndices(result.credentialResults)
@@ -715,7 +777,7 @@ export const identifyOpenBadgesCredentialIndices = (
  *
  * Composing on top of `applyVerificationResults` keeps a single
  * source of truth for the sync-results shape (claims validation,
- * issuer validation, allResults / compatLog merging, etc.) — we just
+ * issuer validation, compatLog handling, etc.) — we just
  * override the two fields that differ when an OB pass is pending.
  */
 export const withSyncResultsAndQueuedVerifyTask = async ({
@@ -729,7 +791,7 @@ export const withSyncResultsAndQueuedVerifyTask = async ({
 }: {
   exchange: App.ExchangeDetailVerify
   result: PresentationVerificationResult
-  compatLog?: CheckResult[]
+  compatLog?: App.CheckResult[]
   debug?: boolean
   openBadgesCredentialIndices: number[]
   deadlineMs: number

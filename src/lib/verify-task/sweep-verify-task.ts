@@ -18,8 +18,8 @@
  *     commit, so we can safely re-enqueue without coordination.
  *   - Otherwise: mark `gave-up`, set state to `'invalid'`, and append
  *     a synthetic `pipeline.timeout` CheckResult to
- *     `variables.results.default.allResults` so the UI surfaces the
- *     failure with a structured reason.
+ *     `variables.results.default.presentationResults` so the UI
+ *     surfaces the failure with a structured reason.
  *
  * On CAS conflict we re-read the exchange and return the persisted
  * version (someone else's sweep won; their write is the truth).
@@ -30,7 +30,6 @@
  * v1 policy is "don't auto-retry" — that decision lives outside this
  * sweep. Phase 5/6 may revisit.
  */
-import type { CheckResult as CoreCheckResult } from '@digitalcredentials/verifier-core'
 import {
   getExchangeData,
   saveExchangeWithCAS as defaultSaveExchangeWithCAS
@@ -154,14 +153,13 @@ const wireDeps = (deps: Partial<SweepIfTimedOutDeps>): SweepIfTimedOutDeps => ({
  */
 export const synthesizePipelineTimeoutCheckResult = (
   task: App.VerifyTask,
-  now: Date
-): CoreCheckResult => {
+  _now: Date
+): App.CheckResult => {
   const detail = task.lastError
     ? `Open Badges verification did not finish within deadline after ${task.attempt} attempt(s). Last error: ${task.lastError.message}`
     : `Open Badges verification did not finish within deadline after ${task.attempt} attempt(s).`
   return {
-    suite: 'verifier-pipeline',
-    check: 'pipeline.timeout',
+    id: 'pipeline.timeout',
     outcome: {
       status: 'failure',
       problems: [
@@ -172,16 +170,20 @@ export const synthesizePipelineTimeoutCheckResult = (
         }
       ]
     },
-    timestamp: now.toISOString(),
     fatal: true
   }
 }
 
 /**
- * Append `check` to `results.default.allResults`, returning a fresh
+ * Append a synthetic `check` (e.g. the `pipeline.timeout` give-up
+ * marker) to `results.default.presentationResults`, returning a fresh
  * results object. If `results` is `undefined`, fabricate a minimal
- * `default` shell containing only the timeout check — this matches
+ * `default` shell containing only the synthetic check — this matches
  * the shape the UI expects so a give-up exchange still renders.
+ *
+ * The synthetic check is appended at the presentation level (rather
+ * than to a per-credential results list) because pipeline-level
+ * failures span all embedded credentials.
  */
 export const appendAllResult = (
   results: { default: App.VerificationResult } | undefined,
@@ -191,10 +193,10 @@ export const appendAllResult = (
     return {
       default: {
         verified: false,
-        presentationResults: [],
+        presentationResults: [check],
         credentialResults: [],
-        allResults: [check],
-        matchedCredentials: []
+        matchedCredentials: [],
+        summary: []
       }
     }
   }
@@ -202,7 +204,7 @@ export const appendAllResult = (
     default: {
       ...results.default,
       verified: false,
-      allResults: [...results.default.allResults, check]
+      presentationResults: [...results.default.presentationResults, check]
     }
   }
 }

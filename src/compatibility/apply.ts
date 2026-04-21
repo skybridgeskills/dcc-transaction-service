@@ -1,4 +1,3 @@
-import type { CheckResult } from '@digitalcredentials/verifier-core'
 import type { CompatibilityResult } from './types.js'
 
 /**
@@ -14,7 +13,7 @@ export const chainFixes = <T>(
   ...fixes: Array<(input: T) => CompatibilityResult<T>>
 ): CompatibilityResult<T> => {
   let result = input
-  const log: CheckResult[] = []
+  const log: App.CheckResult[] = []
   for (const fix of fixes) {
     const next = fix(result)
     result = next.result
@@ -33,7 +32,7 @@ export const chainFixes = <T>(
  */
 export const applyFix = <T>(
   fix: CompatibilityResult<T>,
-  log: CheckResult[]
+  log: App.CheckResult[]
 ): T => {
   log.push(...fix.log)
   return fix.result

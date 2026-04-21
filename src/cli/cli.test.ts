@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'vitest'
-import { parseArgs, loadProfile } from './cli'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
+import { parseArgs, loadProfile, mergeVerifierOptions } from './cli'
 
 describe('parseArgs', () => {
   test('parses workflowId and profileName', () => {
@@ -7,7 +7,8 @@ describe('parseArgs', () => {
     expect(result).toEqual({
       workflowId: 'claim',
       profileName: 'ob3',
-      open: true
+      open: true,
+      options: {}
     })
   })
 
@@ -16,7 +17,8 @@ describe('parseArgs', () => {
     expect(result).toEqual({
       workflowId: 'didAuth',
       profileName: 'default',
-      open: true
+      open: true,
+      options: {}
     })
   })
 
@@ -25,7 +27,8 @@ describe('parseArgs', () => {
     expect(result).toEqual({
       workflowId: 'verify',
       profileName: 'ob3',
-      open: false
+      open: false,
+      options: {}
     })
   })
 
@@ -39,6 +42,107 @@ describe('parseArgs', () => {
 
   test('returns null for invalid workflow', () => {
     expect(parseArgs(['node', 'cli.ts', 'bogus'])).toBeNull()
+  })
+})
+
+describe('parseArgs — verifier-core option flags', () => {
+  test('-v / --verbose sets options.verbose', () => {
+    expect(parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-v'])?.options).toEqual(
+      { verbose: true }
+    )
+    expect(
+      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '--verbose'])?.options
+    ).toEqual({ verbose: true })
+  })
+
+  test('-t / --timing sets options.timing', () => {
+    expect(parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-t'])?.options).toEqual(
+      { timing: true }
+    )
+    expect(
+      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '--timing'])?.options
+    ).toEqual({ timing: true })
+  })
+
+  test('-v -t and --verbose --timing both set both options', () => {
+    expect(
+      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-v', '-t'])?.options
+    ).toEqual({ verbose: true, timing: true })
+    expect(
+      parseArgs([
+        'node',
+        'cli.ts',
+        'verify',
+        'ob3',
+        '--verbose',
+        '--timing'
+      ])?.options
+    ).toEqual({ verbose: true, timing: true })
+  })
+
+  test('cluster-form -vt sets both options', () => {
+    expect(parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-vt'])?.options).toEqual(
+      { verbose: true, timing: true }
+    )
+  })
+
+  test('absent flags omit the corresponding key (no false in payload)', () => {
+    const result = parseArgs(['node', 'cli.ts', 'verify', 'ob3'])
+    expect(result?.options).toEqual({})
+    expect('verbose' in (result?.options ?? {})).toBe(false)
+    expect('timing' in (result?.options ?? {})).toBe(false)
+  })
+
+  test('flags accepted on every workflow', () => {
+    expect(
+      parseArgs(['node', 'cli.ts', 'didAuth', '-v'])?.options
+    ).toEqual({ verbose: true })
+    expect(
+      parseArgs(['node', 'cli.ts', 'claim', 'ob3', '-t'])?.options
+    ).toEqual({ timing: true })
+  })
+})
+
+describe('mergeVerifierOptions', () => {
+  test('returns undefined when no profile or CLI options', () => {
+    expect(mergeVerifierOptions({}, {})).toBeUndefined()
+  })
+
+  test('preserves profile-set options when CLI omits them', () => {
+    expect(
+      mergeVerifierOptions({ options: { verbose: true } }, {})
+    ).toEqual({ verbose: true })
+  })
+
+  test('CLI-set options layer on top of profile options', () => {
+    expect(
+      mergeVerifierOptions({ options: { verbose: true } }, { timing: true })
+    ).toEqual({ verbose: true, timing: true })
+  })
+
+  test('CLI -v with profile options.verbose=true preserves true (no clobber)', () => {
+    expect(
+      mergeVerifierOptions({ options: { verbose: true } }, { verbose: true })
+    ).toEqual({ verbose: true })
+  })
+})
+
+describe('--help mentions the new flags', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    logSpy.mockRestore()
+  })
+
+  test('lists -v/--verbose and -t/--timing under Options', () => {
+    parseArgs(['node', 'cli.ts', '--help'])
+    const printed = logSpy.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(printed).toMatch(/-v, --verbose/)
+    expect(printed).toMatch(/-t, --timing/)
   })
 })
 

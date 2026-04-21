@@ -3,18 +3,17 @@ import { HTTPException } from 'hono/http-exception'
 import { getSignedDIDAuth, verifyDIDAuth } from './didAuth.js'
 
 describe('verifyDIDAuth', function () {
-  test('verifies a bare signed DID Auth presentation (debug=false omits allResults)', async function () {
+  test('verifies a bare signed DID Auth presentation (debug=false omits compatLog)', async function () {
     const challenge = crypto.randomUUID()
     const presentation = await getSignedDIDAuth(challenge)
 
     const result = await verifyDIDAuth({ presentation, challenge })
 
     expect(result.verified).toBe(true)
-    // debug defaults to false → no allResults exposed
-    expect((result as { allResults?: unknown }).allResults).toBeUndefined()
+    expect((result as { compatLog?: unknown }).compatLog).toBeUndefined()
   })
 
-  test('returns allResults including wrap-bare-presentation compat entry when debug=true', async function () {
+  test('returns compatLog including wrap-bare-presentation entry when debug=true', async function () {
     const challenge = crypto.randomUUID()
     const presentation = await getSignedDIDAuth(challenge)
 
@@ -25,23 +24,20 @@ describe('verifyDIDAuth', function () {
     })
 
     expect(result.verified).toBe(true)
-    expect(result.allResults).toBeDefined()
-    const checks = result.allResults ?? []
-    const compatChecks = checks.filter((c) =>
-      c.check.startsWith('compatibility.')
-    )
+    expect(result.compatLog).toBeDefined()
+    const entries = result.compatLog ?? []
+    // Every compatLog entry has a `compat.*` id by construction.
+    for (const c of entries) {
+      expect(c.id?.startsWith('compat.')).toBe(true)
+    }
     expect(
-      compatChecks.some(
-        (c) =>
-          c.check ===
-          'compatibility.vcalm-participation-message:wrap-bare-presentation'
+      entries.some(
+        (c) => c.id === 'compat.vcalm-participation-message.wrap-bare-presentation'
       )
     ).toBe(true)
-    // verifier-core checks should still be present after the prepended compat entries
-    expect(checks.length).toBeGreaterThan(compatChecks.length)
   })
 
-  test('returns problemDetails (and no allResults) for an invalid challenge with debug=false', async function () {
+  test('returns problemDetails (and no compatLog) for an invalid challenge with debug=false', async function () {
     const presentation = await getSignedDIDAuth('issued-challenge')
 
     const result = await verifyDIDAuth({
@@ -52,10 +48,10 @@ describe('verifyDIDAuth', function () {
     expect(result.verified).toBe(false)
     if (result.verified) throw new Error('unreachable')
     expect(result.problemDetails.length).toBeGreaterThan(0)
-    expect(result.allResults).toBeUndefined()
+    expect(result.compatLog).toBeUndefined()
   })
 
-  test('returns problemDetails AND allResults for an invalid challenge with debug=true', async function () {
+  test('returns problemDetails AND compatLog for an invalid challenge with debug=true', async function () {
     const presentation = await getSignedDIDAuth('issued-challenge')
 
     const result = await verifyDIDAuth({
@@ -67,9 +63,11 @@ describe('verifyDIDAuth', function () {
     expect(result.verified).toBe(false)
     if (result.verified) throw new Error('unreachable')
     expect(result.problemDetails.length).toBeGreaterThan(0)
-    expect(result.allResults).toBeDefined()
+    expect(result.compatLog).toBeDefined()
     expect(
-      (result.allResults ?? []).some((c) => c.check.startsWith('compatibility.'))
+      (result.compatLog ?? []).every((c) =>
+        Boolean(c.id?.startsWith('compat.'))
+      )
     ).toBe(true)
   })
 

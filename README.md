@@ -208,8 +208,9 @@ There is no scheduled sweep. The GET on a verify exchange (and on
 `deadlineAt` has lapsed and attempts remain, the sweep bumps the
 attempt and re-enqueues; if attempts are exhausted, it transitions the
 exchange to `state: 'invalid'`, marks the task `'gave-up'`, and appends
-a synthetic `pipeline.timeout` `CheckResult` to `allResults` so the UI
-can surface the failure cause.
+a synthetic `pipeline.timeout` `CheckResult` to
+`variables.results.default.presentationResults` so the UI can surface
+the failure cause.
 
 The practical implication: **clients that stop polling stop driving
 recovery**. A wallet that receives `200` and walks away will never
@@ -234,6 +235,27 @@ existing TTL.
   unconditionally to every recognized OB credential. The
   `openbadges-suite-resolver.ts` seam is where any future per-exchange
   knob (e.g. opt-in/out of specific OB checks) will land.
+
+### Verification result payload
+
+The verify workflow stores results under
+`variables.results.default` using the
+[verifier-core 2.x folded result shape](./docs/verification-payload.md):
+
+- `summary[]` — per-(phase, suite) rollup, always populated. Primary
+  rendering surface for UIs.
+- `results[]` (and `presentationResults[]`) — folded check list,
+  carrying only failures and explicitly-emitted skips by default.
+  Lazy-expand from `summary[]` for failure detail.
+- Pass `variables.options.verbose: true` (CLI: `-v` / `--verbose`)
+  to receive every check that ran (passes included).
+- Pass `variables.options.timing: true` (CLI: `-t` / `--timing`) to
+  receive `TaskTiming` data on every level of the result tree.
+
+See [`docs/verification-payload.md`](./docs/verification-payload.md)
+for the full payload contract, examples, and migration notes from
+the pre-v2 (`allResults` + per-`CheckResult` `check` / `suite` /
+`timestamp`) shape.
 
 ### Verify task env knobs
 

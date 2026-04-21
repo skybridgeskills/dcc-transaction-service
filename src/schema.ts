@@ -80,6 +80,30 @@ export const exchangeBatchSchema = z
     }
   )
 
+/**
+ * Per-exchange knobs that propagate to every `verifier-core` call made
+ * for the exchange's lifetime. Set once at exchange creation and read
+ * (with `false` defaults) at each verifier call site.
+ *
+ * - `verbose` — if true, verifier-core's per-call `verbose: true` is
+ *   passed through, surfacing every check that ran (not just failures
+ *   and explicit skips). Default `false`.
+ * - `timing` — if true, verifier-core attaches `timing: TaskTiming`
+ *   on every `CheckResult`, every `SuiteSummary`, and the result
+ *   root. Default `false`.
+ *
+ * `.strict()` rejects unknown nested keys at parse time, so a typo
+ * like `{ options: { verbos: true } }` fails validation rather than
+ * silently doing nothing.
+ */
+export const verifierOptionsSchema = z
+  .object({
+    verbose: z.boolean().optional(),
+    timing: z.boolean().optional()
+  })
+  .strict()
+  .optional()
+
 // register all possible variables here
 export const baseVariablesSchema = z.object({
   exchangeHost: z
@@ -100,6 +124,15 @@ export const baseVariablesSchema = z.object({
    * to `Config.defaultExchangeDebug` (env `EXCHANGE_DEBUG_DEFAULT`).
    */
   debug: z.boolean().optional(),
+
+  /**
+   * Verifier-call knobs (`verbose`, `timing`); see
+   * {@link verifierOptionsSchema}. Resolved once per call site with
+   * `false` defaults — both the synchronous verify pass and the
+   * asynchronous Open Badges worker pass read from this same object so
+   * the entire exchange uses identical flags.
+   */
+  options: verifierOptionsSchema,
 
   // claim
   vc: z.string().optional(),

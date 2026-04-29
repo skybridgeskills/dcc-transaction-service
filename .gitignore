@@ -54,6 +54,7 @@ types/
 
 # Optional npm cache directory
 .npm
+.pnpm-store
 
 # Optional eslint cache
 .eslintcache
@@ -115,11 +116,15 @@ test-fixtures/.env.testing
 
 # Output
 dist
+storybook-static
 
 # MacOS
 .DS_Store
 
 # the keyv data store
-src/data
+.local/
 
 compose-test.yaml
+
+# developer notes and plans
+docs/plans/*

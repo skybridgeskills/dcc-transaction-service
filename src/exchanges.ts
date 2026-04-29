@@ -1,4 +1,5 @@
 import { saveExchange, getExchangeData } from './transactionManager.js'
+import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
 import {
   createExchangeClaim,
   participateInClaimExchange,
@@ -16,12 +17,8 @@ import {
   participateInVerifyExchange,
   validateExchangeVerify
 } from './workflows/verifyWorkflow.js'
-import type { Context } from 'hono'
-
-import { getLcwProtocol } from './protocols/lcw.js'
+import { getWalletInteractionUrl } from './lib/wallets/index.js'
 import { HTTPException } from 'hono/http-exception'
-
-import { verifyDIDAuth } from './didAuth.js'
 
 /** Allows the creation of one or a batch of exchanges for a particular tenant. */
 export const createExchangeBatch = async ({
@@ -157,20 +154,23 @@ const participateWithEmptyBody = async ({
   workflow: App.Workflow
   exchange: App.ExchangeDetailBase
 }) => {
+  let vpr
   if (['claim', 'didAuth'].includes(workflow.id)) {
-    // Reply with a VPR to authenticate the wallet.
-    const vpr = await getDIDAuthVPR(exchange)
-    return { verifiablePresentationRequest: vpr }
-  }
-  if (workflow.id === 'verify') {
-    const vpr = await getVerifyVPR(exchange as App.ExchangeDetailVerify)
-    return { verifiablePresentationRequest: vpr, ...vpr }
+    vpr = getDIDAuthVPR(exchange)
+  } else if (workflow.id === 'verify') {
+    vpr = getVerifyVPR(exchange as App.ExchangeDetailVerify)
+  } else {
+    throw new HTTPException(400, {
+      message: 'Workflow is not valid for this endpoint'
+    })
   }
 
-  // healthz/catchall
-  throw new HTTPException(400, {
-    message: 'Workflow is not valid for this endpoint'
-  })
+  if (exchange.state === 'pending') {
+    exchange.state = 'active'
+    await saveExchange(exchange)
+  }
+
+  return { verifiablePresentationRequest: vpr }
 }
 
 export const participateInExchange = async ({
@@ -184,34 +184,44 @@ export const participateInExchange = async ({
   workflow: App.Workflow
   exchange: App.ExchangeDetailBase
 }) => {
+  if (exchange.state === 'complete') {
+    throw new HTTPException(400, {
+      message: 'Exchange has already been completed.'
+    })
+  }
+
+  // If there is no body, this is the initial step of the exchange.
   if (!data || !Object.keys(data).length) {
-    // If there is no body, this is the initial step of the exchange.
     return participateWithEmptyBody({ config, workflow, exchange })
   }
-  if (workflow.id === 'didAuth') {
-    return participateInDidAuthExchange({
-      data,
-      exchange: exchange as App.ExchangeDetailDidAuth,
-      workflow,
-      config
-    })
-  }
-  // TODO: add "OID4VCI" support (claim workflow)
-  if (workflow.id === 'claim') {
-    return participateInClaimExchange({
-      data,
-      exchange: exchange as App.ExchangeDetailClaim,
-      workflow,
-      config
-    })
-  }
-  if (workflow.id === 'verify') {
-    return participateInVerifyExchange({
-      data,
-      exchange: exchange as App.ExchangeDetailVerify,
-      workflow,
-      config
-    })
+
+  // Otherwise, the user is submitting data to participate and potentially
+  // complete the exchange.
+  switch (workflow.id) {
+    case 'didAuth':
+      return participateInDidAuthExchange({
+        data,
+        exchange: exchange as App.ExchangeDetailDidAuth,
+        workflow,
+        config
+      })
+    // TODO: add "OID4VCI" support (claim workflow)
+    case 'claim':
+      return participateInClaimExchange({
+        data,
+        exchange: exchange as App.ExchangeDetailClaim,
+        workflow,
+        config
+      })
+    case 'verify':
+      return participateInVerifyExchange({
+        data,
+        exchange: exchange as App.ExchangeDetailVerify,
+        workflow,
+        config
+      })
+    default:
+      throw new HTTPException(404, { message: 'Workflow not found' })
   }
 }
 
@@ -222,10 +232,15 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
       : getDIDAuthVPR(exchange)
   const serviceEndpoint =
     verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
+  const isVerify = exchange.workflowId === 'verify'
   const protocols = {
-    iu: `${serviceEndpoint}/protocols?iuv=1`,
+    iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}`,
     vcapi: serviceEndpoint,
-    lcw: getLcwProtocol(exchange),
+    lcw: isVerify
+      ? getWalletInteractionUrl('lcw', 'vcapiExchange', serviceEndpoint)
+      : getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint, {
+          challenge: exchange.variables.challenge
+        }),
     verifiablePresentationRequest
     // TODO: add "OID4VCI" support (claim workflow)
     // TODO: add "OID4VP" support for forthcoming verification workflows
@@ -233,18 +248,22 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   return protocols
 }
 
-export const getInteractionsForExchange = async (c: Context) => {
-  const exchangeData = await getExchangeData(
-    c.req.param('exchangeId'),
-    c.req.param('workflowId')
-  )
-  if (!exchangeData) {
-    c.status(404)
-    return c.json({
-      code: 404,
-      message: 'Exchange not found'
-    })
+export const getInteractionsForExchange = async (
+  exchangeId: string,
+  workflowId: string,
+  config: App.Config
+) => {
+  try {
+    const loaded = await getExchangeData(exchangeId, workflowId)
+    // Route through the sweep so a polling client picks up an
+    // expired async verify-task attempt naturally. Non-verify and
+    // healthy-verify exchanges round-trip unchanged.
+    const exchangeData = await sweepIfTimedOut(loaded, config)
+    return { protocols: getProtocols(exchangeData) }
+  } catch (e) {
+    if (e instanceof HTTPException && e.status === 404) {
+      return null
+    }
+    throw e
   }
-  const protocols = getProtocols(exchangeData)
-  return c.json({ protocols })
 }

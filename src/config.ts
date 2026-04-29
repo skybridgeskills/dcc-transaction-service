@@ -1,3 +1,9 @@
+import type {
+  EntityIdentityRegistry,
+  OidfEntityIdentityRegistry,
+  VcRecognitionEntityIdentityRegistry
+} from '@digitalcredentials/verifier-core'
+
 let CONFIG: App.Config
 
 const defaultPort = 4004
@@ -8,16 +14,187 @@ const defaultTenantName = 'default'
 const defaultTenantToken = 'default'
 const defaultTtlSeconds = 60 * 10 // exchange expires after ten minutes
 
+const VC_RECOGNITION_URL_KEY = /^REGISTRY_VC_RECOGNITION_([A-Z0-9_]+)_URL$/
+
+const OIDF_TRUST_ANCHOR_EC_KEY = /^REGISTRY_OIDF_([A-Z0-9_]+)_TRUST_ANCHOR_EC$/
+
+/** Built-in DCC registry entries; merged with env-driven OIDF + VC recognition rows. */
+const STATIC_KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
+  'DCC Sandbox Registry': {
+    name: 'DCC Sandbox Registry',
+    type: 'dcc-legacy',
+    url: 'https://credentials-sandbox.dcconsortium.org/registry.json'
+  },
+  'DCC Community Registry': {
+    name: 'DCC Community Registry',
+    type: 'dcc-legacy',
+    url: 'https://digitalcredentials.github.io/community-registry/registry.json'
+  },
+  'DCC Registry': {
+    name: 'DCC Member Registry',
+    type: 'dcc-legacy',
+    url: 'https://digitalcredentials.github.io/dcc-registry/registry.json'
+  }
+}
+
+/**
+ * Reads optional VC Recognition registry definitions from the environment.
+ *
+ * For each slug `S` in `REGISTRY_VC_RECOGNITION_S_URL`, also set
+ * `REGISTRY_VC_RECOGNITION_S_ACCEPTED_ISSUERS` (comma-separated DIDs/URLs).
+ * The registry name for `trustedRegistries` / defaults is `VC_RECOGNITION_S`.
+ */
+export const parseVcRecognitionRegistriesFromEnv = (
+  env: NodeJS.ProcessEnv
+): Record<string, VcRecognitionEntityIdentityRegistry> => {
+  const out: Record<string, VcRecognitionEntityIdentityRegistry> = {}
+
+  for (const key of Object.keys(env)) {
+    const m = key.match(VC_RECOGNITION_URL_KEY)
+    if (!m) continue
+    const slug = m[1]
+    const rawUrl = env[key]
+    const url = typeof rawUrl === 'string' ? rawUrl.trim() : ''
+    if (!url) continue
+
+    const issuersKey = `REGISTRY_VC_RECOGNITION_${slug}_ACCEPTED_ISSUERS`
+    const issuersRaw = env[issuersKey]
+    const issuersStr = typeof issuersRaw === 'string' ? issuersRaw.trim() : ''
+    if (!issuersStr) {
+      console.warn(
+        `registry VC recognition ${slug}: missing or empty ${issuersKey} — skipped`
+      )
+      continue
+    }
+    const acceptedIssuers = issuersStr
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (acceptedIssuers.length === 0) {
+      console.warn(
+        `registry VC recognition ${slug}: no accepted issuers after parsing — skipped`
+      )
+      continue
+    }
+
+    const registryName = `VC_RECOGNITION_${slug}`
+    out[registryName] = {
+      name: registryName,
+      type: 'vc-recognition',
+      url,
+      acceptedIssuers
+    }
+  }
+
+  return out
+}
+
+/**
+ * Reads optional OpenID Federation registry definitions from the environment.
+ *
+ * For each `REGISTRY_OIDF_S_TRUST_ANCHOR_EC`, `S` is the slug; the value is the
+ * trust anchor entity-configuration URL (`trustAnchorEC`). The registry name for
+ * `trustedRegistries` / defaults is `OIDF_S`.
+ */
+export const parseOidfRegistriesFromEnv = (
+  env: NodeJS.ProcessEnv
+): Record<string, OidfEntityIdentityRegistry> => {
+  const out: Record<string, OidfEntityIdentityRegistry> = {}
+
+  for (const key of Object.keys(env)) {
+    const m = key.match(OIDF_TRUST_ANCHOR_EC_KEY)
+    if (!m) continue
+    const slug = m[1]
+    const raw = env[key]
+    const trustAnchorEC = typeof raw === 'string' ? raw.trim() : ''
+    if (!trustAnchorEC) continue
+
+    const registryName = `OIDF_${slug}`
+    out[registryName] = {
+      name: registryName,
+      type: 'oidf',
+      trustAnchorEC
+    }
+  }
+
+  return out
+}
+
+const buildKnownRegistries = (
+  env: typeof process.env
+): Record<string, EntityIdentityRegistry> => ({
+  ...STATIC_KNOWN_REGISTRIES,
+  ...parseOidfRegistriesFromEnv(env),
+  ...parseVcRecognitionRegistriesFromEnv(env)
+})
+
+/**
+ * Map registry names to full EntityIdentityRegistry objects for verifier-core.
+ * Falls back to creating a dcc-legacy registry with a default URL pattern
+ * for unknown registries.
+ */
+export const mapRegistryNamesToRegistries = (
+  registryNames: string[],
+  knownRegistries: Record<string, EntityIdentityRegistry> = getConfig()
+    .knownRegistries
+): EntityIdentityRegistry[] => {
+  return registryNames.map((name) => {
+    if (name in knownRegistries) {
+      return knownRegistries[name]
+    }
+    // For unknown registries, try to construct a reasonable default
+    // This assumes the registry name might be a URL or we use a default pattern
+    return {
+      name,
+      type: 'dcc-legacy',
+      url: name.startsWith('http')
+        ? name
+        : `https://example.com/${name.toLowerCase().replace(/\s+/g, '-')}.json`
+    }
+  })
+}
+
+const parseIssuerInstancesForTenant = (
+  env: typeof process.env,
+  tenantNameLower: string
+): App.IssuerInstance[] => {
+  const suffix = tenantNameLower.toUpperCase()
+  const instances: App.IssuerInstance[] = []
+  for (let n = 1; ; n++) {
+    const idKey = `TENANT_ISSUER_${n}_ID_${suffix}`
+    const id = env[idKey]
+    if (!id) {
+      break
+    }
+    const cryptosuite =
+      env[`TENANT_ISSUER_${n}_CRYPTOSUITE_${suffix}`] ?? 'eddsa-rdfc-2022'
+    const signingServiceTenant =
+      env[`TENANT_ISSUER_${n}_SIGNING_TENANT_${suffix}`] ?? tenantNameLower
+    instances.push({ id, cryptosuite, signingServiceTenant })
+  }
+  return instances
+}
+
+/** Default true; set `UI_SHOW_DETAILS=false` (or `0` / `no`) to disable. */
+const parseUiShowDetails = (raw: string | undefined): boolean => {
+  if (raw === undefined || raw === '') return true
+  const v = raw.trim().toLowerCase()
+  if (v === 'false' || v === '0' || v === 'no') return false
+  return true
+}
+
 const parseTenantsFromEnv = (env: typeof process.env) => {
   const tenants: Record<string, App.Tenant> = {}
   for (const [key, value] of Object.entries(env)) {
     if (key.startsWith('TENANT_TOKEN_') && value) {
       const tenantName = key.slice(13).toLowerCase()
+      const issuerInstances = parseIssuerInstancesForTenant(env, tenantName)
       tenants[tenantName] = {
         tenantName,
-        tenantToken: value
+        tenantToken: value,
+        ...(issuerInstances.length > 0 ? { issuerInstances } : {})
       }
-      if (env[`TENANT_DOMAIN_${tenantName}`]) {
+      if (env[`TENANT_ORIGIN_${tenantName}`]) {
         tenants[tenantName].origin = env[`TENANT_ORIGIN_${tenantName}`]
       }
     }
@@ -30,13 +207,16 @@ const parseConfig = (): App.Config => {
 
   const config: App.Config = {
     port: parseInt(process.env.PORT ?? '0') || defaultPort,
-    defaultExchangeHost: process.env.EXCHANGE_HOST ?? defaultExchangeHost,
+    defaultExchangeHost:
+      process.env.DEFAULT_EXCHANGE_HOST ?? defaultExchangeHost,
     exchangeTtl: parseInt(process.env.EXCHANGE_TTL ?? '0') || defaultTtlSeconds,
     statusService: process.env.STATUS_SERVICE ?? '',
     signingService: process.env.SIGNING_SERVICE ?? defaultSigningService,
 
     defaultWorkflow: process.env.DEFAULT_WORKFLOW ?? defaultWorkflow,
     defaultTenantName: process.env.DEFAULT_TENANT_NAME ?? defaultTenantName,
+
+    uiShowDetails: parseUiShowDetails(process.env.UI_SHOW_DETAILS),
 
     tenants,
     tenantAuthenticationEnabled: Object.keys(tenants).length > 0,
@@ -46,14 +226,46 @@ const parseConfig = (): App.Config => {
     redisUri: process.env.REDIS_URI ?? undefined,
     keyvWriteDelayMs: parseInt(process.env.KEYV_WRITE_DELAY ?? '0') || 100, // 100ms
     keyvExpiredCheckDelayMs:
-      parseInt(process.env.KEYV_EXPIRED_CHECK_DELAY ?? '0') || 4 * 3600 * 1000 // 4 hours
+      parseInt(process.env.KEYV_EXPIRED_CHECK_DELAY ?? '0') || 4 * 3600 * 1000, // 4 hours
+
+    // Verification workflow configuration - registry names (mapped to full config below)
+    defaultTrustedRegistryNames: process.env.DEFAULT_TRUSTED_REGISTRIES
+      ? process.env.DEFAULT_TRUSTED_REGISTRIES.split(',').map((r) => r.trim())
+      : ['DCC Sandbox Registry', 'DCC Issuer Registry'],
+
+    accessJwtSecret: process.env.ACCESS_JWT_SECRET ?? '',
+
+    knownRegistries: buildKnownRegistries(process.env),
+
+    /** Set `EXCHANGE_DEBUG_DEFAULT=true` to attach compatibility-fix and other debug log entries
+     * to `variables.results` by default. */
+    defaultExchangeDebug: process.env.EXCHANGE_DEBUG_DEFAULT === 'true',
+
+    /**
+     * Per-attempt deadline for asynchronous verify tasks. Override with
+     * `VERIFY_TASK_DEADLINE_MS`; defaults to 60s.
+     */
+    verifyTaskDeadlineMs:
+      parseInt(process.env.VERIFY_TASK_DEADLINE_MS ?? '0') || 60_000,
+
+    /**
+     * Maximum attempts (initial + retries) for an async verify task.
+     * Override with `VERIFY_TASK_MAX_ATTEMPTS`; defaults to 2.
+     */
+    verifyTaskMaxAttempts:
+      parseInt(process.env.VERIFY_TASK_MAX_ATTEMPTS ?? '0') || 2
   }
 
   // Only if no tenants are configured, use the default tenant
   if (Object.keys(config.tenants).length === 0) {
+    const issuerInstances = parseIssuerInstancesForTenant(
+      process.env,
+      defaultTenantName
+    )
     config.tenants[defaultTenantName] = {
       tenantName: defaultTenantName,
-      tenantToken: defaultTenantToken
+      tenantToken: defaultTenantToken,
+      ...(issuerInstances.length > 0 ? { issuerInstances } : {})
     }
   }
 

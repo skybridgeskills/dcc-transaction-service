@@ -8,7 +8,10 @@ import {
   getInteractionsForExchange,
   participateInExchange
 } from './exchanges.js'
-import { authenticateTenantMiddleware } from './auth.js'
+import {
+  authenticateTenantMiddleware,
+  authenticateExchangeOrTenantMiddleware
+} from './auth.js'
 import { healthCheck } from './health.js'
 import { HTTPException } from 'hono/http-exception'
 import * as schema from './schema.js'
@@ -18,6 +21,12 @@ import { JSONObject } from 'hono/utils/types'
 import { getWorkflow } from './workflows.js'
 import { getConfig } from './config.js'
 import { getExchangeData } from './transactionManager.js'
+import { resolveInteraction } from './interactions.js'
+import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
+import { setCookie } from 'hono/cookie'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { handleOAuthTokenPost } from './oauth/token.js'
+import { oauthAuthorizationServerMetadata } from './oauth/metadata.js'
 
 /**
  * Wraps a Hono handler with error handling
@@ -27,10 +36,22 @@ import { getExchangeData } from './transactionManager.js'
 const handleErrors = (err: unknown, c: Context) => {
   if (err instanceof HTTPException) {
     c.status(err.status)
-    return c.json({
+    const body: Record<string, unknown> = {
       code: err.status,
       message: err.message
-    })
+    }
+    const cause = err.cause as { problemDetails?: unknown } | undefined
+    if (
+      cause &&
+      typeof cause === 'object' &&
+      'problemDetails' in cause &&
+      Array.isArray((cause as { problemDetails: unknown }).problemDetails)
+    ) {
+      body.problemDetails = (
+        cause as { problemDetails: unknown[] }
+      ).problemDetails
+    }
+    return c.json(body)
   } else if (err instanceof z.ZodError) {
     c.status(400)
     return c.json({
@@ -90,7 +111,8 @@ const routes = {
   legacyExchangeDetail: '/exchange/:exchangeId', // This might not be used anymore if it is not referenced by the exchange creation
   exchangeCreate: '/workflows/:workflowId/exchanges',
   exchangeDetail: '/workflows/:workflowId/exchanges/:exchangeId',
-  protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols'
+  protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols',
+  interaction: '/interactions/:exchangeId'
 }
 
 export const app = new Hono()
@@ -102,6 +124,7 @@ export const app = new Hono()
 
   .use(logger())
   .use(cors())
+  .use('/ui/*', serveStatic({ root: './dist/' }))
   .use(setConfigContext)
 
   // Config Handler adds config to the context
@@ -116,6 +139,14 @@ export const app = new Hono()
 
   // Extended health check
   .get(routes.healthz, healthCheck)
+
+  // OAuth 2.0 client_credentials (M2M access JWT for tenant API)
+  .post('/oauth/token', async (c) => handleOAuthTokenPost(c))
+
+  // RFC 8414 Authorization Server Metadata
+  .get('/.well-known/oauth-authorization-server', (c) =>
+    c.json(oauthAuthorizationServerMetadata(c.var.config))
+  )
 
   /*
   This is step 1 in an exchange. Creates a new exchange and stores the provided data for later use
@@ -235,22 +266,28 @@ export const app = new Hono()
   // Get Exchange State
   .get(
     routes.exchangeDetail,
-    authenticateTenantMiddleware,
+    authenticateExchangeOrTenantMiddleware,
     addWorkflowByParam,
     async (c) => {
-      const exchange = await getExchangeData(
+      const loaded = await getExchangeData(
         c.req.param('exchangeId')!,
         c.var.workflow.id
       )
-      const authEnabled = c.var.config.tenantAuthenticationEnabled
-      if (
-        authEnabled &&
-        c.var.authTenant &&
-        c.var.authTenant.tenantName !== exchange?.tenantName
-      ) {
-        throw new HTTPException(401, { message: 'Unauthorized' })
+      if (!c.var.exchangeTokenAuth) {
+        const authEnabled = c.var.config.tenantAuthenticationEnabled
+        if (
+          authEnabled &&
+          c.var.authTenant &&
+          c.var.authTenant.tenantName !== loaded?.tenantName
+        ) {
+          throw new HTTPException(401, { message: 'Unauthorized' })
+        }
       }
 
+      // GET-driven sweep: a polling client trips the retry / give-up
+      // transitions for verify exchanges with a lapsed verifyTask.
+      // No-op for non-verify and healthy-verify exchanges.
+      const exchange = await sweepIfTimedOut(loaded, c.var.config)
       return c.json(exchange)
     }
   )
@@ -260,6 +297,36 @@ export const app = new Hono()
   interact with this exchange. Eventually we'll use this URL as QR code contents for wallet to scan.
   VC-API 0.7 as of 2025-06-08: https://w3c-ccg.github.io/vc-api/#interaction-url-format
   */
-  .get(routes.protocols, getInteractionsForExchange)
+  .get(routes.protocols, async (c) => {
+    const result = await getInteractionsForExchange(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!,
+      c.var.config
+    )
+    if (!result) {
+      return c.json({ code: 404, message: 'Exchange not found' }, 404)
+    }
+    return c.json(result)
+  })
+
+  // VCALM interaction URL — content-negotiated endpoint for browser and API access
+  .get(routes.interaction, async (c) => {
+    const result = await resolveInteraction(
+      c.req.param('exchangeId')!,
+      c.req.header('accept'),
+      c.var.config
+    )
+    if (result.kind === 'html') {
+      setCookie(c, 'exchange_token', result.token, {
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: c.req.url.startsWith('https'),
+        path: '/',
+        maxAge: result.maxAge
+      })
+      return c.html(result.html)
+    }
+    return c.json({ protocols: result.protocols })
+  })
 
 export type AppType = typeof app

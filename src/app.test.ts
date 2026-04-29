@@ -7,6 +7,7 @@ import { getDataForExchangeSetupPost } from './test-fixtures/testData.js'
 import { getSignedDIDAuth } from './didAuth.js'
 import {
   saveExchange,
+  getExchangeData,
   initializeTransactionManager
 } from './transactionManager.js'
 import * as transactionManager from './transactionManager.js'
@@ -85,16 +86,16 @@ describe('api', function () {
       const walletQuery = walletQuerys.find((q) => q.retrievalId === 'someId')
       expect(walletQuery).toBeDefined()
       const url = walletQuery?.vprDeepLink ?? ''
+      const serviceEndpoint = extractServiceEndpoint(url)
+      const path = new URL(serviceEndpoint).pathname
 
-      const parsedDeepLink = new URL(url)
-      //should be http://localhost:4004/exchange?challenge=VOclS8ZiMs&auth_type=bearer
-      const requestURI = parsedDeepLink.searchParams.get('vc_request_url') ?? ''
-      // here we need to pull out just the path
-      // since we are calling the endpoint via
-      // supertest
-      const path = new URL(requestURI).pathname
-      // the challenge that the exchange service generated
-      const challenge = parsedDeepLink.searchParams.get('challenge') ?? ''
+      const initResponse = await app.request(path, {
+        method: 'POST',
+        body: JSON.stringify({}),
+        headers: { 'Content-Type': 'application/json' }
+      })
+      const initBody = (await initResponse.json()) as any
+      const challenge = initBody.verifiablePresentationRequest.challenge
       const didAuth = await getSignedDIDAuth(challenge)
 
       const exchangeResponse = await app.request(path, {
@@ -354,20 +355,15 @@ describe('api', function () {
       expect(body).toBeDefined()
       expect(body.code).toBe(401)
       expect(body.message).toBe('Invalid DIDAuth or unsupported options.')
+      expect(Array.isArray(body.problemDetails)).toBe(true)
     })
 
     test('does the VPR exchange for DID Auth', async function () {
       const walletQuery = await doSetup(app)
       const url = walletQuery?.vprDeepLink ?? ''
 
-      // Step 2. mimics what the wallet would do when opened by deeplink
-      // which is to parse the deeplink and call the exchange initiation endpoint
-      const parsedDeepLink = new URL(url)
-      const inititationURI =
-        parsedDeepLink.searchParams.get('vc_request_url') ?? ''
-
-      // strip out the host because we are using supertest
-      const initiationURIPath = new URL(inititationURI).pathname
+      const serviceEndpoint = extractServiceEndpoint(url)
+      const initiationURIPath = new URL(serviceEndpoint).pathname
 
       const initiationResponse = await app.request(initiationURIPath, {
         method: 'POST' // empty body to initiate a VC-API exchange
@@ -412,14 +408,8 @@ describe('api', function () {
       const walletQuery = await doSetup(app, 'claim')
       const url = walletQuery?.vprDeepLink ?? ''
 
-      // Step 2. mimics what the wallet would do when opened by deeplink
-      // which is to parse the deeplink and call the exchange initiation endpoint
-      const parsedDeepLink = new URL(url)
-      const inititationURI =
-        parsedDeepLink.searchParams.get('vc_request_url') ?? ''
-
-      // strip out the host because we are using supertest
-      const initiationURIPath = new URL(inititationURI).pathname
+      const serviceEndpoint = extractServiceEndpoint(url)
+      const initiationURIPath = new URL(serviceEndpoint).pathname
 
       const initiationResponse = await app.request(initiationURIPath, {
         method: 'POST'
@@ -464,6 +454,210 @@ describe('api', function () {
   })
 })
 
+describe('single-use exchange enforcement', function () {
+  beforeAll(() => {
+    vi.spyOn(axios, 'post').mockImplementation(() =>
+      Promise.resolve({ data: {} })
+    )
+
+    const currentConfig = config.getConfig()
+    vi.spyOn(config, 'getConfig').mockImplementation(() => {
+      return {
+        ...currentConfig,
+        statusService: '',
+        tenantAuthenticationEnabled: false
+      }
+    })
+  })
+
+  afterAll(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('initial VPR request transitions exchange to active', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(initResponse.status).toBe(200)
+
+    const exchangeId = path.split('/exchanges/')[1]
+    const exchange = await getExchangeData(exchangeId, 'didAuth')
+    expect(exchange.state).toBe('active')
+  })
+
+  test('completed didAuth exchange returns 400 on second attempt', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const challenge = vpr.challenge
+    const didAuth = await getSignedDIDAuth(challenge)
+
+    // First completion — should succeed
+    const firstResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(firstResponse.status).toBe(200)
+
+    // Second attempt — should be rejected
+    const secondResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(secondResponse.status).toBe(400)
+    const body = await secondResponse.json()
+    expect(body.message).toBe('Exchange has already been completed.')
+  })
+
+  test('completed exchange rejects empty-body VPR request too', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const didAuth = await getSignedDIDAuth(vpr.challenge)
+
+    await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    // Try to get VPR again after completion
+    const secondInit = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(secondInit.status).toBe(400)
+    const body = await secondInit.json()
+    expect(body.message).toBe('Exchange has already been completed.')
+  })
+
+  test('didAuth completion stores holder in variables.results', async function () {
+    const walletQuery = await doSetup(app)
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const holderId = `did:ex:${crypto.randomUUID()}`
+    const didAuth = await getSignedDIDAuth(vpr.challenge, holderId)
+
+    await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    const exchangeId = path.split('/exchanges/')[1]
+    const exchange = (await getExchangeData(
+      exchangeId,
+      'didAuth'
+    )) as App.ExchangeDetailDidAuth
+    expect(exchange.state).toBe('complete')
+    expect(exchange.variables.results).toBeDefined()
+    expect(exchange.variables.results!.default.holder).toBe(holderId)
+  })
+
+  test('claim completion stores credential and sets complete', async function () {
+    const walletQuery = await doSetup(app, 'claim')
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const didAuth = await getSignedDIDAuth(vpr.challenge)
+
+    await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+    const exchangeId = path.split('/exchanges/')[1]
+    const exchange = (await getExchangeData(
+      exchangeId,
+      'claim'
+    )) as App.ExchangeDetailClaim
+    expect(exchange.state).toBe('complete')
+    expect(exchange.variables.results).toBeDefined()
+    expect(exchange.variables.results!.default).toBeDefined()
+    expect(
+      exchange.variables.results!.default.verifiableCredential
+    ).toBeDefined()
+  })
+
+  test('completed claim exchange returns 400 on second attempt', async function () {
+    const walletQuery = await doSetup(app, 'claim')
+    const url = walletQuery?.vprDeepLink ?? ''
+    const serviceEndpoint = extractServiceEndpoint(url)
+    const path = new URL(serviceEndpoint).pathname
+
+    const initResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const vpr = (await initResponse.json())
+      ?.verifiablePresentationRequest as App.VPR
+    const didAuth = await getSignedDIDAuth(vpr.challenge)
+
+    const firstResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(firstResponse.status).toBe(200)
+
+    const secondResponse = await app.request(path, {
+      method: 'POST',
+      body: JSON.stringify(didAuth),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    expect(secondResponse.status).toBe(400)
+    const body = await secondResponse.json()
+    expect(body.message).toBe('Exchange has already been completed.')
+  })
+})
+
 const doSetup = async (app: AppType, workflowId = 'didAuth') => {
   const testData = getDataForExchangeSetupPost(
     'default',
@@ -489,16 +683,23 @@ const doSetup = async (app: AppType, workflowId = 'didAuth') => {
   return walletQuery
 }
 
+const extractServiceEndpoint = (walletUrl: string): string => {
+  const parsed = new URL(walletUrl)
+  return decodeURIComponent(parsed.searchParams.get('vc_request_url')!)
+}
+
 const doSetupWithDirectDeepLink = async (app: AppType) => {
   const walletQuery = await doSetup(app)
   const url = walletQuery?.directDeepLink ?? ''
+  const serviceEndpoint = extractServiceEndpoint(url)
+  const path = new URL(serviceEndpoint).pathname
 
-  const parsedDeepLink = new URL(url)
-  const requestURI = parsedDeepLink.searchParams.get('vc_request_url') ?? '' //should be http://localhost:4004/exchange?challenge=VOclS8ZiMs&auth_type=bearer
-  // here we need to pull out just the path
-  // since we are calling the endpoint via
-  // supertest
-  const path = new URL(requestURI).pathname
-  const challenge = parsedDeepLink.searchParams.get('challenge') ?? '' // the challenge that the exchange service generated
+  const initResponse = await app.request(path, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    headers: { 'Content-Type': 'application/json' }
+  })
+  const initBody = (await initResponse.json()) as any
+  const challenge = initBody.verifiablePresentationRequest.challenge as string
   return { path, challenge }
 }

@@ -1,14 +1,19 @@
-// @ts-nocheck // There are no type definitions for these digitalbazaar libraries
-import { verify, signPresentation, createPresentation } from '@digitalbazaar/vc'
+// @ts-nocheck // Digital Bazaar VC signing APIs are loosely typed
+import { signPresentation, createPresentation } from '@digitalbazaar/vc'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { securityLoader } from '@digitalcredentials/security-document-loader'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
-import { DataIntegrityProof } from '@digitalbazaar/data-integrity'
-import { documentLoader } from './documentLoader.js'
-import { cryptosuite as ecdsaRdfc2019Cryptosuite } from '@digitalbazaar/ecdsa-rdfc-2019-cryptosuite'
-import { cryptosuite as eddsaRdfc2022Cryptosuite } from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite'
-import { preparePresentation } from './verifiablePresentation.js'
-import { suites as verificationSuite } from './suites.js'
+import {
+  cryptographicVerificationProblemDetail,
+  type ProblemDetail
+} from './lib/errors/problem-details.js'
+import { getVerifier } from './lib/verifier.js'
+import { applyFix } from './compatibility/apply.js'
+import { prepareVcalmParticipationMessage } from './compatibility/vcalm-participation-message/index.js'
+import { prepareVerifiableEntity } from './compatibility/verifiable-entity/index.js'
+import { assertValidVerifiablePresentationStructure } from './lib/data/verifiable-presentation/assert.js'
+
+const signingDocumentLoader = securityLoader().build()
 
 let key: Ed25519VerificationKey2020
 let suite: Ed25519Signature2020
@@ -37,24 +42,113 @@ export const getSignedDIDAuth = async (
     presentation,
     suite,
     challenge,
-    documentLoader
+    documentLoader: signingDocumentLoader
   })
 }
 
+/**
+ * `compatLog` carries the synthetic CheckResult entries emitted by the
+ * compatibility-fix pipeline. With verifier-core 2.x the verifier's own
+ * folded results live in the regular `presentationResults` /
+ * `credentialResults` arrays and no longer need to be duplicated into a
+ * debug-only side-channel; this field surfaces the small set of
+ * compat-fix log entries (e.g. envelope wrapping, Ed25519Signature2020
+ * context injection) that callers may want to inspect when `debug` mode
+ * is enabled.
+ */
+export type DidAuthVerificationResult =
+  | { verified: true; compatLog?: App.CheckResult[] }
+  | {
+      verified: false
+      problemDetails: ProblemDetail[]
+      compatLog?: App.CheckResult[]
+    }
+
+function problemDetailsFromChecks(
+  results: ReadonlyArray<{ outcome: App.CheckResult['outcome'] }>
+): ProblemDetail[] {
+  const out: ProblemDetail[] = []
+  for (const check of results) {
+    if (check.outcome.status === 'failure') {
+      for (const p of check.outcome.problems) {
+        out.push(
+          cryptographicVerificationProblemDetail(`${p.title}: ${p.detail}`)
+        )
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Verify a wallet-submitted DID Authentication presentation.
+ *
+ * Applies the same per-object compatibility fixes used by the verify
+ * workflow (envelope wrapping, Ed25519Signature2020 context injection) and
+ * passes the **raw** post-compat presentation to verifier-core so the
+ * cryptographic proof verifies against the byte-equivalent payload the
+ * wallet signed.
+ *
+ * Throws `HTTPException(400)` when the post-compat object isn't a
+ * structurally valid Verifiable Presentation. Cryptographic verification
+ * failures are returned as `{ verified: false, problemDetails }` rather
+ * than thrown, so callers can map them to the appropriate response code
+ * (e.g. `401` for the DID-Auth and claim flows).
+ *
+ * When `debug === true`, the returned object includes `compatLog`:
+ * the compatibility-fix log entries (verifier-core's own checks are
+ * available via the standard `presentationResults` shape). When `debug`
+ * is false (the default), `compatLog` is omitted.
+ */
 export const verifyDIDAuth = async ({
   presentation,
-  challenge
+  challenge,
+  debug = false
 }: {
   presentation: unknown
   challenge: string
-}) => {
-  const refinedPresentation = preparePresentation(presentation)
+  debug?: boolean
+}): Promise<DidAuthVerificationResult> => {
+  const compatLog: App.CheckResult[] = []
+  const message = applyFix(
+    prepareVcalmParticipationMessage(presentation as Record<string, unknown>),
+    compatLog
+  )
+  const refinedPresentation = applyFix(
+    prepareVerifiableEntity(
+      (message.verifiablePresentation ?? message) as Record<string, unknown>
+    ),
+    compatLog
+  )
 
-  const result = await verify({
+  // Defensive structural validation — THROWS HTTPException(400) on bad
+  // shape; the parsed value is intentionally discarded so it cannot be
+  // passed to verifier-core in place of the raw signed object (see
+  // assert.ts JSDoc on JsonLdField mutation and signature canonicalization).
+  assertValidVerifiablePresentationStructure(refinedPresentation)
+
+  const result = await getVerifier().verifyPresentation({
     presentation: refinedPresentation,
-    challenge,
-    suite: verificationSuite,
-    documentLoader
+    challenge
   })
-  return result.verified
+
+  const verifierChecks = result.presentationResults
+  const exposed = debug ? compatLog : undefined
+
+  if (result.verified) {
+    return exposed ? { verified: true, compatLog: exposed } : { verified: true }
+  }
+
+  const problemDetails = problemDetailsFromChecks(verifierChecks)
+  if (problemDetails.length === 0) {
+    problemDetails.push(
+      cryptographicVerificationProblemDetail(
+        'DID Authentication presentation could not be verified.'
+      )
+    )
+  }
+
+  return exposed
+    ? { verified: false, problemDetails, compatLog: exposed }
+    : { verified: false, problemDetails }
 }

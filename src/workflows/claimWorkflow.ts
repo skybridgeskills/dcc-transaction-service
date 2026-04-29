@@ -5,8 +5,15 @@ import { createPresentation } from '@digitalbazaar/vc'
 import Handlebars from 'handlebars'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { verifyDIDAuth } from '../didAuth.js'
+import { saveExchange } from '../transactionManager.js'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
+import {
+  extractWalletCryptosuitesFromPresentation,
+  selectIssuerInstance
+} from '../lib/issuer-selection.js'
+import { problemDetailResponse } from '../lib/errors/problem-details.js'
+import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
 export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -51,7 +58,8 @@ export const createExchangeClaim = ({
     tenantName: data.variables.tenantName,
     variables: {
       ...data.variables,
-      challenge: crypto.randomUUID()
+      challenge: crypto.randomUUID(),
+      features: variablesFeaturesFromConfig(config)
     },
     expires:
       data.expires ??
@@ -74,14 +82,20 @@ export const participateInClaimExchange = async ({
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
-  const didAuthVerified = await verifyDIDAuth({
+  const debug = exchange.variables.debug ?? config.defaultExchangeDebug
+  const didAuthResult = await verifyDIDAuth({
     presentation: data,
-    challenge: exchange.variables.challenge
+    challenge: exchange.variables.challenge,
+    debug
   })
 
-  if (!didAuthVerified) {
+  if (!didAuthResult.verified) {
     throw new HTTPException(401, {
-      message: 'Invalid DIDAuth or unsupported options.'
+      message: 'Invalid DIDAuth or unsupported options.',
+      cause: problemDetailResponse(
+        'Invalid DIDAuth or unsupported options.',
+        didAuthResult.problemDetails
+      )
     })
   }
 
@@ -109,6 +123,20 @@ export const participateInClaimExchange = async ({
     })
   }
 
+  const tenantKey = exchange.tenantName.toLowerCase()
+  const tenant = config.tenants[tenantKey]
+  const walletCryptosuites =
+    extractWalletCryptosuitesFromPresentation(data)
+  const issuerInstance = tenant
+    ? selectIssuerInstance(tenant, walletCryptosuites)
+    : null
+  const signingTenant =
+    issuerInstance?.signingServiceTenant ?? exchange.tenantName
+
+  if (issuerInstance?.id) {
+    credential.issuer = issuerInstance.id
+  }
+
   // add credential status if enabled
   if (config.statusService) {
     credential = await callService(
@@ -117,9 +145,27 @@ export const participateInClaimExchange = async ({
     )
   }
   const signedCredential = await callService(
-    `${config.signingService}/instance/${exchange.tenantName}/credentials/sign`,
+    `${config.signingService}/instance/${signingTenant}/credentials/sign`,
     credential
   )
+
+  const updatedExchange: App.ExchangeDetailClaim = {
+    ...exchange,
+    state: 'complete',
+    variables: {
+      ...exchange.variables,
+      results: {
+        default: {
+          verifiableCredential: [signedCredential],
+          ...(didAuthResult.compatLog
+            ? { compatLog: didAuthResult.compatLog }
+            : {})
+        }
+      }
+    }
+  }
+  await saveExchange(updatedExchange)
+
   // generate VP to return VCs
   const verifiablePresentation = createPresentation()
   verifiablePresentation.verifiableCredential = [signedCredential]

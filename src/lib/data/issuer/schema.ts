@@ -1,0 +1,12 @@
+import { z } from 'zod'
+import { JsonLdField } from '../jsonld-field'
+
+export const issuerObjectSchema = z.object({
+  id: z.string(),
+  type: JsonLdField(z.string()).optional()
+})
+
+/** VC issuer: a DID string or an issuer object with at least an `id`. */
+export const issuerSchema = z.union([z.string(), issuerObjectSchema])
+
+export type Issuer = z.infer<typeof issuerSchema>

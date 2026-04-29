@@ -2,6 +2,10 @@ import { z } from 'zod'
 import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
 import { HTTPException } from 'hono/http-exception'
 import { verifyDIDAuth } from '../didAuth.js'
+import { saveExchange } from '../transactionManager.js'
+import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
+import { problemDetailResponse } from '../lib/errors/problem-details.js'
+import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
 
@@ -25,7 +29,8 @@ export const createExchangeDidAuth = ({
     exchangeId: crypto.randomUUID(),
     variables: {
       ...data.variables,
-      challenge: crypto.randomUUID()
+      challenge: crypto.randomUUID(),
+      features: variablesFeaturesFromConfig(config)
     },
     expires:
       data.expires ??
@@ -62,7 +67,8 @@ export const getDIDAuthVPR = (exchange: App.ExchangeDetailBase) => {
       ]
     },
     challenge: exchange.variables.challenge,
-    domain: exchange.variables.exchangeHost
+    domain: exchange.variables.exchangeHost,
+    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES]
   }
 }
 
@@ -79,18 +85,39 @@ export const participateInDidAuthExchange = async ({
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
-  const didAuthVerified = await verifyDIDAuth({
+  const debug = exchange.variables.debug ?? config.defaultExchangeDebug
+  const didAuthResult = await verifyDIDAuth({
     presentation: data,
-    challenge: exchange.variables.challenge
+    challenge: exchange.variables.challenge,
+    debug
   })
 
-  if (!didAuthVerified) {
+  if (!didAuthResult.verified) {
     throw new HTTPException(401, {
-      message: 'Invalid DIDAuth or unsupported options.'
+      message: 'Invalid DIDAuth or unsupported options.',
+      cause: problemDetailResponse(
+        'Invalid DIDAuth or unsupported options.',
+        didAuthResult.problemDetails
+      )
     })
   }
 
-  const credentialTemplate = workflow?.credentialTemplates?.[0]
+  const updatedExchange: App.ExchangeDetailDidAuth = {
+    ...exchange,
+    state: 'complete',
+    variables: {
+      ...exchange.variables,
+      results: {
+        default: {
+          holder: data.holder,
+          ...(didAuthResult.compatLog
+            ? { compatLog: didAuthResult.compatLog }
+            : {})
+        }
+      }
+    }
+  }
+  await saveExchange(updatedExchange)
 
   return {
     redirectUrl: exchange.variables.redirectUrl ?? ''

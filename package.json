@@ -27,7 +27,7 @@
     "@digitalbazaar/ed25519-verification-key-2020": "^4.1.0",
     "@digitalbazaar/vc": "^7.0.0",
     "@digitalcredentials/security-document-loader": "^6.0.0",
-    "@digitalcredentials/verifier-core": "link:../verifier-core",
+    "@digitalcredentials/verifier-core": "github:skybridgeskills/dcc-verifier-core#main",
     "@hono/node-server": "^1.14.4",
     "@keyv/redis": "^4.4.0",
     "axios": "^1.7.7",

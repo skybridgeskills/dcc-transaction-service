@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Details } from '../Details'
+import { Details } from '../Details.js'
 
 /**
  * Optional timing breakdown panel.

@@ -4,7 +4,7 @@ import {
   PresentationCard,
   TimingPanel,
   anyTiming
-} from './verification'
+} from './verification/index.js'
 
 /**
  * Top-level orchestrator for the verifier-core 2.x verification UI.

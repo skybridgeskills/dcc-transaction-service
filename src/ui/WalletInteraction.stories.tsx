@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { WalletInteraction } from './WalletInteraction'
+import { WalletInteraction } from './WalletInteraction.js'
 
 const mockProtocols = {
   vcapi: 'https://example.com/workflows/verify/exchanges/test-123',

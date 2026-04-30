@@ -1,8 +1,8 @@
-export { PresentationCard } from './PresentationCard'
-export { CredentialCard } from './CredentialCard'
-export { PhaseRow } from './PhaseRow'
-export { FailureDetailList } from './FailureDetailList'
-export { TimingPanel } from './TimingPanel'
+export { PresentationCard } from './PresentationCard.js'
+export { CredentialCard } from './CredentialCard.js'
+export { PhaseRow } from './PhaseRow.js'
+export { FailureDetailList } from './FailureDetailList.js'
+export { TimingPanel } from './TimingPanel.js'
 export {
   anyTiming,
   failureDetail,
@@ -10,4 +10,4 @@ export {
   phaseOrder,
   type PhaseKey,
   type SuitesByPhase
-} from './helpers'
+} from './helpers.js'

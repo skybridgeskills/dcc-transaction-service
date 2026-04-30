@@ -4,7 +4,7 @@ import {
   type ExchangeState,
   type ExchangeStatusResponse,
   HttpNotOkResponseError
-} from '../lib/services/exchange-client/exchange-client'
+} from '../lib/services/exchange-client/exchange-client.js'
 
 export interface ExchangeStatusResult {
   state: ExchangeState | null

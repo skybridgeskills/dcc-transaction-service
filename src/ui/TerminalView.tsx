@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { VerificationResults } from './VerificationResults'
-import { Details } from './Details'
+import { VerificationResults } from './VerificationResults.js'
+import { Details } from './Details.js'
 import type {
   ExchangeState,
   ExchangeStatusVariables

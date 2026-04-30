@@ -1,5 +1,5 @@
 import { parseArgs as nodeParseArgs } from 'node:util'
-import { HttpExchangeClient } from '../lib/services/exchange-client/http-exchange-client'
+import { HttpExchangeClient } from '../lib/services/exchange-client/http-exchange-client.js'
 import { exec } from 'child_process'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'

@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { HttpNotOkResponseError } from './exchange-client'
-import { HttpExchangeClient } from './http-exchange-client'
+import { HttpNotOkResponseError } from './exchange-client.js'
+import { HttpExchangeClient } from './http-exchange-client.js'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)

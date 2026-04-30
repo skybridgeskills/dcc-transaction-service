@@ -3,9 +3,9 @@
  */
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useExchangeStatus } from './useExchangeStatus'
-import { HttpNotOkResponseError } from '../lib/services/exchange-client/exchange-client'
-import type { ExchangeClient } from '../lib/services/exchange-client/exchange-client'
+import { useExchangeStatus } from './useExchangeStatus.js'
+import { HttpNotOkResponseError } from '../lib/services/exchange-client/exchange-client.js'
+import type { ExchangeClient } from '../lib/services/exchange-client/exchange-client.js'
 
 describe('useExchangeStatus', () => {
   beforeEach(() => {

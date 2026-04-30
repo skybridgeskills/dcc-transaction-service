@@ -22,7 +22,11 @@ export default [
   {
     plugins: { 'import-x': importX },
     rules: {
-      'import-x/extensions': ['error', 'ignorePackages']
+      'import-x/extensions': ['error', 'ignorePackages'],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }
+      ]
     }
   },
   eslintConfigPrettier

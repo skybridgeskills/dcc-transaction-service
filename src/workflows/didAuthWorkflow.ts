@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
+import { vcApiExchangeCreateSchema } from '../schema.js'
 import { HTTPException } from 'hono/http-exception'
 import { verifyDIDAuth } from '../didAuth.js'
 import { saveExchange } from '../transactionManager.js'
@@ -9,7 +9,7 @@ import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
 
-export const validateExchangeDidAuth = (data: any) => {
+export const validateExchangeDidAuth = (data: unknown) => {
   return exchangeCreateSchemaDidAuth.parse(data)
 }
 
@@ -75,10 +75,10 @@ export const getDIDAuthVPR = (exchange: App.ExchangeDetailBase) => {
 export const participateInDidAuthExchange = async ({
   data,
   exchange,
-  workflow,
+  workflow: _workflow,
   config
 }: {
-  data: any
+  data: Record<string, unknown>
   exchange: App.ExchangeDetailDidAuth
   workflow: App.Workflow
   config: App.Config
@@ -109,7 +109,7 @@ export const participateInDidAuthExchange = async ({
       ...exchange.variables,
       results: {
         default: {
-          holder: data.holder,
+          holder: data.holder as string,
           ...(didAuthResult.compatLog
             ? { compatLog: didAuthResult.compatLog }
             : {})

@@ -226,7 +226,7 @@ describe('sweepIfTimedOut', () => {
 
     // The synthetic timeout CheckResult is appended to
     // presentationResults (pipeline-level failure spans all VCs).
-    const lastCheck = result.variables.results?.default.presentationResults.at(-1)!
+    const lastCheck = result.variables.results!.default.presentationResults.at(-1)!
     expect(lastCheck.id).toBe('pipeline.timeout')
     expect(lastCheck.outcome.status).toBe('failure')
     if (lastCheck.outcome.status === 'failure') {

@@ -1,5 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react'
-import { wallets, getWallet } from '../lib/wallets/index.js'
+import { getWallet } from '../lib/wallets/index.js'
 import type { ProtocolId } from '../lib/wallets/wallet-schema.js'
 
 interface WalletInteractionProps {

@@ -135,6 +135,6 @@ const readVerifyTaskAttemptId = (
  * This is meant for testing failures. It deletes the keyv store entirely.
  */
 export const clearKeyv = () => {
-  // @ts-ignore
+  // @ts-expect-error intentionally clearing for tests
   keyv = undefined
 }

@@ -1,4 +1,4 @@
-import { expect, test, describe, vi, beforeAll, afterAll } from 'vitest'
+import { expect, test, describe, beforeAll } from 'vitest'
 import { app } from './hono.js'
 import { prefersHtml } from './interactions.js'
 import { signExchangeToken } from './lib/server/exchangeToken.js'

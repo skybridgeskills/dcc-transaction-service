@@ -71,7 +71,7 @@ const handleErrors = (err: unknown, c: Context) => {
 
 // Validation
 
-const validateJson = (value: JSONObject, c: Context) => {
+const validateJson = (value: JSONObject, _c: Context) => {
   // pass-through validator, will get failures if the JSON is invalid
   return value
 }

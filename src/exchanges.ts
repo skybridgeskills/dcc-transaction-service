@@ -146,7 +146,7 @@ export const createExchangeVcapi = async ({
 }
 
 const participateWithEmptyBody = async ({
-  config,
+  config: _config,
   workflow,
   exchange
 }: {
@@ -179,7 +179,7 @@ export const participateInExchange = async ({
   workflow,
   exchange
 }: {
-  data: any
+  data: Record<string, unknown> | null | undefined
   config: App.Config
   workflow: App.Workflow
   exchange: App.ExchangeDetailBase

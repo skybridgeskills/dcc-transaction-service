@@ -180,7 +180,7 @@ declare global {
         vc: string
         results?: {
           default: {
-            verifiableCredential: any[]
+            verifiableCredential: unknown[]
             /** Compatibility-fix log entries; populated only when `variables.debug === true`. */
             compatLog?: CheckResult[]
           }
@@ -210,7 +210,7 @@ declare global {
       title: string
       detail: string
       status?: number
-      [key: string]: any
+      [key: string]: unknown
     }
 
     /**
@@ -228,7 +228,7 @@ declare global {
       id: string
       /** Discriminated outcome */
       outcome:
-        | { status: 'success'; message: string }
+        | { status: 'success'; message: string; payload?: unknown }
         | { status: 'failure'; problems: ProblemDetail[] }
         | { status: 'skipped'; reason: string }
       /** Whether this check failure is fatal to overall verification */
@@ -254,7 +254,7 @@ declare global {
       /** True if no check returned a failure outcome */
       verified: boolean
       /** The parsed credential that was verified */
-      verifiableCredential: any
+      verifiableCredential: unknown
       /**
        * Flat array of results from all suites for this credential. In
        * non-verbose mode (the default since verifier-core 2.0.0), this
@@ -299,7 +299,7 @@ declare global {
       error?: {
         name: string
         message: string
-        stackTrace?: any
+        stackTrace?: unknown
       }
       foundInRegistries?: string[]
       registriesNotLoaded?: string[]
@@ -321,7 +321,7 @@ declare global {
       credentialResults: CredentialVerificationResult[]
 
       /** Credentials that matched the claims requirements */
-      matchedCredentials: any[]
+      matchedCredentials: unknown[]
 
       /**
        * Presentation-level per-suite rollup; per-credential rollups live
@@ -346,7 +346,7 @@ declare global {
 
       /** Optional claims validation details */
       claimsValidation?: {
-        extractedClaims: Record<string, any>
+        extractedClaims: Record<string, unknown>
         requiredClaims: DcqlClaim[]
         matched: boolean
         missingClaims?: string[]
@@ -427,7 +427,7 @@ declare global {
     interface WorkflowStep {
       createChallenge: boolean
       verifiablePresentationRequest: {
-        query: Array<{ type: string } & Record<string, any>> // Simplistic for now
+        query: Array<{ type: string } & Record<string, unknown>>
       }
     }
 

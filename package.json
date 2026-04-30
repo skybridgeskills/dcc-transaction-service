@@ -4,7 +4,7 @@
   "version": "0.3.1",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && pnpm build:ui",
     "start": "node -r dotenv/config dist/server.js",
     "dev": "pnpm build:ui && nodemon -r dotenv/config --exec tsx src/server.ts",
     "dev-noenv": "nodemon --exec tsx src/server.ts",

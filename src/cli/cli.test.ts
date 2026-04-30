@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { parseArgs, loadProfile, mergeVerifierOptions } from './cli'
+import { parseArgs, loadProfile, mergeVerifierOptions } from './cli.js'
 
 describe('parseArgs', () => {
   test('parses workflowId and profileName', () => {

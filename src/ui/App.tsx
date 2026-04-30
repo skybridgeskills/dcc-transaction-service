@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { CSSProperties } from 'react'
-import { wallets } from '../lib/wallets/index'
-import { WalletInteraction } from './WalletInteraction'
-import { TerminalView } from './TerminalView'
-import { useExchangeStatus } from './useExchangeStatus'
-import type { ExchangeClient } from '../lib/services/exchange-client/exchange-client'
-import { HttpExchangeClient } from '../lib/services/exchange-client/http-exchange-client'
+import { wallets } from '../lib/wallets/index.js'
+import { WalletInteraction } from './WalletInteraction.js'
+import { TerminalView } from './TerminalView.js'
+import { useExchangeStatus } from './useExchangeStatus.js'
+import type { ExchangeClient } from '../lib/services/exchange-client/exchange-client.js'
+import { HttpExchangeClient } from '../lib/services/exchange-client/http-exchange-client.js'
 
 interface AppProps {
   exchangeClient?: ExchangeClient

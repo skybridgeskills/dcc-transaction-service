@@ -1,6 +1,6 @@
 import { QRCodeSVG } from 'qrcode.react'
-import { wallets, getWallet } from '../lib/wallets/index'
-import type { ProtocolId } from '../lib/wallets/wallet-schema'
+import { wallets, getWallet } from '../lib/wallets/index.js'
+import type { ProtocolId } from '../lib/wallets/wallet-schema.js'
 
 interface WalletInteractionProps {
   selectedId: string

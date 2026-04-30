@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { FakeExchangeClient } from './fake-exchange-client'
+import { FakeExchangeClient } from './fake-exchange-client.js'
 
 describe('FakeExchangeClient', () => {
   const mockProtocols = {

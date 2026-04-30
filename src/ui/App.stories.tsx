@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { App } from './App'
-import { FakeExchangeClient } from '../lib/services/exchange-client/fake-exchange-client'
+import { App } from './App.js'
+import { FakeExchangeClient } from '../lib/services/exchange-client/fake-exchange-client.js'
 import {
   createMockVerifierCoreResult,
   createMockCredential

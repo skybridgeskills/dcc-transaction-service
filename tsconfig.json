@@ -6,11 +6,8 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": false,
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
     "resolveJsonModule": true
   },
   "include": ["src/**/*"],

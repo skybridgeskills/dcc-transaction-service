@@ -3,7 +3,7 @@ import {
   type ExchangeProtocols,
   type ExchangeStatusResponse,
   HttpNotOkResponseError
-} from './exchange-client'
+} from './exchange-client.js'
 
 export class HttpExchangeClient implements ExchangeClient {
   private readonly baseUrl: string

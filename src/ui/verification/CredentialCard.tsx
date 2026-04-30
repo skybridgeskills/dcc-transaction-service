@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { PhaseRow } from './PhaseRow'
-import { groupByPhase, isPhaseAllSkipped, phaseOrder, type PhaseKey } from './helpers'
+import { PhaseRow } from './PhaseRow.js'
+import { groupByPhase, isPhaseAllSkipped, phaseOrder, type PhaseKey } from './helpers.js'
 
 /**
  * Renders one credential's verification breakdown.

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
-import { Details } from '../Details'
-import { FailureDetailList } from './FailureDetailList'
-import { failureDetail } from './helpers'
+import { Details } from '../Details.js'
+import { FailureDetailList } from './FailureDetailList.js'
+import { failureDetail } from './helpers.js'
 
 /**
  * One row per `SuiteSummary`. Status badge from `summary.status`;

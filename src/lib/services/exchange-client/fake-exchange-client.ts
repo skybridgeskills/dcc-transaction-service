@@ -4,7 +4,7 @@ import type {
   ExchangeState,
   ExchangeStatusResponse,
   ExchangeStatusVariables
-} from './exchange-client'
+} from './exchange-client.js'
 
 export interface FakeExchangeClientOptions {
   protocols: Record<string, string>

@@ -1,6 +1,8 @@
 import globals from 'globals'
 import pluginJs from '@eslint/js'
 import eslintConfigPrettier from 'eslint-config-prettier'
+import tseslint from 'typescript-eslint'
+import { importX } from 'eslint-plugin-import-x'
 
 export default [
   {
@@ -16,5 +18,12 @@ export default [
     languageOptions: { globals: globals.node }
   },
   pluginJs.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    plugins: { 'import-x': importX },
+    rules: {
+      'import-x/extensions': ['error', 'ignorePackages']
+    }
+  },
   eslintConfigPrettier
 ]

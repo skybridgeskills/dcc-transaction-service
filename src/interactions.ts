@@ -10,7 +10,7 @@ import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
  *
  * Returns true (HTML) when:
  *   - Accept includes text/html
- *   - Accept includes *​/* but does NOT include application/json
+ *   - Accept includes wildcard but does NOT include application/json
  * Returns false (JSON) otherwise, including when Accept is missing.
  */
 export const prefersHtml = (accept: string | undefined): boolean => {

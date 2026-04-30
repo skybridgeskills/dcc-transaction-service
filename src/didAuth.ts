@@ -1,4 +1,5 @@
-// @ts-nocheck // Digital Bazaar VC signing APIs are loosely typed
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck -- Digital Bazaar VC signing APIs are loosely typed
 import { signPresentation, createPresentation } from '@digitalbazaar/vc'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { securityLoader } from '@digitalcredentials/security-document-loader'

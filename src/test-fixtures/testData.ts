@@ -39,7 +39,8 @@ export const createMockExchange = (
   ...overrides
 })
 
-export const createMockCredential = (overrides: any = {}): any => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createMockCredential = (overrides: Record<string, unknown> = {}): any => ({
   '@context': ['https://www.w3.org/2018/credentials/v1'],
   type: ['VerifiableCredential', 'OpenBadgeCredential'],
   id: 'urn:uuid:test-credential-id',
@@ -70,8 +71,9 @@ export const createMockCredential = (overrides: any = {}): any => ({
 })
 
 export const createMockPresentation = (
-  credentials: any[] = [],
-  overrides: any = {}
+  credentials: unknown[] = [],
+  overrides: Record<string, unknown> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any => ({
   '@context': ['https://www.w3.org/2018/credentials/v1'],
   type: ['VerifiablePresentation'],
@@ -92,7 +94,7 @@ export const createMockPresentation = (
 export const createMockVerifierCoreResult = (
   presentationValid = true,
   credentialsValid = true,
-  overrides: any = {}
+  overrides: Record<string, unknown> = {}
 ): import('@digitalcredentials/verifier-core').PresentationVerificationResult => ({
   verified: presentationValid && credentialsValid,
   verifiablePresentation: createMockPresentation([
@@ -202,9 +204,9 @@ export const createMockVerifierCoreResult = (
               check: 'registry.issuer-registered',
               suite: 'registry',
               outcome: {
-                status: 'success',
+                status: 'success' as const,
                 message: 'Issuer found in DCC Sandbox Registry',
-                foundInRegistries: ['DCC Sandbox Registry']
+                payload: { foundInRegistries: ['DCC Sandbox Registry'] }
               }
             }
           ]
@@ -263,11 +265,13 @@ export const createMockVerifierCoreResult = (
   ...overrides
 })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const createMockExpiredCredential = (): any =>
   createMockCredential({
     expirationDate: '2020-01-01T00:00:00Z' // Expired in the past
   })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const createMockRevokedCredential = (): any =>
   createMockCredential({
     credentialStatus: {

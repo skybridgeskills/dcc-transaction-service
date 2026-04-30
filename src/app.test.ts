@@ -64,7 +64,7 @@ describe('api', function () {
       const response = await client.exchange.$post({
         json: testData
       })
-      const body = (await response.json()) as any
+      const body = (await response.json()) as Record<string, unknown>
       expect(response.headers.get('content-type')).toContain('json')
       expect(response.status).toBe(200)
 
@@ -76,13 +76,13 @@ describe('api', function () {
       const testData = getDataForExchangeSetupPost('default')
       const response = await client.exchange.$post({ json: testData })
       expect(response.headers.get('content-type')).toContain('json')
-      const body = (await response.json()) as any
+      const body = (await response.json()) as Record<string, unknown>
       expect(response.status).toBe(200)
 
       expect(body).toBeDefined()
       expect(body.length).toBe(testData.data.length)
 
-      const walletQuerys = body as App.DCCWalletQuery[]
+      const walletQuerys = body as unknown as App.DCCWalletQuery[]
       const walletQuery = walletQuerys.find((q) => q.retrievalId === 'someId')
       expect(walletQuery).toBeDefined()
       const url = walletQuery?.vprDeepLink ?? ''
@@ -94,8 +94,8 @@ describe('api', function () {
         body: JSON.stringify({}),
         headers: { 'Content-Type': 'application/json' }
       })
-      const initBody = (await initResponse.json()) as any
-      const challenge = initBody.verifiablePresentationRequest.challenge
+      const initBody = (await initResponse.json()) as Record<string, unknown>
+      const challenge = (initBody.verifiablePresentationRequest as Record<string, unknown>).challenge as string
       const didAuth = await getSignedDIDAuth(challenge)
 
       const exchangeResponse = await app.request(path, {
@@ -115,7 +115,7 @@ describe('api', function () {
     })
 
     test('returns error if missing exchangeHost', async function () {
-      const { exchangeHost, ...testData } = getDataForExchangeSetupPost('test')
+      const { exchangeHost: _exchangeHost, ...testData } = getDataForExchangeSetupPost('test')
       const response = await app.request('/exchange', {
         method: 'POST',
         body: JSON.stringify(testData),
@@ -133,7 +133,7 @@ describe('api', function () {
     })
 
     test('returns error if missing tenantName', async function () {
-      const { tenantName, ...testData } = getDataForExchangeSetupPost('test')
+      const { tenantName: _tenantName, ...testData } = getDataForExchangeSetupPost('test')
       const response = await app.request('/exchange', {
         method: 'POST',
         body: JSON.stringify(testData),
@@ -152,7 +152,7 @@ describe('api', function () {
 
     test('returns error if missing vc or subjectData', async function () {
       const testData = getDataForExchangeSetupPost('test')
-      // @ts-ignore
+      // @ts-expect-error testing invalid data
       delete testData.data[0].vc
       const response = await app.request('/exchange', {
         method: 'POST',
@@ -172,7 +172,7 @@ describe('api', function () {
 
     test('returns error if missing batchId with subjectData', async function () {
       const testData = getDataForExchangeSetupPost('test') as App.ExchangeBatch
-      // @ts-ignore
+      // @ts-expect-error testing invalid data
       delete testData.data[0].vc
       testData.data[0].subjectData = { hello: 'trouble' }
       const response = await app.request('/exchange', {
@@ -193,7 +193,7 @@ describe('api', function () {
 
     test('returns error if missing retrievalId', async function () {
       const testData = getDataForExchangeSetupPost('test')
-      // @ts-ignore
+      // @ts-expect-error testing invalid data
       delete testData.data[0].retrievalId
       const response = await app.request('/exchange', {
         method: 'POST',
@@ -286,8 +286,7 @@ describe('api', function () {
 
     test('returns 503 if internal error', async function () {
       // we delete the keyv store to force an error
-      const spy = vi
-        .spyOn(transactionManager, 'saveExchange')
+      vi.spyOn(transactionManager, 'saveExchange')
         .mockImplementation(async () => {
           throw new HTTPException(500, { message: 'Failed to save exchange.' })
         })
@@ -699,7 +698,7 @@ const doSetupWithDirectDeepLink = async (app: AppType) => {
     body: JSON.stringify({}),
     headers: { 'Content-Type': 'application/json' }
   })
-  const initBody = (await initResponse.json()) as any
-  const challenge = initBody.verifiablePresentationRequest.challenge as string
+  const initBody = (await initResponse.json()) as Record<string, unknown>
+  const challenge = (initBody.verifiablePresentationRequest as Record<string, unknown>).challenge as string
   return { path, challenge }
 }

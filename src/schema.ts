@@ -11,7 +11,7 @@ export const credentialDataSchema = z
             // Sets template to be a string
             try {
               return JSON.stringify(vcData)
-            } catch (error) {
+            } catch {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message:
@@ -44,7 +44,7 @@ export const optionalFutureDate = (d: string | undefined) => {
   try {
     const date = new Date(d)
     return date < new Date()
-  } catch (error) {
+  } catch {
     return false
   }
 }

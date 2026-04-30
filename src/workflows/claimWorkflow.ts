@@ -31,7 +31,7 @@ export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
             // Rudimentary check to ensure VC template is valid
             const docType = arrayOf(data.type) as string[]
             return docType.includes('VerifiableCredential')
-          } catch (error) {
+          } catch {
             return false
           }
         },
@@ -40,7 +40,7 @@ export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
   })
 })
 
-export const validateExchangeClaim = (data: any) => {
+export const validateExchangeClaim = (data: unknown) => {
   return exchangeCreateSchemaClaim.parse(data)
 }
 
@@ -75,7 +75,7 @@ export const participateInClaimExchange = async ({
   workflow,
   config
 }: {
-  data: any
+  data: Record<string, unknown>
   exchange: App.ExchangeDetailClaim
   workflow: App.Workflow
   config: App.Config
@@ -116,8 +116,8 @@ export const participateInClaimExchange = async ({
       credentialTemplate.template
     )(exchange.variables)
     credential = JSON.parse(builtCredential)
-    credential.credentialSubject.id = data.holder
-  } catch (error) {
+    credential.credentialSubject.id = data.holder as string
+  } catch {
     throw new HTTPException(400, {
       message: 'Failed to build credential from template'
     })

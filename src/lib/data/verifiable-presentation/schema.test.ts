@@ -88,7 +88,7 @@ describe('verifiablePresentationSchema', () => {
   })
 
   test('VP without holder parses (optional per spec)', () => {
-    const { holder: _, ...vpWithout } = baseVP
+    const { holder: _holder, ...vpWithout } = baseVP
     const result = verifiablePresentationSchema.parse(vpWithout)
     expect(result.holder).toBeUndefined()
   })
@@ -100,7 +100,7 @@ describe('verifiablePresentationSchema', () => {
   })
 
   test('VP without verifiableCredential parses (optional per W3C VCDM)', () => {
-    const { verifiableCredential: _, ...vpWithout } = baseVP
+    const { verifiableCredential: _vc, ...vpWithout } = baseVP
     const result = verifiablePresentationSchema.parse(vpWithout)
     expect(result.verifiableCredential).toBeUndefined()
   })

@@ -276,6 +276,7 @@ describe('applyVerificationResults', function () {
         }
       ],
       summary: [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       verifiablePresentation: {} as any
     }
 
@@ -284,8 +285,10 @@ describe('applyVerificationResults', function () {
     expect(
       updatedExchange.variables.results!.default.matchedCredentials
     ).toHaveLength(1)
+
     expect(
-      updatedExchange.variables.results!.default.matchedCredentials[0]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (updatedExchange.variables.results!.default.matchedCredentials[0] as any)
         .credentialSubject.achievement.id
     ).toBe('urn:uuid:achievement-1')
   })
@@ -704,6 +707,7 @@ describe('applyVerificationResults - debug + compatLog', function () {
 
   const singleProofResult = (): import('@digitalcredentials/verifier-core').PresentationVerificationResult => ({
     verified: true,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     verifiablePresentation: {} as any,
     presentationResults: [
       {

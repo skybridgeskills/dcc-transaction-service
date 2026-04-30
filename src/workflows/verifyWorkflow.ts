@@ -10,7 +10,7 @@ import { newVerifyTask } from '../lib/verify-task/verify-task.js'
 import { enqueueVerifyTask } from '../lib/verify-task/enqueue-verify-task.js'
 import {
   named
-  // @ts-ignore no type definitions for this package
+  // @ts-expect-error no type definitions for this package
 } from '@digitalbazaar/credentials-context'
 import { assertValidVerifiablePresentationStructure } from '../lib/data/verifiable-presentation/assert.js'
 import { parseCredential } from '../lib/data/verifiable-credential/schema.js'
@@ -52,14 +52,14 @@ export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
   })
 })
 
-export const validateExchangeVerify = (data: any) => {
+export const validateExchangeVerify = (data: unknown) => {
   return exchangeCreateSchemaVerify.parse(data)
 }
 
 export const createExchangeVerify = ({
   data,
   config,
-  workflow
+  workflow: _workflow
 }: {
   data: z.infer<typeof exchangeCreateSchemaVerify>
   config: App.Config
@@ -91,8 +91,8 @@ export const createExchangeVerify = ({
 const getCredentialQuery = ({
   vprContext,
   vprCredentialType,
-  trustedIssuers,
-  vprClaims
+  trustedIssuers: _trustedIssuers,
+  vprClaims: _vprClaims
 }: {
   vprContext: string[]
   vprCredentialType: string[]
@@ -188,20 +188,20 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
  * Extract claim values from a credential using path notation
  */
 const extractCredentialClaims = (
-  credential: any,
+  credential: Record<string, unknown>,
   claims: App.DcqlClaim[]
-): Record<string, any> => {
-  const extractedClaims: Record<string, any> = {}
+): Record<string, unknown> => {
+  const extractedClaims: Record<string, unknown> = {}
 
   for (const claim of claims) {
     if (!claim.path || claim.path.length === 0) continue
 
-    let value = credential
+    let value: unknown = credential
     let pathExists = true
 
     for (const pathSegment of claim.path) {
       if (value && typeof value === 'object' && pathSegment in value) {
-        value = value[pathSegment]
+        value = (value as Record<string, unknown>)[pathSegment]
       } else {
         pathExists = false
         break
@@ -221,7 +221,7 @@ const extractCredentialClaims = (
  * Match extracted claims against VPR requirements
  */
 const matchClaimsAgainstRequirements = (
-  extractedClaims: Record<string, any>,
+  extractedClaims: Record<string, unknown>,
   requiredClaims: App.DcqlClaim[]
 ): { matched: boolean; missingClaims?: string[] } => {
   const missingClaims: string[] = []
@@ -296,12 +296,15 @@ const ensureCredentialResultIds = (
  * to determine if the issuer is in any trusted registries.
  */
 const validateTrustedIssuers = (
-  credential: any,
+  credential: Record<string, unknown>,
   trustedIssuers: string[],
   trustedRegistries: string[],
   credentialResult: App.CredentialVerificationResult
 ): { issuerFound: boolean; registryMatch: boolean } => {
-  const issuer = credential.issuer?.id || credential.issuer
+  const rawIssuer = credential.issuer
+  const issuer = (typeof rawIssuer === 'object' && rawIssuer !== null && 'id' in rawIssuer
+    ? (rawIssuer as Record<string, unknown>).id
+    : rawIssuer) as string
   const issuerFound = trustedIssuers.includes(issuer)
 
   // Find all registry suite checks in the results array
@@ -418,16 +421,16 @@ export const applyVerificationResults = async ({
 
   // Extract and validate claims if specified
   let claimsValidation: App.VerificationResult['claimsValidation'] | undefined
-  let matchedCredentials: any[] = []
+  let matchedCredentials: unknown[] = []
 
   if (exchange.variables.vprClaims.length > 0) {
-    const allExtractedClaims: Record<string, any> = {}
-    const validCredentials: any[] = []
+    const allExtractedClaims: Record<string, unknown> = {}
+    const validCredentials: unknown[] = []
 
     for (const credentialResult of credentialResults) {
       if (credentialResult.verifiableCredential) {
         const extractedClaims = extractCredentialClaims(
-          credentialResult.verifiableCredential,
+          credentialResult.verifiableCredential as Record<string, unknown>,
           exchange.variables.vprClaims
         )
         const claimsMatch = matchClaimsAgainstRequirements(
@@ -472,7 +475,7 @@ export const applyVerificationResults = async ({
     for (const credentialResult of credentialResults) {
       if (credentialResult.verifiableCredential) {
         const validation = validateTrustedIssuers(
-          credentialResult.verifiableCredential,
+          credentialResult.verifiableCredential as Record<string, unknown>,
           exchange.variables.trustedIssuers,
           exchange.variables.trustedRegistries || [],
           credentialResult
@@ -538,7 +541,7 @@ export const applyVerificationResults = async ({
 /**
  * Build verification response body
  */
-const buildVerificationResponse = (exchange: App.ExchangeDetailVerify): any => {
+const buildVerificationResponse = (exchange: App.ExchangeDetailVerify): unknown => {
   if (exchange.variables.redirectUrl) {
     return { redirectUrl: exchange.variables.redirectUrl }
   }
@@ -564,7 +567,7 @@ export const preparePresentationForVerify = ({
   exchange,
   config
 }: {
-  data: any
+  data: Record<string, unknown>
   exchange: App.ExchangeDetailVerify
   config: App.Config
 }): {
@@ -665,10 +668,10 @@ export const preparePresentationForVerify = ({
 export const participateInVerifyExchange = async ({
   data,
   exchange,
-  workflow,
+  workflow: _workflow,
   config
 }: {
-  data: any
+  data: Record<string, unknown>
   exchange: App.ExchangeDetailVerify
   workflow: App.Workflow
   config: App.Config

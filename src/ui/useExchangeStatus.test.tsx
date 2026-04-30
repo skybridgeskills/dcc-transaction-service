@@ -90,7 +90,7 @@ describe('useExchangeStatus', () => {
       fetchExchangeStatus
     }
 
-    const { result } = renderHook(() =>
+    renderHook(() =>
       useExchangeStatus('https://example.com/exchange/123', client)
     )
 

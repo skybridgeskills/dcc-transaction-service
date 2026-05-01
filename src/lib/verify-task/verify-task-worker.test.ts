@@ -181,6 +181,83 @@ describe('mergeOpenBadgesResultsAt', () => {
       obSummary
     ])
   })
+
+  test('deduplicates suite summaries by id (existing wins)', () => {
+    const merged = buildBaseResult([true])
+    const incomingDupProof: App.SuiteSummary = {
+      ...proofSummary,
+      message: 'duplicate id — must not duplicate entry'
+    }
+    const incomingDupOb: App.SuiteSummary = {
+      ...obSummary,
+      message: 'second openbadges summary with same id — ignored'
+    }
+    const next = mergeOpenBadgesResultsAt(merged, 0, {
+      verified: true,
+      results: [checkSuccess('openbadges', 'x')],
+      summary: [obSummary, incomingDupOb, incomingDupProof]
+    })
+
+    expect(next.credentialResults[0].summary).toEqual([proofSummary, obSummary])
+  })
+
+  test('registry checks from OB pass replace prior registry checks', () => {
+    const merged = buildBaseResult([true])
+    const oldReg: App.CheckResult = {
+      id: 'trust.registry.did-resolver-test',
+      outcome: { status: 'success', message: 'prior sync result' }
+    }
+    merged.credentialResults[0].results.push(oldReg)
+
+    const newReg: App.CheckResult = {
+      id: 'trust.registry.did-resolver-test',
+      outcome: {
+        status: 'failure',
+        problems: [{ type: 'urn:test', title: 'registry', detail: 'OB pass result' }]
+      },
+      fatal: true
+    }
+    const next = mergeOpenBadgesResultsAt(merged, 0, {
+      verified: false,
+      results: [newReg],
+      summary: [{ ...obSummary, status: 'failure', verified: false }]
+    })
+
+    const registryChecks = next.credentialResults[0].results.filter((r) =>
+      r.id.startsWith('trust.registry.')
+    )
+    expect(registryChecks).toHaveLength(1)
+    expect(registryChecks[0]).toBe(newReg)
+    expect(next.credentialResults[0].results.filter((r) => r.id === newReg.id)).toHaveLength(1)
+  })
+
+  test('deduplicates non-registry checks by id (existing wins)', () => {
+    const merged = buildBaseResult([true])
+    const existingOb = checkSuccess('openbadges', 'openbadges.same-id-merge')
+    merged.credentialResults[0].results.push(existingOb)
+
+    const fromObSameId: App.CheckResult = {
+      ...existingOb,
+      outcome: {
+        status: 'failure',
+        problems: [{ type: 'urn:test', title: 'should lose', detail: 'from OB pass' }]
+      },
+      fatal: true
+    }
+    const next = mergeOpenBadgesResultsAt(merged, 0, {
+      verified: true,
+      results: [fromObSameId],
+      summary: [obSummary]
+    })
+
+    expect(
+      next.credentialResults[0].results.filter((r) => r.id === existingOb.id)
+    ).toHaveLength(1)
+    expect(next.credentialResults[0].results.find((r) => r.id === existingOb.id)).toBe(
+      existingOb
+    )
+    expect(next.credentialResults[0].verified).toBe(true)
+  })
 })
 
 // ----- processVerifyTask (worker, with injected deps) ------------------

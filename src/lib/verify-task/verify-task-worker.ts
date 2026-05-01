@@ -149,6 +149,43 @@ export const processVerifyTask = async (
 
 // ----- helpers (pure unless noted) ----------------------------------------
 
+/** Dedupe suite summaries by `id`; existing order wins; incoming skips ids already seen (including within `incoming`). */
+const mergeSummaries = (
+  existing: readonly App.SuiteSummary[],
+  incoming: readonly App.SuiteSummary[]
+): App.SuiteSummary[] => {
+  const seen = new Set(existing.map((s) => s.id))
+  const appended: App.SuiteSummary[] = []
+  for (const s of incoming) {
+    if (seen.has(s.id)) continue
+    seen.add(s.id)
+    appended.push(s)
+  }
+  return [...existing, ...appended]
+}
+
+const isRegistryCheck = (r: App.CheckResult): boolean =>
+  r.id.startsWith('trust.registry.')
+
+/**
+ * Merge prior credential checks with an OB/async pass:
+ * registry checks (`trust.registry.*`) from `incoming` replace any registry checks
+ * in `existing`; other checks dedupe by `id` with `existing` taking precedence.
+ */
+const mergeResults = (
+  existing: readonly App.CheckResult[],
+  incoming: readonly App.CheckResult[]
+): App.CheckResult[] => {
+  const existingNonRegistry = existing.filter((r) => !isRegistryCheck(r))
+  const incomingRegistry = incoming.filter((r) => isRegistryCheck(r))
+  const incomingNonRegistry = incoming.filter((r) => !isRegistryCheck(r))
+
+  const keptIds = new Set(existingNonRegistry.map((r) => r.id))
+  const appendedNonRegistry = incomingNonRegistry.filter((r) => !keptIds.has(r.id))
+
+  return [...existingNonRegistry, ...incomingRegistry, ...appendedNonRegistry]
+}
+
 const commitFailure = async (
   exchange: App.ExchangeDetailVerify,
   capturedAttemptId: string,
@@ -184,22 +221,18 @@ export const withVerifyTask = (
 
 /**
  * Replace `credentialResults[index]` in `merged` with a new entry that
- * unions the prior default-suite results with `obResult.results`,
- * concatenates the per-suite `summary[]` arrays, recomputes the
- * per-credential `verified` flag (logical AND), and recomputes the
- * top-level `verified` flag.
+ * merges the prior credential checks with `obResult.results`,
+ * merges the per-suite `summary[]` (deduped by suite `id`; existing first),
+ * recomputes the per-credential `verified` flag (logical AND), and
+ * recomputes the top-level `verified` flag.
+ *
+ * {@link mergeResults} applies to `results`: registry checks (`trust.registry.*`)
+ * from the OB pass replace earlier registry checks; other checks dedupe by
+ * {@link mergeSummaries} merges summaries without duplicate suite `id`s (existing wins;
+ * repeats in `incoming` are skipped).
  *
  * Pure: returns a new {@link App.VerificationResult}; does not mutate
  * any input.
- *
- * **Why concatenation is safe for `summary[]`** — the sync pass and
- * the async OB pass operate on disjoint suite sets (the OB pass is
- * specifically the suites returned by `openbadgesSuitesFor`, which
- * the sync defaults do not include). verifier-core never returns a
- * half-run suite, so two `SuiteSummary` entries for the same `(phase,
- * suite)` cannot appear across passes. This is a load-bearing
- * invariant of the two-pass workflow; revisit this helper if it ever
- * changes.
  *
  * `claimsValidation`, `issuerValidation`, and `matchedCredentials` are
  * untouched — the OB suites do not contribute claims-matching or
@@ -242,8 +275,8 @@ export const mergeOpenBadgesResultsAt = (
   const updatedCr: App.CredentialVerificationResult = {
     ...prev,
     verified: prev.verified && obResult.verified,
-    results: [...prev.results, ...obAppResults],
-    summary: [...prev.summary, ...obResult.summary]
+    results: mergeResults(prev.results, obAppResults),
+    summary: mergeSummaries(prev.summary, obResult.summary)
   }
 
   const credentialResults = merged.credentialResults.map((cr, i) =>

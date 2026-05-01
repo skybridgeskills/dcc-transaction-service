@@ -5,8 +5,8 @@ import type { CSSProperties } from 'react'
  *
  * Renders the overall verified/not-verified badge and a "X of Y
  * verified" line driven by `result.credentialResults`. Per-suite
- * VP-level chips read from `result.summary` (still optional during
- * the verifier-core 2.x migration).
+ * VP-level chips read from `result.summary` (presentation envelope
+ * verification, distinct from per-credential checks).
  */
 export function PresentationCard({
   result
@@ -40,6 +40,7 @@ export function PresentationCard({
       </p>
       {result.summary && result.summary.length > 0 ? (
         <div style={chipRow} data-testid="presentation-suite-chips">
+          <p style={chipRowLabel}>Presentation envelope checks:</p>
           {result.summary.map((s) => (
             <span key={s.id} style={chipStyle(s.status)}>
               {s.suite}: {s.message}
@@ -69,6 +70,13 @@ const chipRow: CSSProperties = {
   gap: '6px',
   marginTop: '12px',
   justifyContent: 'center'
+}
+
+const chipRowLabel: CSSProperties = {
+  width: '100%',
+  margin: '8px 0 4px',
+  fontSize: '0.75rem',
+  color: '#6b7280'
 }
 
 const chipStyle = (status: App.SuiteSummary['status']): CSSProperties => ({

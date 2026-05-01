@@ -102,8 +102,7 @@ const titleStyle: CSSProperties = {
 const phaseHeaderStyle: CSSProperties = {
   margin: '12px 0 4px',
   fontSize: '0.75rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  fontWeight: 500,
   color: '#6b7280'
 }
 

@@ -9,6 +9,15 @@ import {
   participateInExchange
 } from './exchanges.js'
 import {
+  buildCredentialOffer,
+  buildIssuerMetadata,
+  buildOid4vciAsMetadata,
+  ensurePreAuthorizedCode,
+  handleCredentialRequest,
+  handleNonceRequest,
+  handleTokenRequest
+} from './oid4vci/index.js'
+import {
   authenticateTenantMiddleware,
   authenticateExchangeOrTenantMiddleware
 } from './auth.js'
@@ -20,7 +29,7 @@ import z from 'zod'
 import { JSONObject } from 'hono/utils/types'
 import { getWorkflow } from './workflows.js'
 import { getConfig } from './config.js'
-import { getExchangeData } from './transactionManager.js'
+import { getExchangeData, saveExchange } from './transactionManager.js'
 import { resolveInteraction } from './interactions.js'
 import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
 import { setCookie } from 'hono/cookie'
@@ -112,7 +121,20 @@ const routes = {
   exchangeCreate: '/workflows/:workflowId/exchanges',
   exchangeDetail: '/workflows/:workflowId/exchanges/:exchangeId',
   protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols',
-  interaction: '/interactions/:exchangeId'
+  interaction: '/interactions/:exchangeId',
+  // OID4VCI 1.0 Pre-Authorized Code Flow (per-exchange scope).
+  oid4vciCredentialOffer:
+    '/workflows/:workflowId/exchanges/:exchangeId/openid/credential-offer',
+  oid4vciToken: '/workflows/:workflowId/exchanges/:exchangeId/openid/token',
+  oid4vciNonce: '/workflows/:workflowId/exchanges/:exchangeId/openid/nonce',
+  oid4vciCredential:
+    '/workflows/:workflowId/exchanges/:exchangeId/openid/credential',
+  // RFC 8615 path-suffix well-known URLs. The wallet computes these from
+  // the `credential_issuer` URL it gets in the credential offer.
+  oid4vciIssuerMetadata:
+    '/.well-known/openid-credential-issuer/workflows/:workflowId/exchanges/:exchangeId',
+  oid4vciAuthorizationServerMetadata:
+    '/.well-known/oauth-authorization-server/workflows/:workflowId/exchanges/:exchangeId'
 }
 
 export const app = new Hono()
@@ -307,6 +329,177 @@ export const app = new Hono()
       return c.json({ code: 404, message: 'Exchange not found' }, 404)
     }
     return c.json(result)
+  })
+
+  /*
+  OID4VCI 1.0 Credential Issuer Metadata (§12.2) — RFC 8615 path-suffix well-known.
+  Wallets construct this URL from the `credential_issuer` value in the credential
+  offer.
+  */
+  .get(routes.oid4vciIssuerMetadata, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'claim') {
+      throw new HTTPException(404, { message: 'Unknown exchange' })
+    }
+    return c.json(
+      buildIssuerMetadata(exchange as App.ExchangeDetailClaim, c.var.config)
+    )
+  })
+
+  /*
+  RFC 8414 OAuth Authorization Server Metadata, per-exchange. Distinct from the
+  global `/.well-known/oauth-authorization-server` which serves tenant-API
+  metadata. This advertises the per-exchange OID4VCI Token Endpoint and the
+  `urn:ietf:params:oauth:grant-type:pre-authorized_code` grant type.
+  */
+  .get(routes.oid4vciAuthorizationServerMetadata, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'claim') {
+      throw new HTTPException(404, { message: 'Unknown exchange' })
+    }
+    return c.json(buildOid4vciAsMetadata(exchange as App.ExchangeDetailClaim))
+  })
+
+  /*
+  OID4VCI 1.0 Credential Offer — fetched by the wallet from the URI embedded in the
+  `openid-credential-offer://?credential_offer_uri=...` deep link. The first GET lazily
+  mints + persists the pre-authorized code; subsequent GETs return the same offer until
+  the code is redeemed or the exchange expires.
+  */
+  .get(routes.oid4vciCredentialOffer, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'claim') {
+      throw new HTTPException(400, {
+        message: 'OID4VCI credential offer is only available for claim exchanges'
+      })
+    }
+    const claim = exchange as App.ExchangeDetailClaim
+    // Bound the pre-auth code TTL by the exchange's own expiry.
+    const exchangeRemainingSec = Math.max(
+      1,
+      Math.floor((new Date(claim.expires).getTime() - Date.now()) / 1000)
+    )
+    const codeTtlSec = Math.min(600, exchangeRemainingSec)
+    const ensured = ensurePreAuthorizedCode(claim, codeTtlSec)
+    if (ensured.isNew) {
+      await saveExchange(ensured.exchange)
+    }
+    return c.json(buildCredentialOffer(ensured.exchange))
+  })
+
+  /*
+  OID4VCI 1.0 Token Endpoint (§6) — pre-authorized code grant.
+  RFC 6749 form-urlencoded body. Spec-shaped error responses are
+  returned with 400 + `Cache-Control: no-store`.
+  */
+  .post(routes.oid4vciToken, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'claim') {
+      throw new HTTPException(400, {
+        message: 'OID4VCI token endpoint is only available for claim exchanges'
+      })
+    }
+    const body = await c.req.parseBody()
+    const result = handleTokenRequest(
+      body,
+      exchange as App.ExchangeDetailClaim
+    )
+    if (!result.ok) {
+      c.header('Cache-Control', 'no-store')
+      return c.json(result.body, result.status)
+    }
+    await saveExchange(result.exchange)
+    c.header('Cache-Control', 'no-store')
+    return c.json(result.response)
+  })
+
+  /*
+  OID4VCI 1.0 Nonce Endpoint (§7). Mints a single-use 5-minute
+  `c_nonce`. No auth required; replaces any prior nonce on the
+  exchange.
+  */
+  .post(routes.oid4vciNonce, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'claim') {
+      throw new HTTPException(400, {
+        message: 'OID4VCI nonce endpoint is only available for claim exchanges'
+      })
+    }
+    const result = handleNonceRequest(exchange as App.ExchangeDetailClaim)
+    await saveExchange(result.exchange)
+    c.header('Cache-Control', 'no-store')
+    return c.json(result.response)
+  })
+
+  /*
+  OID4VCI 1.0 Credential Endpoint (§8). Validates Bearer access token
+  and a `proofs.di_vp[0]` Verifiable Presentation that DIDAuth-binds
+  the holder DID to the previously-issued `c_nonce`, then defers to
+  the shared claim signing path. Returns the OID4VCI 1.0 §8.3 response.
+  */
+  .post(routes.oid4vciCredential, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'claim') {
+      throw new HTTPException(400, {
+        message:
+          'OID4VCI credential endpoint is only available for claim exchanges'
+      })
+    }
+
+    const auth = c.req.header('Authorization') ?? ''
+    const accessToken = auth.startsWith('Bearer ')
+      ? auth.slice('Bearer '.length).trim()
+      : undefined
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      c.header('Cache-Control', 'no-store')
+      return c.json(
+        {
+          error: 'invalid_credential_request',
+          error_description: 'Credential request body must be JSON.'
+        },
+        400
+      )
+    }
+
+    const result = await handleCredentialRequest({
+      accessToken,
+      body,
+      exchange: exchange as App.ExchangeDetailClaim,
+      workflow: getWorkflow('claim'),
+      config: c.var.config
+    })
+
+    if (!result.ok) {
+      c.header('Cache-Control', 'no-store')
+      return c.json(result.body, result.status)
+    }
+
+    // The shared signing helper already persisted state='complete' +
+    // verifiableCredential. No additional save needed.
+    c.header('Cache-Control', 'no-store')
+    return c.json(result.response)
   })
 
   // VCALM interaction URL — content-negotiated endpoint for browser and API access

@@ -18,6 +18,10 @@ import {
   validateExchangeVerify
 } from './workflows/verifyWorkflow.js'
 import { getWalletInteractionUrl } from './lib/wallets/index.js'
+import {
+  buildOpenIdCredentialOfferDeepLinkByReference,
+  credentialOfferUriForExchange
+} from './oid4vci/index.js'
 import { HTTPException } from 'hono/http-exception'
 
 /** Allows the creation of one or a batch of exchanges for a particular tenant. */
@@ -205,7 +209,6 @@ export const participateInExchange = async ({
         workflow,
         config
       })
-    // TODO: add "OID4VCI" support (claim workflow)
     case 'claim':
       return participateInClaimExchange({
         data,
@@ -233,7 +236,13 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   const serviceEndpoint =
     verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
   const isVerify = exchange.workflowId === 'verify'
-  const protocols = {
+  const protocols: {
+    iu: string
+    vcapi: string
+    lcw?: string
+    OID4VCI?: string
+    verifiablePresentationRequest: typeof verifiablePresentationRequest
+  } = {
     iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}`,
     vcapi: serviceEndpoint,
     lcw: isVerify
@@ -242,9 +251,20 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
           challenge: exchange.variables.challenge
         }),
     verifiablePresentationRequest
-    // TODO: add "OID4VCI" support (claim workflow)
     // TODO: add "OID4VP" support for forthcoming verification workflows
   }
+
+  // OID4VCI 1.0 Pre-Authorized Code Flow is offered alongside VCALM for
+  // claim exchanges. The deep link points at the credential offer URI;
+  // the wallet GETs that to receive the offer JSON. The offer route
+  // lazily mints the pre-authorized code on first GET, so we don't need
+  // any state on the exchange for this protocol entry to be valid.
+  if (exchange.workflowId === 'claim') {
+    protocols.OID4VCI = buildOpenIdCredentialOfferDeepLinkByReference(
+      credentialOfferUriForExchange(exchange as App.ExchangeDetailClaim)
+    )
+  }
+
   return protocols
 }
 

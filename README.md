@@ -161,6 +161,26 @@ Which is an endpoint typically meant to be called by the Docker
 [HEALTHCHECK](https://docs.docker.com/reference/dockerfile/#healthcheck) option for a specific
 service. Read more below in the [Health Check](#health-check) section.
 
+### OID4VCI 1.0 Pre-Authorized Code Flow
+
+For `claim` exchanges, the service additionally exposes the [OpenID for Verifiable Credential
+Issuance 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
+Pre-Authorized Code Flow. The wallet-facing entry point is the `OID4VCI` field on the protocols
+object — an `openid-credential-offer://?credential_offer_uri=...` deep link.
+
+- `GET /workflows/claim/exchanges/:exchangeId/openid/credential-offer` — Credential Offer JSON.
+- `GET /.well-known/openid-credential-issuer/workflows/claim/exchanges/:exchangeId` — Credential
+  Issuer Metadata.
+- `GET /.well-known/oauth-authorization-server/workflows/claim/exchanges/:exchangeId` —
+  per-exchange OAuth Authorization Server Metadata.
+- `POST /workflows/claim/exchanges/:exchangeId/openid/token` — pre-authorized code grant.
+- `POST /workflows/claim/exchanges/:exchangeId/openid/nonce` — single-use `c_nonce`.
+- `POST /workflows/claim/exchanges/:exchangeId/openid/credential` — issuance via a `proofs.di_vp`
+  Data Integrity Verifiable Presentation key proof bound to the previously-issued nonce.
+
+See [`docs/oid4vci-pre-authorized-flow.md`](./docs/oid4vci-pre-authorized-flow.md) for the full
+walk-through with curl commands.
+
 ## Verification pipeline
 
 The verify workflow (`POST /workflows/verify/exchanges/:exchangeId`)

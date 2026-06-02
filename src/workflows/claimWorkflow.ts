@@ -99,24 +99,80 @@ export const participateInClaimExchange = async ({
     })
   }
 
+  const signedCredential = await signClaimCredentialFromHolderDid({
+    holderDid: data.holder as string,
+    exchange,
+    workflow,
+    config,
+    walletCryptosuites: extractWalletCryptosuitesFromPresentation(data),
+    compatLog: didAuthResult.compatLog
+  })
+
+  if (!signedCredential) {
+    return {
+      redirectUrl: exchange.variables.redirectUrl ?? ''
+    }
+  }
+
+  // generate VP to return VCs
+  const verifiablePresentation = createPresentation()
+  verifiablePresentation.verifiableCredential = [signedCredential]
+
+  // VC-API indicates we would wrap this in a verifiablePresentation property, but LCW can't handle that.
+  // Should be return {verifiablePresentation}
+  // We will now try a stupid hack to nest it inside the VP
+  verifiablePresentation['verifiablePresentation'] = {
+    ...verifiablePresentation
+  }
+
+  return verifiablePresentation
+}
+
+/**
+ * Build, status-allocate, and sign a claim-workflow credential bound
+ * to the given holder DID. Saves the exchange as `complete` with the
+ * signed credential under `variables.results.default.verifiableCredential`.
+ *
+ * Shared between {@link participateInClaimExchange} (the VC-API
+ * `vcapi` flow) and the OID4VCI credential endpoint, both of which
+ * receive the holder DID via different proof shapes but converge on
+ * the same signing path.
+ *
+ * Returns the signed credential, or `undefined` when the workflow has
+ * no credential template configured (in which case the caller falls
+ * back to a `redirectUrl` response).
+ */
+export const signClaimCredentialFromHolderDid = async ({
+  holderDid,
+  exchange,
+  workflow,
+  config,
+  walletCryptosuites,
+  compatLog
+}: {
+  holderDid: string
+  exchange: App.ExchangeDetailClaim
+  workflow: App.Workflow
+  config: App.Config
+  walletCryptosuites: string[]
+  compatLog?: App.CheckResult[]
+}): Promise<App.Credential | undefined> => {
   const credentialTemplate = workflow?.credentialTemplates?.[0]
   if (!credentialTemplate) {
     // TODO: this path won't be hit for now, but we eventually should support redirection to a
     // url set in exchange variables at exchange creation time.
-    return {
-      redirectUrl: exchange.variables.redirectUrl ?? ''
-    }
+    return undefined
   }
 
   // The 'claim' workflow has a template that expects a `vc` variable of the built credential
   // as a string. Future more complex workflows may have more complex templates.
   let credential: App.Credential
   try {
-    const builtCredential = await Handlebars.compile(
-      credentialTemplate.template
-    )(exchange.variables)
+    const builtCredential = await Handlebars.compile(credentialTemplate.template)(
+      exchange.variables
+    )
     credential = JSON.parse(builtCredential)
-    credential.credentialSubject.id = data.holder as string
+    credential.credentialSubject.id = holderDid
   } catch {
     throw new HTTPException(400, {
       message: 'Failed to build credential from template'
@@ -125,8 +181,6 @@ export const participateInClaimExchange = async ({
 
   const tenantKey = exchange.tenantName.toLowerCase()
   const tenant = config.tenants[tenantKey]
-  const walletCryptosuites =
-    extractWalletCryptosuitesFromPresentation(data)
   const issuerInstance = tenant
     ? selectIssuerInstance(tenant, walletCryptosuites)
     : null
@@ -157,25 +211,12 @@ export const participateInClaimExchange = async ({
       results: {
         default: {
           verifiableCredential: [signedCredential],
-          ...(didAuthResult.compatLog
-            ? { compatLog: didAuthResult.compatLog }
-            : {})
+          ...(compatLog ? { compatLog } : {})
         }
       }
     }
   }
   await saveExchange(updatedExchange)
 
-  // generate VP to return VCs
-  const verifiablePresentation = createPresentation()
-  verifiablePresentation.verifiableCredential = [signedCredential]
-
-  // VC-API indicates we would wrap this in a verifiablePresentation property, but LCW can't handle that.
-  // Should be return {verifiablePresentation}
-  // We will now try a stupid hack to nest it inside the VP
-  verifiablePresentation['verifiablePresentation'] = {
-    ...verifiablePresentation
-  }
-
-  return verifiablePresentation
+  return signedCredential
 }

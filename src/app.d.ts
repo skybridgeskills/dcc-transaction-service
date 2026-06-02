@@ -174,10 +174,32 @@ declare global {
       values?: string[]
     }
 
+    /**
+     * OID4VCI 1.0 Pre-Authorized Code Flow runtime state, populated lazily
+     * the first time a wallet hits `/openid/credential-offer` for the
+     * exchange. Holds the pre-authorized code, the opaque access token,
+     * and the most recently issued single-use `c_nonce`. TTLs are wall
+     * clock and bounded by the exchange's own `expires`.
+     *
+     * Stored inline on the exchange so all OID4VCI lifecycle state lives
+     * in a single Keyv record alongside the rest of the exchange.
+     */
+    interface ExchangeOid4vciState {
+      preAuthorizedCode?: string
+      preAuthorizedCodeExpiresAt?: string
+      codeUsed?: boolean
+      accessToken?: string
+      accessTokenExpiresAt?: string
+      cNonce?: string
+      cNonceExpiresAt?: string
+      nonceUsed?: boolean
+    }
+
     interface ExchangeDetailClaim extends ExchangeDetailBase {
       workflowId: 'claim'
       variables: BaseVariables & {
         vc: string
+        oid4vci?: ExchangeOid4vciState
         results?: {
           default: {
             verifiableCredential: unknown[]
@@ -465,6 +487,18 @@ declare global {
       vcapi?: string
       verifiablePresentationRequest: VPR
       lcw?: string
+      /**
+       * OID4VCI 1.0 deep link of the form
+       * `openid-credential-offer://?credential_offer_uri=...`. Present
+       * only on `claim` exchanges (the workflow that supports OID4VCI
+       * Pre-Authorized Code Flow).
+       *
+       * Spelt uppercase to match the OID4VCI 1.0 spec name and to mirror
+       * the convention from the prior sveltekit spike. Other protocol
+       * keys (`vcapi`, `lcw`, …) stay lowercase because they originate
+       * from VC-API.
+       */
+      OID4VCI?: string
     }
 
     interface DCCWalletQuery {

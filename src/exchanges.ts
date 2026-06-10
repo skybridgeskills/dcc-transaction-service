@@ -243,7 +243,7 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
     OID4VCI?: string
     verifiablePresentationRequest: typeof verifiablePresentationRequest
   } = {
-    iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}`,
+    iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}?iuv=1`,
     vcapi: serviceEndpoint,
     lcw: isVerify
       ? getWalletInteractionUrl('lcw', 'vcapiExchange', serviceEndpoint)

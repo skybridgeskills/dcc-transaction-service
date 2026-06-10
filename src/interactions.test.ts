@@ -64,8 +64,11 @@ describe('GET /interactions/:exchangeId', () => {
     )
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('json')
-    const body = await response.json()
+    const body = (await response.json()) as { protocols: { iu: string } }
     expect(body).toHaveProperty('protocols')
+    expect(body.protocols.iu).toBe(
+      'http://localhost:4005/interactions/test-interaction-id?iuv=1'
+    )
   })
 
   test('returns JSON when no Accept header', async () => {
@@ -74,8 +77,11 @@ describe('GET /interactions/:exchangeId', () => {
     )
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('json')
-    const body = await response.json()
+    const body = (await response.json()) as { protocols: { iu: string } }
     expect(body).toHaveProperty('protocols')
+    expect(body.protocols.iu).toBe(
+      'http://localhost:4005/interactions/test-interaction-id?iuv=1'
+    )
   })
 
   test('returns HTML when Accept is text/html', async () => {

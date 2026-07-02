@@ -55,9 +55,7 @@ export const exchangeBatchSchema = z
       exchangeHost: z.string({
         message: 'Incomplete exchange data - you must provide an exchangeHost'
       }),
-      tenantName: z.string({
-        message: 'Incomplete exchange data - you must provide a tenant name'
-      }),
+      tenantName: z.string().optional(),
       batchId: z.string().optional(),
       workflowId: z.enum(['didAuth', 'claim']).optional(),
       data: z.array(credentialDataSchema),
@@ -110,10 +108,7 @@ export const baseVariablesSchema = z.object({
     .string()
     .optional()
     .default(process.env.DEFAULT_EXCHANGE_HOST ?? 'http://localhost:4004'),
-  tenantName: z.string({
-    message:
-      'Incomplete exchange data - you must provide a tenant name variable'
-  }),
+  tenantName: z.string().optional(),
   batchId: z.string().optional(),
   retrievalId: z.string().optional(),
   metadata: z.any().optional(),

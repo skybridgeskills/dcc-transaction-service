@@ -32,6 +32,7 @@ import { getConfig } from './config.js'
 import { getExchangeData, saveExchange } from './transactionManager.js'
 import { resolveInteraction } from './interactions.js'
 import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
+import { resolveExchangeTenant } from './lib/tenant/resolve-exchange-tenant.js'
 import { setCookie } from 'hono/cookie'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { handleOAuthTokenPost } from './oauth/token.js'
@@ -185,14 +186,11 @@ export const app = new Hono()
     async (c) => {
       const body = c.req.valid('json')
       const data = schema.exchangeBatchSchema.parse(body)
-      const authEnabled = c.var.config.tenantAuthenticationEnabled
-      if (
-        authEnabled &&
-        c.var.authTenant &&
-        c.var.authTenant.tenantName !== data.tenantName
-      ) {
-        throw new HTTPException(401, { message: 'Unauthorized' })
-      }
+      data.tenantName = resolveExchangeTenant({
+        bodyTenantName: data.tenantName,
+        authTenant: c.var.authTenant,
+        defaultTenantName: c.var.config.defaultTenantName
+      })
       c.set('workflow', getWorkflow(data.workflowId ?? 'didAuth'))
       return c.json(
         await createExchangeBatch({
@@ -216,14 +214,11 @@ export const app = new Hono()
       // Initial basic structure validation
       const data = schema.vcApiExchangeCreateSchema.parse(inputData)
 
-      const authEnabled = c.var.config.tenantAuthenticationEnabled
-      if (
-        authEnabled &&
-        c.var.authTenant &&
-        c.var.authTenant.tenantName !== data.variables.tenantName
-      ) {
-        throw new HTTPException(401, { message: 'Unauthorized' })
-      }
+      data.variables.tenantName = resolveExchangeTenant({
+        bodyTenantName: data.variables.tenantName,
+        authTenant: c.var.authTenant,
+        defaultTenantName: c.var.config.defaultTenantName
+      })
 
       return c.json(
         await createExchangeVcapi({

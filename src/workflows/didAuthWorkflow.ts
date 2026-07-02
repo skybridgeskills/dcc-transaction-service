@@ -25,7 +25,7 @@ export const createExchangeDidAuth = ({
   const exchange: App.ExchangeDetailBase = {
     ...data,
     workflowId: workflow.id,
-    tenantName: data.variables.tenantName,
+    tenantName: data.variables.tenantName ?? config.defaultTenantName,
     exchangeId: crypto.randomUUID(),
     variables: {
       ...data.variables,

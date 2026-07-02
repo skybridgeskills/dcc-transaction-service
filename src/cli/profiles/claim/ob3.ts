@@ -35,7 +35,6 @@ const vc = {
 }
 
 const profile: ProfileVariables = {
-  tenantName: 'default',
   vc: JSON.stringify(vc)
 }
 

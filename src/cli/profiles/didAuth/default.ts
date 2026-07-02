@@ -1,7 +1,5 @@
 import type { ProfileVariables } from '../../types.js'
 
-const profile: ProfileVariables = {
-  tenantName: 'default'
-}
+const profile: ProfileVariables = {}
 
 export default profile

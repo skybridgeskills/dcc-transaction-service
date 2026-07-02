@@ -132,7 +132,9 @@ describe('api', function () {
       )
     })
 
-    test('returns error if missing tenantName', async function () {
+    test('succeeds when tenantName omitted (resolves to default tenant)', async function () {
+      // With tenant auth disabled in the test config, an omitted tenantName is
+      // no longer a 400 — it falls back to config.defaultTenantName.
       const { tenantName: _tenantName, ...testData } = getDataForExchangeSetupPost('test')
       const response = await app.request('/exchange', {
         method: 'POST',
@@ -141,13 +143,10 @@ describe('api', function () {
           'Content-Type': 'application/json'
         }
       })
-      const body = await response.json()
+      const body = (await response.json()) as unknown[]
       expect(response.headers.get('content-type')).toContain('json')
-      expect(response.status).toBe(400)
-      expect(body.code).toBe(400)
-      expect(body.message).toContain(
-        'Incomplete exchange data - you must provide a tenant name'
-      )
+      expect(response.status).toBe(200)
+      expect(body.length).toBe(testData.data.length)
     })
 
     test('returns error if missing vc or subjectData', async function () {

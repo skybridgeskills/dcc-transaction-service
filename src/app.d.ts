@@ -95,7 +95,7 @@ declare global {
       }>
       batchId?: string
       exchangeHost: string
-      tenantName: string
+      tenantName?: string
       workflowId?: string
     }
 
@@ -105,7 +105,7 @@ declare global {
         vc?: string
         redirectUrl?: string
         exchangeHost: string
-        tenantName: string
+        tenantName?: string
         challenge?: string
       }
     }

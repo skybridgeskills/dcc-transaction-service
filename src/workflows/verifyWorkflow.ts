@@ -69,7 +69,7 @@ export const createExchangeVerify = ({
     ...data,
     workflowId: 'verify',
     exchangeId: crypto.randomUUID(),
-    tenantName: data.variables.tenantName,
+    tenantName: data.variables.tenantName ?? config.defaultTenantName,
     variables: {
       ...data.variables,
       challenge: crypto.randomUUID(),

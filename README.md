@@ -68,7 +68,7 @@ Expects an object containing the data that will later be used to issue the crede
 ```
 {
    exchangeHost: "hostname to use when constructing the exchange endpoints",
-   tenantName: "the tenant with which to later sign the credentials",
+   tenantName: "(optional) the tenant with which to later sign the credentials",
    data: [
       {
          vc: "an unsigned populated Verifiable Credential",
@@ -85,6 +85,12 @@ Expects an object containing the data that will later be used to issue the crede
 
 This endpoint returns a list of interactions to pass to a wallet such as the [Leaner Credential
 Wallet](https://lcw.app) to initiate the exchange.
+
+`tenantName` is optional. When tenant auth is enabled, the tenant is derived from
+the request's `Bearer` token; a body `tenantName` that disagrees with the token
+tenant is rejected with `401`. When tenant auth is disabled, the body
+`tenantName` (or `DEFAULT_TENANT_NAME`) is used. The same resolution applies to
+`POST /workflows/:workflowId/exchanges`.
 
 ### `POST /workflows/:workflowId/exchanges` - Create Exchange (VC-API)
 
@@ -153,7 +159,9 @@ At the moment, the [Leaner Credential Wallet](https://lcw.app) only supports the
 - GET /workflows/:workflowId/exchanges/:exchangeId
 
 Returns the exchange data for the given exchangeId and transactionId. If authentication is required,
-an `Authorization` header with a valid tenant `Bearer` token is required.
+an `Authorization` header with a valid tenant `Bearer` token is required. On the create endpoints the
+tenant is derived from this token, so the request body `tenantName` is optional; it only needs to be
+sent when tenant auth is disabled (and even then it defaults to `DEFAULT_TENANT_NAME`).
 
 - GET /healthz
 

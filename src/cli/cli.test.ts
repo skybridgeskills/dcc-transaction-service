@@ -149,20 +149,20 @@ describe('--help mentions the new flags', () => {
 describe('loadProfile', () => {
   test('loads claim/ob3 profile', async () => {
     const vars = await loadProfile('claim', 'ob3')
-    expect(vars.tenantName).toBe('default')
+    expect(vars.tenantName).toBeUndefined()
     expect(typeof vars.vc).toBe('string')
     expect(JSON.parse(vars.vc as string).type).toContain('OpenBadgeCredential')
   })
 
   test('loads verify/ob3 profile', async () => {
     const vars = await loadProfile('verify', 'ob3')
-    expect(vars.tenantName).toBe('default')
+    expect(vars.tenantName).toBeUndefined()
     expect(vars.vprCredentialType).toContain('OpenBadgeCredential')
   })
 
   test('loads didAuth/default profile', async () => {
     const vars = await loadProfile('didAuth', 'default')
-    expect(vars.tenantName).toBe('default')
+    expect(vars.tenantName).toBeUndefined()
   })
 
   test('throws for unknown profile', async () => {

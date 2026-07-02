@@ -55,7 +55,7 @@ export const createExchangeClaim = ({
     ...data,
     workflowId: 'claim',
     exchangeId: crypto.randomUUID(),
-    tenantName: data.variables.tenantName,
+    tenantName: data.variables.tenantName ?? config.defaultTenantName,
     variables: {
       ...data.variables,
       challenge: crypto.randomUUID(),

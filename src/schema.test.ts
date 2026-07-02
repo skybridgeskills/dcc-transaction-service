@@ -56,6 +56,11 @@ describe('baseVariablesSchema with options', () => {
     expect(out.options).toBeUndefined()
   })
 
+  test('parses with tenantName omitted (server resolves it from the token)', () => {
+    const out = baseVariablesSchema.parse({})
+    expect(out.tenantName).toBeUndefined()
+  })
+
   test('parses with options.verbose: true', () => {
     const out = baseVariablesSchema.parse({
       ...baseValid,

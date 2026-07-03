@@ -12,6 +12,7 @@ import {
   extractWalletCryptosuitesFromPresentation,
   selectIssuerInstance
 } from '../lib/issuer-selection.js'
+import { extractHolderDid } from '../lib/data/verifiable-presentation/extract-holder-did.js'
 import { problemDetailResponse } from '../lib/errors/problem-details.js'
 import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 
@@ -99,8 +100,14 @@ export const participateInClaimExchange = async ({
     })
   }
 
+  // The wallet may POST a VC-API envelope (`{ verifiablePresentation: VP }`)
+  // or a bare presentation; unwrap either shape before reading the holder DID.
+  const presentation = ((data.verifiablePresentation ?? data) ??
+    {}) as Record<string, unknown>
+  const holderDid = extractHolderDid(presentation)
+
   const signedCredential = await signClaimCredentialFromHolderDid({
-    holderDid: data.holder as string,
+    holderDid,
     exchange,
     workflow,
     config,
@@ -150,13 +157,21 @@ export const signClaimCredentialFromHolderDid = async ({
   walletCryptosuites,
   compatLog
 }: {
-  holderDid: string
+  holderDid: string | undefined
   exchange: App.ExchangeDetailClaim
   workflow: App.Workflow
   config: App.Config
   walletCryptosuites: string[]
   compatLog?: App.CheckResult[]
 }): Promise<App.Credential | undefined> => {
+  // Bind the credential to the authenticated holder. Fail loudly rather than
+  // issuing a subject-less credential when the holder DID can't be determined.
+  if (!holderDid) {
+    throw new HTTPException(401, {
+      message: 'Could not determine holder DID from the DIDAuth presentation.'
+    })
+  }
+
   const credentialTemplate = workflow?.credentialTemplates?.[0]
   if (!credentialTemplate) {
     // TODO: this path won't be hit for now, but we eventually should support redirection to a

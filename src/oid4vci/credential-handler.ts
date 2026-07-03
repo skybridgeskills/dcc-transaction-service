@@ -13,6 +13,7 @@
  * or a spec-shaped error response (§8.3.1).
  */
 import { extractWalletCryptosuitesFromPresentation } from '../lib/issuer-selection.js'
+import { extractHolderDid } from '../lib/data/verifiable-presentation/extract-holder-did.js'
 import { verifyDIDAuth } from '../didAuth.js'
 import { signClaimCredentialFromHolderDid } from '../workflows/claimWorkflow.js'
 import { deriveCredentialConfigurationId } from './credential-offer.js'
@@ -74,16 +75,6 @@ const extractVpChallenge = (vp: Record<string, unknown>): string | undefined => 
   if (proof && typeof proof === 'object') {
     const c = (proof as { challenge?: unknown }).challenge
     if (typeof c === 'string') return c
-  }
-  return undefined
-}
-
-const extractHolderDid = (vp: Record<string, unknown>): string | undefined => {
-  const holder = (vp as { holder?: unknown }).holder
-  if (typeof holder === 'string') return holder
-  if (holder && typeof holder === 'object') {
-    const id = (holder as { id?: unknown }).id
-    if (typeof id === 'string') return id
   }
   return undefined
 }

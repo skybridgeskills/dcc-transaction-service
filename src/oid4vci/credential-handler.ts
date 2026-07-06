@@ -100,6 +100,17 @@ export const handleCredentialRequest = async ({
     return unauthorized(tokenCheck.reason)
   }
 
+  // Single-use: a completed exchange has already issued its credential.
+  // Mirrors the VC-API guard in exchanges.ts. Checked after token validation
+  // so completion state isn't leaked to unauthenticated callers.
+  if (exchange.state === 'complete') {
+    return err(
+      400,
+      'credential_request_denied',
+      'A credential has already been issued for this exchange.'
+    )
+  }
+
   const parsed = credentialRequestSchema.safeParse(body)
   if (!parsed.success) {
     return err(400, 'invalid_credential_request', 'Credential request body is malformed.')

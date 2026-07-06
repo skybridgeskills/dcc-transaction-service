@@ -133,6 +133,7 @@ curl -fsS "$HOST/workflows/claim/exchanges/$EXCHANGE_ID/openid/credential" \
 | Unknown `credential_configuration_id`  | `400`  | `{ "error": "unknown_credential_configuration" }` |
 | Missing or invalid `proofs.di_vp[0]`   | `400`  | `{ "error": "invalid_proof" }`             |
 | Wrong / replayed / expired `c_nonce`   | `400`  | `{ "error": "invalid_nonce" }`             |
+| Credential already issued (complete)   | `400`  | `{ "error": "credential_request_denied" }` |
 
 Token + nonce endpoints set `Cache-Control: no-store` per RFC 6749
 and OID4VCI 1.0 §7.2 respectively.

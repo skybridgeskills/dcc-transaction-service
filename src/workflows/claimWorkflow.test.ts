@@ -1,20 +1,21 @@
 /**
  * Unit tests for the VC-API `claim` workflow's holder-DID binding.
  *
- * Regression coverage for the bug where `participateInClaimExchange`
- * read the holder DID from the top level of the request body. When a
- * wallet submits the VC-API envelope (`{ verifiablePresentation: VP }`),
- * `data.holder` is `undefined`, so `credentialSubject.id` was set to
- * `undefined` and silently dropped on serialization — issuing a
- * subject-less credential.
+ * The issued `credentialSubject.id` is bound to the holder returned by
+ * `verifyDIDAuth` — the entity that cryptographically signed the DIDAuth
+ * proof — never the self-asserted top-level `holder` field. A presented
+ * `holder` that disagrees with the verified signer is rejected, and a
+ * missing verified holder never yields a subject-less credential.
  *
  * `verifyDIDAuth`, the signing service call, and exchange persistence are
- * mocked so these tests exercise only the extraction + binding path.
+ * mocked so these tests exercise only the binding + mismatch path.
  */
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { HTTPException } from 'hono/http-exception'
 
-const verifyDIDAuthMock = vi.fn(async () => ({ verified: true }))
+const HOLDER = 'did:key:z6MknGSUtEUXvNgx4yqftKjv6mLCAzjEmttB2FcvucADYgZN'
+
+const verifyDIDAuthMock = vi.fn(async () => ({ verified: true, holder: HOLDER }))
 const callServiceMock = vi.fn(
   async (_endpoint: string, body: Record<string, unknown>) => body
 )
@@ -36,8 +37,6 @@ vi.mock('../utils.js', async (importActual) => {
 const { participateInClaimExchange, signClaimCredentialFromHolderDid } =
   await import('./claimWorkflow.js')
 const { getWorkflow } = await import('../workflows.js')
-
-const HOLDER = 'did:key:z6MknGSUtEUXvNgx4yqftKjv6mLCAzjEmttB2FcvucADYgZN'
 
 const fakeConfig: App.Config = {
   port: 4004,
@@ -152,10 +151,27 @@ describe('participateInClaimExchange — holder DID binding', () => {
     expect(issuedCredential(result).credentialSubject.id).toBe(HOLDER)
   })
 
-  test('throws 401 and does not sign when no holder DID is present', async () => {
+  test('binds to the verified signer even when the body omits `holder`', async () => {
+    // The holder comes from the proof signer (verifyDIDAuth), so a body
+    // without a top-level `holder` still yields a correctly-bound subject.
+    const result = await participateInClaimExchange({
+      data: wrappedPresentation(),
+      exchange: baseExchange(),
+      workflow: getWorkflow('claim'),
+      config: fakeConfig
+    })
+
+    expect(issuedCredential(result).credentialSubject.id).toBe(HOLDER)
+  })
+
+  test('throws 401 and does not sign when the proof yields no verified holder', async () => {
+    verifyDIDAuthMock.mockResolvedValueOnce({
+      verified: true
+    } as unknown as { verified: true; holder: string })
+
     await expect(
       participateInClaimExchange({
-        data: wrappedPresentation(),
+        data: wrappedPresentation(HOLDER),
         exchange: baseExchange(),
         workflow: getWorkflow('claim'),
         config: fakeConfig
@@ -164,6 +180,21 @@ describe('participateInClaimExchange — holder DID binding', () => {
 
     // The guard fires before the signing service is called, so no
     // unbound credential is ever issued.
+    expect(callServiceMock).not.toHaveBeenCalled()
+  })
+
+  test('throws 401 when the self-asserted holder disagrees with the signer', async () => {
+    // verifyDIDAuth verified the proof was signed by HOLDER, but the body
+    // claims a different holder — a spoof attempt. Must be rejected, unsigned.
+    await expect(
+      participateInClaimExchange({
+        data: wrappedPresentation('did:example:someone-else'),
+        exchange: baseExchange(),
+        workflow: getWorkflow('claim'),
+        config: fakeConfig
+      })
+    ).rejects.toBeInstanceOf(HTTPException)
+
     expect(callServiceMock).not.toHaveBeenCalled()
   })
 })

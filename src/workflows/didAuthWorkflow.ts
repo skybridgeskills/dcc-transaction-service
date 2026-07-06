@@ -102,6 +102,14 @@ export const participateInDidAuthExchange = async ({
     })
   }
 
+  // Store the holder that actually signed the proof, not the self-asserted
+  // top-level `holder`.
+  if (!didAuthResult.holder) {
+    throw new HTTPException(401, {
+      message: 'Could not determine holder DID from the DIDAuth proof signer.'
+    })
+  }
+
   const updatedExchange: App.ExchangeDetailDidAuth = {
     ...exchange,
     state: 'complete',
@@ -109,7 +117,7 @@ export const participateInDidAuthExchange = async ({
       ...exchange.variables,
       results: {
         default: {
-          holder: data.holder as string,
+          holder: didAuthResult.holder,
           ...(didAuthResult.compatLog
             ? { compatLog: didAuthResult.compatLog }
             : {})

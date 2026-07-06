@@ -109,4 +109,33 @@ describe('verifyDIDAuth', function () {
 
     expect(presentation).toEqual(before)
   })
+
+  // The DID that controls the test signing key (see `initializeKeyAndSuite`).
+  const SIGNER = 'did:key:z6MkvL5yVCgPhYvQwSoSRQou6k6ZGfD5mNM57HKxufEXwfnP'
+
+  test('returns the holder derived from the proof signer', async function () {
+    const challenge = crypto.randomUUID()
+    const presentation = await getSignedDIDAuth(challenge)
+
+    const result = await verifyDIDAuth({ presentation, challenge })
+
+    expect(result.verified).toBe(true)
+    if (!result.verified) throw new Error('unreachable')
+    expect(result.holder).toBe(SIGNER)
+  })
+
+  test('returns the signer as holder even when the VP self-asserts a different holder', async function () {
+    // Sign with the test key but claim a `holder` DID the signer does not
+    // control. The returned holder MUST be the signer, not the spoofed value —
+    // this is the load-bearing binding that stops issuing to an unowned DID.
+    const challenge = crypto.randomUUID()
+    const presentation = await getSignedDIDAuth(challenge, 'did:example:victim')
+
+    const result = await verifyDIDAuth({ presentation, challenge })
+
+    expect(result.verified).toBe(true)
+    if (!result.verified) throw new Error('unreachable')
+    expect(presentation.holder).toBe('did:example:victim')
+    expect(result.holder).toBe(SIGNER)
+  })
 })

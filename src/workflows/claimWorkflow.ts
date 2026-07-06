@@ -104,7 +104,16 @@ export const participateInClaimExchange = async ({
   // or a bare presentation; unwrap either shape before reading the holder DID.
   const presentation = ((data.verifiablePresentation ?? data) ??
     {}) as Record<string, unknown>
-  const holderDid = extractHolderDid(presentation)
+  // Bind to the entity that cryptographically signed the DIDAuth proof — never
+  // the self-asserted top-level `holder`. Reject when a present `holder`
+  // disagrees with the signer.
+  const holderDid = didAuthResult.holder
+  const assertedHolder = extractHolderDid(presentation)
+  if (assertedHolder && holderDid && assertedHolder !== holderDid) {
+    throw new HTTPException(401, {
+      message: 'Presentation holder does not match the proof signer.'
+    })
+  }
 
   const signedCredential = await signClaimCredentialFromHolderDid({
     holderDid,

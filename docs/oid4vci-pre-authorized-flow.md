@@ -137,6 +137,16 @@ curl -fsS "$HOST/workflows/claim/exchanges/$EXCHANGE_ID/openid/credential" \
 Token + nonce endpoints set `Cache-Control: no-store` per RFC 6749
 and OID4VCI 1.0 §7.2 respectively.
 
+## Holder binding
+
+The issued `credentialSubject.id` is bound to the **controller of the key
+that signed the `di_vp` proof** — i.e. the DID portion (before the `#`
+fragment) of the authentication proof's `verificationMethod`. It is never
+taken from the self-asserted top-level `holder` field, which no verifier
+layer checks. If the proof carries a `holder` that disagrees with the
+signer, the request is rejected with `invalid_proof`. This ensures a
+credential is only ever issued to a DID whose key the presenter controls.
+
 ## Out of scope (deferred follow-ups)
 
 The current implementation intentionally omits the following pieces

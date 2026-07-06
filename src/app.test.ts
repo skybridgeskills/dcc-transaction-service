@@ -426,8 +426,9 @@ describe('api', function () {
         )?.serviceEndpoint ?? ''
       // strip out the host because we are using supertest
       const continuationURIPath = new URL(continuationURI).pathname
-      const randomId = `did:ex:${crypto.randomUUID()}`
-      const didAuth = await getSignedDIDAuth(challenge, randomId)
+      // holder defaults to the signing key's controller, so the self-asserted
+      // holder matches the proof signer (the binding the issuer enforces).
+      const didAuth = await getSignedDIDAuth(challenge)
 
       const continuationResponse = await app.request(continuationURIPath, {
         method: 'POST',
@@ -557,7 +558,7 @@ describe('single-use exchange enforcement', function () {
     expect(body.message).toBe('Exchange has already been completed.')
   })
 
-  test('didAuth completion stores holder in variables.results', async function () {
+  test('didAuth completion stores the proof signer as holder, not a spoofed `holder`', async function () {
     const walletQuery = await doSetup(app)
     const url = walletQuery?.vprDeepLink ?? ''
     const serviceEndpoint = extractServiceEndpoint(url)
@@ -570,8 +571,9 @@ describe('single-use exchange enforcement', function () {
     })
     const vpr = (await initResponse.json())
       ?.verifiablePresentationRequest as App.VPR
-    const holderId = `did:ex:${crypto.randomUUID()}`
-    const didAuth = await getSignedDIDAuth(vpr.challenge, holderId)
+    // Sign with the test key but self-assert an unrelated holder DID.
+    const spoofedHolder = `did:ex:${crypto.randomUUID()}`
+    const didAuth = await getSignedDIDAuth(vpr.challenge, spoofedHolder)
 
     await app.request(path, {
       method: 'POST',
@@ -586,7 +588,11 @@ describe('single-use exchange enforcement', function () {
     )) as App.ExchangeDetailDidAuth
     expect(exchange.state).toBe('complete')
     expect(exchange.variables.results).toBeDefined()
-    expect(exchange.variables.results!.default.holder).toBe(holderId)
+    // The stored holder is the controller of the key that signed the proof,
+    // never the self-asserted (spoofable) `holder` field.
+    const SIGNER = 'did:key:z6MkvL5yVCgPhYvQwSoSRQou6k6ZGfD5mNM57HKxufEXwfnP'
+    expect(exchange.variables.results!.default.holder).toBe(SIGNER)
+    expect(exchange.variables.results!.default.holder).not.toBe(spoofedHolder)
   })
 
   test('claim completion stores credential and sets complete', async function () {

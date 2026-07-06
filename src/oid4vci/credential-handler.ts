@@ -141,11 +141,24 @@ export const handleCredentialRequest = async ({
     return err(400, 'invalid_proof', 'DIDAuth verification failed.')
   }
 
-  const holderDid =
-    extractHolderDid(vp as Record<string, unknown>) ??
-    (didAuthResult as unknown as { holder?: string }).holder
+  // Bind the credential to the entity that cryptographically signed the
+  // di_vp proof — never the self-asserted top-level `holder` (which no
+  // verifier layer checks). Reject when a present `holder` disagrees.
+  const holderDid = didAuthResult.holder
   if (!holderDid) {
-    return err(400, 'invalid_proof', 'Could not extract holder DID from di_vp.')
+    return err(
+      400,
+      'invalid_proof',
+      'Could not determine holder DID from the di_vp proof signer.'
+    )
+  }
+  const assertedHolder = extractHolderDid(vp as Record<string, unknown>)
+  if (assertedHolder && assertedHolder !== holderDid) {
+    return err(
+      400,
+      'invalid_proof',
+      'Presentation holder does not match the proof signer.'
+    )
   }
 
   const walletCryptosuites = extractWalletCryptosuitesFromPresentation(

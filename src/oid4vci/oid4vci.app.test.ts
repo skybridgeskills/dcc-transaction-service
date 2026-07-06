@@ -427,6 +427,65 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
     ).toBeDefined()
   })
 
+  test('rejects a VP whose self-asserted holder differs from the proof signer', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const offer = credentialOfferSchema.parse(
+      await (
+        await app.request(
+          `/workflows/claim/exchanges/${exchangeId}/openid/credential-offer`
+        )
+      ).json()
+    )
+    const code = offer.grants[PRE_AUTHORIZED_GRANT]['pre-authorized_code']
+    const tokenBody = (await (
+      await app.request(
+        `/workflows/claim/exchanges/${exchangeId}/openid/token`,
+        {
+          method: 'POST',
+          body: new URLSearchParams({
+            grant_type: PRE_AUTHORIZED_GRANT,
+            'pre-authorized_code': code
+          }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        }
+      )
+    ).json()) as { access_token: string }
+    const { c_nonce } = (await (
+      await app.request(
+        `/workflows/claim/exchanges/${exchangeId}/openid/nonce`,
+        { method: 'POST' }
+      )
+    ).json()) as { c_nonce: string }
+
+    // Signed by the test key, but claiming a holder DID the signer does not
+    // control. Must be rejected rather than issuing to the unowned DID.
+    const vp = await getSignedDIDAuth(c_nonce, 'did:example:victim')
+    const resp = await app.request(
+      `/workflows/claim/exchanges/${exchangeId}/openid/credential`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${tokenBody.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          credential_configuration_id: 'OpenBadgeCredential',
+          proofs: { di_vp: [vp] }
+        })
+      }
+    )
+    expect(resp.status).toBe(400)
+    const body = (await resp.json()) as { error: string }
+    expect(body.error).toBe('invalid_proof')
+
+    // No credential was issued: the exchange never reached `complete`.
+    const exchange = (await getExchangeData(
+      exchangeId,
+      'claim'
+    )) as App.ExchangeDetailClaim
+    expect(exchange.state).not.toBe('complete')
+  })
+
   test('replay defense: re-using the same nonce returns invalid_nonce', async () => {
     const { exchangeId } = await createClaimExchange()
     const offer = credentialOfferSchema.parse(

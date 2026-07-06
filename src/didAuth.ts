@@ -58,12 +58,45 @@ export const getSignedDIDAuth = async (
  * is enabled.
  */
 export type DidAuthVerificationResult =
-  | { verified: true; compatLog?: App.CheckResult[] }
+  | { verified: true; holder?: string; compatLog?: App.CheckResult[] }
   | {
       verified: false
       problemDetails: ProblemDetail[]
       compatLog?: App.CheckResult[]
     }
+
+/**
+ * Derive the *cryptographically bound* holder DID from a verified
+ * presentation: the controller of the signing key, i.e. the DID portion
+ * (before the `#` fragment) of the authentication proof's
+ * `verificationMethod`.
+ *
+ * This is deliberately NOT the top-level `holder` field — no verifier layer
+ * (verifier-core → `@digitalcredentials/vc` → jsonld-signatures) checks that
+ * `holder` matches the signer, so `holder` is fully self-asserted. Callers
+ * that issue credentials MUST bind the subject to this value.
+ *
+ * When several proofs are present, prefer the `authentication` proof (or the
+ * one carrying the challenge) — that is the DIDAuth proof.
+ */
+const deriveHolderFromProof = (
+  presentation: Record<string, unknown>,
+  challenge: string
+): string | undefined => {
+  const isObj = (p: unknown): p is Record<string, unknown> =>
+    !!p && typeof p === 'object'
+  const proof = (presentation as { proof?: unknown }).proof
+  const proofs = Array.isArray(proof) ? proof : proof ? [proof] : []
+  const auth =
+    proofs.find((p) => isObj(p) && p.proofPurpose === 'authentication') ??
+    proofs.find((p) => isObj(p) && p.challenge === challenge) ??
+    proofs[0]
+  if (!isObj(auth)) return undefined
+  const vm = auth.verificationMethod
+  if (typeof vm !== 'string' || vm.length === 0) return undefined
+  const hashIndex = vm.indexOf('#')
+  return hashIndex === -1 ? vm : vm.slice(0, hashIndex)
+}
 
 function problemDetailsFromChecks(
   results: ReadonlyArray<{ outcome: App.CheckResult['outcome'] }>
@@ -137,7 +170,12 @@ export const verifyDIDAuth = async ({
   const exposed = debug ? compatLog : undefined
 
   if (result.verified) {
-    return exposed ? { verified: true, compatLog: exposed } : { verified: true }
+    const holder = deriveHolderFromProof(refinedPresentation, challenge)
+    return {
+      verified: true,
+      ...(holder ? { holder } : {}),
+      ...(exposed ? { compatLog: exposed } : {})
+    }
   }
 
   const problemDetails = problemDetailsFromChecks(verifierChecks)

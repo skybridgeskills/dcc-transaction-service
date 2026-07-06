@@ -427,6 +427,64 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
     ).toBeDefined()
   })
 
+  test('rejects a second credential request once the exchange is complete', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const offer = credentialOfferSchema.parse(
+      await (
+        await app.request(
+          `/workflows/claim/exchanges/${exchangeId}/openid/credential-offer`
+        )
+      ).json()
+    )
+    const code = offer.grants[PRE_AUTHORIZED_GRANT]['pre-authorized_code']
+    const tokenBody = (await (
+      await app.request(
+        `/workflows/claim/exchanges/${exchangeId}/openid/token`,
+        {
+          method: 'POST',
+          body: new URLSearchParams({
+            grant_type: PRE_AUTHORIZED_GRANT,
+            'pre-authorized_code': code
+          }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        }
+      )
+    ).json()) as { access_token: string }
+
+    const issue = async () => {
+      const { c_nonce } = (await (
+        await app.request(
+          `/workflows/claim/exchanges/${exchangeId}/openid/nonce`,
+          { method: 'POST' }
+        )
+      ).json()) as { c_nonce: string }
+      const vp = await getSignedDIDAuth(c_nonce)
+      return app.request(
+        `/workflows/claim/exchanges/${exchangeId}/openid/credential`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokenBody.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            credential_configuration_id: 'OpenBadgeCredential',
+            proofs: { di_vp: [vp] }
+          })
+        }
+      )
+    }
+
+    const first = await issue()
+    expect(first.status).toBe(200)
+
+    // A fresh nonce + valid token must not re-issue against a complete exchange.
+    const second = await issue()
+    expect(second.status).toBe(400)
+    const body = (await second.json()) as { error: string }
+    expect(body.error).toBe('credential_request_denied')
+  })
+
   test('rejects a VP whose self-asserted holder differs from the proof signer', async () => {
     const { exchangeId } = await createClaimExchange()
     const offer = credentialOfferSchema.parse(
@@ -486,7 +544,7 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
     expect(exchange.state).not.toBe('complete')
   })
 
-  test('replay defense: re-using the same nonce returns invalid_nonce', async () => {
+  test('nonce defense: a proof bound to a non-issued nonce returns invalid_nonce', async () => {
     const { exchangeId } = await createClaimExchange()
     const offer = credentialOfferSchema.parse(
       await (
@@ -509,19 +567,15 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
         }
       )
     ).json()) as { access_token: string }
-    const { c_nonce } = (await (
-      await app.request(
-        `/workflows/claim/exchanges/${exchangeId}/openid/nonce`,
-        { method: 'POST' }
-      )
-    ).json()) as { c_nonce: string }
-    const vp = await getSignedDIDAuth(c_nonce)
-    const body = {
-      credential_configuration_id: 'OpenBadgeCredential',
-      proofs: { di_vp: [vp] }
-    }
+    // Mint a nonce, but bind the proof to a *different* challenge that was
+    // never issued as this exchange's c_nonce. Keeps nonce-defense coverage
+    // independent of the completion guard (the exchange never completes here).
+    await app.request(`/workflows/claim/exchanges/${exchangeId}/openid/nonce`, {
+      method: 'POST'
+    })
+    const vp = await getSignedDIDAuth('never-issued-nonce')
 
-    const first = await app.request(
+    const resp = await app.request(
       `/workflows/claim/exchanges/${exchangeId}/openid/credential`,
       {
         method: 'POST',
@@ -529,25 +583,15 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
           Authorization: `Bearer ${tokenBody.access_token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify({
+          credential_configuration_id: 'OpenBadgeCredential',
+          proofs: { di_vp: [vp] }
+        })
       }
     )
-    expect(first.status).toBe(200)
-
-    const replay = await app.request(
-      `/workflows/claim/exchanges/${exchangeId}/openid/credential`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${tokenBody.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      }
-    )
-    expect(replay.status).toBe(400)
-    const replayBody = (await replay.json()) as { error: string }
-    expect(replayBody.error).toBe('invalid_nonce')
+    expect(resp.status).toBe(400)
+    const body = (await resp.json()) as { error: string }
+    expect(body.error).toBe('invalid_nonce')
   })
 
   test('returns 401 with no Bearer header', async () => {

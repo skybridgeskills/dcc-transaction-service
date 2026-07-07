@@ -1,4 +1,4 @@
-# transaction-manager-service Changelog
+# Transaction Service Changelog
 
 ## Unreleased
 

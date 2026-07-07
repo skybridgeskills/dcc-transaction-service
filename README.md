@@ -323,7 +323,7 @@ file. The supported fields:
 | Key                        | Description                                                                 | Default               | Required |
 | -------------------------- | --------------------------------------------------------------------------- | --------------------- | -------- |
 | `PORT`                     | HTTP port on which to run the express app                                   | 4004                  | no       |
-| `EXCHANGE_HOST`            | Default exchange host to use when constructing the exchange endpoints       | http://localhost:4004 | no       |
+| `DEFAULT_EXCHANGE_HOST`    | Default exchange host to use when constructing the exchange endpoints       | http://localhost:4004 | no       |
 | `EXCHANGE_TTL`             | Time to live for exchanges in seconds                                       | 600 (10 minutes)      | no       |
 | `STATUS_SERVICE`           | URL for the status service. Set to empty string to disable                  | http://localhost:4008 | no       |
 | `SIGNING_SERVICE`          | URL for the signing service                                                 | http://localhost:4006 | no       |

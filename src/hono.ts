@@ -18,6 +18,11 @@ import {
   handleTokenRequest
 } from './oid4vci/index.js'
 import {
+  buildAuthorizationRequest,
+  ensureOid4vpState,
+  handleOid4vpResponse
+} from './oid4vp/index.js'
+import {
   authenticateTenantMiddleware,
   authenticateExchangeOrTenantMiddleware
 } from './auth.js'
@@ -130,6 +135,11 @@ const routes = {
   oid4vciNonce: '/workflows/:workflowId/exchanges/:exchangeId/openid/nonce',
   oid4vciCredential:
     '/workflows/:workflowId/exchanges/:exchangeId/openid/credential',
+  // OID4VP 1.0 verifier binding (per-exchange scope, verify workflow only).
+  oid4vpRequest:
+    '/workflows/:workflowId/exchanges/:exchangeId/openid4vp/request',
+  oid4vpResponse:
+    '/workflows/:workflowId/exchanges/:exchangeId/openid4vp/response',
   // RFC 8615 path-suffix well-known URLs. The wallet computes these from
   // the `credential_issuer` URL it gets in the credential offer.
   oid4vciIssuerMetadata:
@@ -389,6 +399,87 @@ export const app = new Hono()
       await saveExchange(ensured.exchange)
     }
     return c.json(buildCredentialOffer(ensured.exchange))
+  })
+
+  /*
+  OID4VP 1.0 Authorization Request (§5) — fetched by the wallet from the `request_uri`
+  embedded in the `openid4vp://?client_id=...&request_uri=...` deep link. Served as
+  unsigned JSON (the `redirect_uri` client_id prefix forbids signing). The first GET
+  lazily mints + persists the single-use `state`; subsequent GETs return the same
+  request until the exchange completes or expires.
+  */
+  .get(routes.oid4vpRequest, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'verify') {
+      throw new HTTPException(400, {
+        message:
+          'OID4VP authorization request is only available for verify exchanges'
+      })
+    }
+    const ensured = ensureOid4vpState(exchange as App.ExchangeDetailVerify)
+    if (ensured.isNew) {
+      await saveExchange(ensured.exchange)
+    }
+    c.header('Cache-Control', 'no-store')
+    return c.json(buildAuthorizationRequest(ensured.exchange))
+  })
+
+  /*
+  OID4VP 1.0 direct_post Response (§8.2). The wallet POSTs a DCQL `vp_token`
+  (JSON object keyed by credential-query id) here. The handler binds it to the
+  exchange (`state`/replay guard + `client_id`↔`domain`), then reuses the verify
+  pipeline so the exchange finalizes exactly like the VC-API path. Accepts JSON
+  or form-urlencoded. Spec-shaped errors return 400 + `Cache-Control: no-store`.
+  */
+  .post(routes.oid4vpResponse, async (c) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.req.param('workflowId')!
+    )
+    if (exchange.workflowId !== 'verify') {
+      throw new HTTPException(400, {
+        message: 'OID4VP response endpoint is only available for verify exchanges'
+      })
+    }
+    if (exchange.state === 'complete') {
+      c.header('Cache-Control', 'no-store')
+      return c.json(
+        {
+          error: 'invalid_request',
+          error_description: 'This exchange has already been completed.'
+        },
+        400
+      )
+    }
+
+    const contentType = c.req.header('content-type') ?? ''
+    let body: unknown
+    if (contentType.includes('application/json')) {
+      try {
+        body = await c.req.json()
+      } catch {
+        body = undefined
+      }
+    } else {
+      body = await c.req.parseBody()
+    }
+
+    const result = await handleOid4vpResponse({
+      body,
+      exchange: exchange as App.ExchangeDetailVerify,
+      workflow: getWorkflow('verify'),
+      config: c.var.config
+    })
+
+    c.header('Cache-Control', 'no-store')
+    if (!result.ok) {
+      return c.json(result.body, result.status)
+    }
+    // The verify pipeline already persisted the finalized exchange.
+    return c.json(result.response, 200)
   })
 
   /*

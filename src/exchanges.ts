@@ -22,6 +22,11 @@ import {
   buildOpenIdCredentialOfferDeepLinkByReference,
   credentialOfferUriForExchange
 } from './oid4vci/index.js'
+import {
+  buildOid4vpDeepLink,
+  clientIdForExchange,
+  requestUriForExchange
+} from './oid4vp/index.js'
 import { HTTPException } from 'hono/http-exception'
 
 /** Allows the creation of one or a batch of exchanges for a particular tenant. */
@@ -241,6 +246,7 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
     vcapi: string
     lcw?: string
     OID4VCI?: string
+    OID4VP?: string
     verifiablePresentationRequest: typeof verifiablePresentationRequest
   } = {
     iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}?iuv=1`,
@@ -251,7 +257,6 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
           challenge: exchange.variables.challenge
         }),
     verifiablePresentationRequest
-    // TODO: add "OID4VP" support for forthcoming verification workflows
   }
 
   // OID4VCI 1.0 Pre-Authorized Code Flow is offered alongside VCALM for
@@ -263,6 +268,19 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
     protocols.OID4VCI = buildOpenIdCredentialOfferDeepLinkByReference(
       credentialOfferUriForExchange(exchange as App.ExchangeDetailClaim)
     )
+  }
+
+  // OID4VP 1.0 verifier binding is offered alongside VC-API / CHAPI for
+  // verify exchanges. The deep link references the authorization request
+  // by `request_uri`; the wallet GETs that to receive the request JSON.
+  // The request route lazily mints the single-use `state` on first GET,
+  // so no exchange state needs to be persisted for this entry to be valid.
+  if (isVerify) {
+    const verify = exchange as App.ExchangeDetailVerify
+    protocols.OID4VP = buildOid4vpDeepLink({
+      clientId: clientIdForExchange(verify),
+      requestUri: requestUriForExchange(verify)
+    })
   }
 
   return protocols

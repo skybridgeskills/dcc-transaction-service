@@ -189,6 +189,25 @@ object — an `openid-credential-offer://?credential_offer_uri=...` deep link.
 See [`docs/oid4vci-pre-authorized-flow.md`](./docs/oid4vci-pre-authorized-flow.md) for the full
 walk-through with curl commands.
 
+### OID4VP 1.0 Verifier Binding
+
+For `verify` exchanges, the service additionally exposes the **verifier** side of [OpenID for
+Verifiable Presentations 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
+so a wallet can present a Data Integrity credential over OID4VP. The wallet-facing entry point is
+the `OID4VP` field on the protocols object — an `openid4vp://?client_id=...&request_uri=...` deep
+link. The binding uses **DCQL** (not `presentation_definition`), an **unsigned** request with the
+`redirect_uri` client_id prefix, and **`direct_post`**; the presented VP runs through the same
+`verifier-core` pipeline as the VC-API path.
+
+- `GET /workflows/verify/exchanges/:exchangeId/openid4vp/request` — unsigned OID4VP 1.0
+  authorization request JSON (DCQL query + `client_metadata`); lazily mints a single-use `state`.
+- `POST /workflows/verify/exchanges/:exchangeId/openid4vp/response` — `direct_post` `vp_token`
+  (DCQL object keyed by credential-query id), bound to the exchange by `state` / `nonce` /
+  `client_id`↔`domain` and verified by the existing pipeline.
+
+See [`docs/oid4vp-1.0-verifier.md`](./docs/oid4vp-1.0-verifier.md) for the request/response shapes,
+DCQL mapping, and security binding.
+
 ## Verification pipeline
 
 The verify workflow (`POST /workflows/verify/exchanges/:exchangeId`)

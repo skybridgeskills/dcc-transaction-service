@@ -110,12 +110,6 @@ declare global {
       }
     }
 
-    // TODO: verify with OID4VP
-    interface DcqlQuery {
-      path: string
-      value: string
-    }
-
     type SupportedWorkflowIds = 'didAuth' | 'claim' | 'verify' | 'healthz'
     type ExchangeState = 'pending' | 'active' | 'complete' | 'invalid'
 
@@ -193,6 +187,24 @@ declare global {
       cNonce?: string
       cNonceExpiresAt?: string
       nonceUsed?: boolean
+    }
+
+    /**
+     * OID4VP 1.0 verifier runtime state, populated lazily the first time a
+     * wallet GETs the authorization request (`/openid4vp/request`). Bound to
+     * the exchange's own `challenge` (used as the OID4VP `nonce`); `state` is
+     * a single-use correlation token echoed back on the `direct_post`
+     * response.
+     *
+     * Stored inline on the exchange so all OID4VP lifecycle state lives in a
+     * single Keyv record alongside the rest of the exchange (mirrors
+     * {@link ExchangeOid4vciState}).
+     */
+    interface ExchangeOid4vpState {
+      /** Opaque correlation token; echoed in the request `state` and required on direct_post. */
+      state?: string
+      /** True once a direct_post response has been accepted (replay guard). */
+      responseReceived?: boolean
     }
 
     interface ExchangeDetailClaim extends ExchangeDetailBase {
@@ -441,6 +453,7 @@ declare global {
         trustedIssuers: string[]
         trustedRegistries?: string[]
         vprClaims: DcqlClaim[]
+        oid4vp?: ExchangeOid4vpState
         results?: { default: VerificationResult }
         verifyTask?: VerifyTask
       }
@@ -499,6 +512,18 @@ declare global {
        * from VC-API.
        */
       OID4VCI?: string
+      /**
+       * OID4VP 1.0 deep link of the form
+       * `openid4vp://?client_id=...&request_uri=...`. Present only on
+       * `verify` exchanges (the workflow that supports the OID4VP 1.0
+       * verifier binding).
+       *
+       * Spelt uppercase to match the OID4VP 1.0 spec name and to mirror the
+       * {@link Protocols.OID4VCI} convention. The `request_uri` GET lazily
+       * mints the single-use `state`, so no exchange state needs to be
+       * persisted for this entry to be valid.
+       */
+      OID4VP?: string
     }
 
     interface DCCWalletQuery {

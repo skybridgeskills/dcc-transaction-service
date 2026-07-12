@@ -52,6 +52,9 @@ export function WalletInteraction({
       <div style={{ marginTop: '16px' }}>
         <a
           href={interactionUrl}
+          {...(selectedId === 'learncard'
+            ? { target: '_blank', rel: 'noopener noreferrer' }
+            : {})}
           style={{
             display: 'inline-block',
             padding: '10px 20px',

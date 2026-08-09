@@ -43,6 +43,7 @@ const fakeConfig: App.Config = {
   defaultExchangeHost: 'https://issuer.example',
   exchangeTtl: 600,
   statusService: '',
+  statusServiceToken: '',
   signingService: 'http://localhost:4006',
   defaultWorkflow: 'didAuth',
   defaultTenantName: 'default',

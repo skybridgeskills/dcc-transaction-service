@@ -26,6 +26,12 @@ declare global {
       defaultExchangeHost: string
       exchangeTtl: number
       statusService: string
+      /**
+       * Bearer token for the status service, which authenticates every write.
+       * Global rather than per-tenant: this service talks to status as one
+       * client today. Per-tenant tokens land if that stops being true.
+       */
+      statusServiceToken: string
       signingService: string
       defaultWorkflow: string
       defaultTenantName: string

@@ -217,9 +217,14 @@ export const signClaimCredentialFromHolderDid = async ({
 
   // add credential status if enabled
   if (config.statusService) {
+    // The status service is Bearer-only on every write, so allocate carries a
+    // token. Same URL and the same pre-signing point in the flow as before.
     credential = await callService(
       `${config.statusService}/credentials/status/allocate`,
-      credential
+      credential,
+      config.statusServiceToken
+        ? { Authorization: `Bearer ${config.statusServiceToken}` }
+        : undefined
     )
   }
   const signedCredential = await callService(

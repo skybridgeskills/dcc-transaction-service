@@ -211,6 +211,7 @@ const parseConfig = (): App.Config => {
       process.env.DEFAULT_EXCHANGE_HOST ?? defaultExchangeHost,
     exchangeTtl: parseInt(process.env.EXCHANGE_TTL ?? '0') || defaultTtlSeconds,
     statusService: process.env.STATUS_SERVICE ?? '',
+    statusServiceToken: process.env.STATUS_SERVICE_TOKEN ?? '',
     signingService: process.env.SIGNING_SERVICE ?? defaultSigningService,
 
     defaultWorkflow: process.env.DEFAULT_WORKFLOW ?? defaultWorkflow,

@@ -109,8 +109,13 @@ const barePresentation = (holder?: unknown) => ({
   proof
 })
 
+// VC-API returns the presentation wrapped: `{ verifiablePresentation: VP }`.
 const issuedCredential = (result: unknown) =>
-  (result as { verifiableCredential: App.Credential[] }).verifiableCredential[0]
+  (
+    result as {
+      verifiablePresentation: { verifiableCredential: App.Credential[] }
+    }
+  ).verifiablePresentation.verifiableCredential[0]
 
 describe('participateInClaimExchange — holder DID binding', () => {
   beforeEach(() => {

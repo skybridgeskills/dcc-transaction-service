@@ -134,14 +134,21 @@ export const participateInClaimExchange = async ({
   const verifiablePresentation = createPresentation()
   verifiablePresentation.verifiableCredential = [signedCredential]
 
-  // VC-API indicates we would wrap this in a verifiablePresentation property, but LCW can't handle that.
-  // Should be return {verifiablePresentation}
-  // We will now try a stupid hack to nest it inside the VP
-  verifiablePresentation['verifiablePresentation'] = {
-    ...verifiablePresentation
-  }
-
-  return verifiablePresentation
+  // VC-API §"Participate in an exchange" returns the presentation wrapped:
+  // `{ verifiablePresentation: VP }`. Earlier this returned a bare VP that also
+  // carried a duplicated `verifiablePresentation` member — a hack so the Learner
+  // Credential Wallet, which reads a bare VP, kept working.
+  //
+  // That hybrid was found to break real wallets: the Certree wallet drove the
+  // VC-API claim flow to completion, we returned 200 with a fully valid
+  // credential, and it reported "We couldn't get the credential" with nothing
+  // entering the wallet. The reference holder accepted the same payload, so the
+  // shape was the remaining difference.
+  //
+  // ⚠️ LCW compatibility: LCW reads a bare VP and will not find the credential in
+  // this envelope. If LCW must keep working against this service, negotiate the
+  // shape per client rather than reinstating the duplicated member.
+  return { verifiablePresentation }
 }
 
 /**

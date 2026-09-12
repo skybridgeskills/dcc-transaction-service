@@ -13,9 +13,19 @@
  * `challenge`) are still passed at the call site; the singleton owns
  * only the long-lived dependencies. This keeps per-exchange registry
  * overrides working without rebuilding the verifier.
+ *
+ * ⚠️ ONE GAP THE OVERRIDES DO NOT REACH. verifier-core's `buildContext`
+ * hardcodes `cryptoSuites: defaultCryptoSuites()` for `bitstring-status-check`,
+ * so the status suite sees verifier-core's ORIGINAL two suites, not the
+ * widened set below. Harmless today — our status lists are signed
+ * `eddsa-rdfc-2022` — but a P-256-signed status list would fail its status
+ * check while its credential proof verified. Closing it means a change in
+ * verifier-core.
  */
 import { createVerifier, type Verifier } from '@digitalcredentials/verifier-core'
 import { getVerifierVerificationFetchers } from './verifier-keyv-store.js'
+import { buildVerifierDocumentLoader } from './verifier-document-loader.js'
+import { verifierCryptoServices } from './verifier-crypto-suites.js'
 
 let verifier: Verifier | undefined
 
@@ -28,7 +38,16 @@ let verifier: Verifier | undefined
 export const getVerifier = (): Verifier => {
   if (!verifier) {
     const { httpGetService, cacheService } = getVerifierVerificationFetchers()
-    verifier = createVerifier({ httpGetService, cacheService })
+    verifier = createVerifier({
+      httpGetService,
+      cacheService,
+      // Both overrides widen verifier-core's defaults past `did:key`/`did:web`
+      // and past `eddsa-rdfc-2022` — see the two modules for why each gap was a
+      // hazard rather than a missing feature: a wallet that took our advertised
+      // acceptance at its word earned a failure for a gap that was ours.
+      documentLoader: buildVerifierDocumentLoader(httpGetService),
+      cryptoServices: verifierCryptoServices()
+    })
   }
   return verifier
 }

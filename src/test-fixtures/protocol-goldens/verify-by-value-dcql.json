@@ -1,0 +1,93 @@
+{
+  "name": "verify-by-value-dcql",
+  "workflow": "verify",
+  "why": "The by-value arm — the conformant delivery under the redirect_uri prefix, and a baseline construction.",
+  "exercisedOnTheWire": true,
+  "variables": {
+    "vprContext": [
+      "https://www.w3.org/2018/credentials/v1"
+    ],
+    "vprCredentialType": [
+      "VerifiableCredential",
+      "OpenBadgeCredential"
+    ],
+    "trustedIssuers": [],
+    "vprClaims": [],
+    "oid4vpDelivery": "by-value"
+  },
+  "protocols": {
+    "iu": "http://localhost:4005/interactions/{exchangeId}?iuv=1",
+    "vcapi": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}",
+    "lcw": "https://lcw.app/request?request=%7B%22protocols%22%3A%7B%22vcapi%22%3A%22http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%22%7D%7D",
+    "verifiablePresentationRequest": {
+      "query": [
+        {
+          "type": "QueryByExample",
+          "credentialQuery": {
+            "example": {
+              "type": [
+                "VerifiableCredential",
+                "OpenBadgeCredential"
+              ],
+              "@context": [
+                "https://www.w3.org/2018/credentials/v1"
+              ]
+            }
+          }
+        },
+        {
+          "type": "DIDAuthentication",
+          "acceptedCryptosuites": [
+            {
+              "cryptosuite": "eddsa-rdfc-2022"
+            },
+            {
+              "cryptosuite": "ecdsa-rdfc-2019"
+            },
+            {
+              "cryptosuite": "ed25519-signature-2020"
+            }
+          ],
+          "acceptedMethods": [
+            {
+              "method": "key"
+            },
+            {
+              "method": "web"
+            },
+            {
+              "method": "jwk"
+            }
+          ]
+        }
+      ],
+      "interact": {
+        "service": [
+          {
+            "type": "VerifiableCredentialApiExchangeService",
+            "serviceEndpoint": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}"
+          },
+          {
+            "type": "UnmediatedPresentationService2021",
+            "serviceEndpoint": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}"
+          }
+        ]
+      },
+      "challenge": "{challenge}",
+      "domain": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}",
+      "acceptedCryptosuites": [
+        {
+          "cryptosuite": "eddsa-rdfc-2022"
+        },
+        {
+          "cryptosuite": "ecdsa-rdfc-2019"
+        },
+        {
+          "cryptosuite": "ed25519-signature-2020"
+        }
+      ]
+    },
+    "OID4VP": "openid4vp://?response_type=vp_token&response_mode=direct_post&client_id=redirect_uri%3Ahttp%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Fresponse&response_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Fresponse&nonce={challenge}&state={state}&dcql_query=%7B%22credentials%22%3A%5B%7B%22id%22%3A%22credential%22%2C%22format%22%3A%22ldp_vc%22%2C%22meta%22%3A%7B%22type_values%22%3A%5B%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%23VerifiableCredential%22%5D%5D%7D%7D%5D%7D&client_metadata=%7B%22vp_formats_supported%22%3A%7B%22ldp_vc%22%3A%7B%22proof_type_values%22%3A%5B%22DataIntegrityProof%22%5D%2C%22cryptosuite_values%22%3A%5B%22eddsa-rdfc-2022%22%2C%22ecdsa-rdfc-2019%22%5D%7D%2C%22ldp_vp%22%3A%7B%22proof_type_values%22%3A%5B%22DataIntegrityProof%22%5D%2C%22cryptosuite_values%22%3A%5B%22eddsa-rdfc-2022%22%2C%22ecdsa-rdfc-2019%22%5D%7D%7D%7D",
+    "oid4vp-1.0": "openid4vp://?response_type=vp_token&response_mode=direct_post&client_id=redirect_uri%3Ahttp%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Fresponse&response_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Fresponse&nonce={challenge}&state={state}&dcql_query=%7B%22credentials%22%3A%5B%7B%22id%22%3A%22credential%22%2C%22format%22%3A%22ldp_vc%22%2C%22meta%22%3A%7B%22type_values%22%3A%5B%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%23VerifiableCredential%22%5D%5D%7D%7D%5D%7D&client_metadata=%7B%22vp_formats_supported%22%3A%7B%22ldp_vc%22%3A%7B%22proof_type_values%22%3A%5B%22DataIntegrityProof%22%5D%2C%22cryptosuite_values%22%3A%5B%22eddsa-rdfc-2022%22%2C%22ecdsa-rdfc-2019%22%5D%7D%2C%22ldp_vp%22%3A%7B%22proof_type_values%22%3A%5B%22DataIntegrityProof%22%5D%2C%22cryptosuite_values%22%3A%5B%22eddsa-rdfc-2022%22%2C%22ecdsa-rdfc-2019%22%5D%7D%7D%7D"
+  }
+}

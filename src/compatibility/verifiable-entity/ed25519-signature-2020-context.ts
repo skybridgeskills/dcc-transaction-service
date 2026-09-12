@@ -10,7 +10,7 @@ const SUITE_CONTEXT_URL = 'https://w3id.org/security/suites/ed25519-2020/v1'
 const SIGNATURE_TYPE = 'Ed25519Signature2020'
 
 /**
- * Some signers (e.g. LearnCard via SpruceKit) sign verifiable entities with
+ * Some signers sign verifiable entities with
  * `Ed25519Signature2020` but omit the suite context URL
  * (`https://w3id.org/security/suites/ed25519-2020/v1`) from the entity's
  * top-level `@context`, even though the proof block declares it. The Digital

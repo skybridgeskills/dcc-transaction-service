@@ -19,8 +19,86 @@ exactly the VCALM exchange's lifetime.
 | Credential Issuer Metadata      | `GET`  | `/.well-known/openid-credential-issuer/workflows/claim/exchanges/:id`                 |
 | OAuth Authorization Server Meta | `GET`  | `/.well-known/oauth-authorization-server/workflows/claim/exchanges/:id`               |
 | Token                           | `POST` | `/workflows/claim/exchanges/:id/openid/token`                                         |
+| Token, by construction †        | `POST` | `/workflows/claim/exchanges/:id/token`                                                |
 | Nonce                           | `POST` | `/workflows/claim/exchanges/:id/openid/nonce`                                         |
 | Credential                      | `POST` | `/workflows/claim/exchanges/:id/openid/credential`                                    |
+
+### Discovery constructions — both are served
+
+A wallet does not fetch metadata from a URL we hand it. It **computes** the URL from the
+`credential_issuer` value in the credential offer, and there are two ways to do that:
+
+| Construction | URL for `credential_issuer = $HOST/workflows/claim/exchanges/:id` |
+| --- | --- |
+| **RFC 8414 §3.1 path-suffix** — well-known inserted after the **host** | `$HOST/.well-known/openid-credential-issuer/workflows/claim/exchanges/:id` |
+| **OIDC Discovery 1.0 concatenation** — well-known **appended** to the identifier | `$HOST/workflows/claim/exchanges/:id/.well-known/openid-credential-issuer` |
+
+RFC 8414 §3.1, which OID4VCI adopts, specifies the path-suffix form for issuer identifiers
+that carry a path — and a per-exchange `credential_issuer` always does. **But wallets in the
+wild compute the concatenated form**, and a wallet that guesses differently from its issuer
+404s at discovery and abandons the flow before token, nonce or credential. One mismatch
+therefore hides everything downstream.
+
+This service serves **both**, from the same handlers, for all three names:
+
+| Endpoint | Method | Concatenated path |
+| --- | --- | --- |
+| Credential Issuer Metadata | `GET` | `/workflows/claim/exchanges/:id/.well-known/openid-credential-issuer` |
+| OAuth AS Metadata | `GET` | `/workflows/claim/exchanges/:id/.well-known/oauth-authorization-server` |
+| OIDC Discovery alias | `GET` | `/workflows/claim/exchanges/:id/.well-known/openid-configuration` |
+
+Two caveats worth knowing:
+
+- **`openid-configuration` is a deliberate interop alias.** It returns the OID4VCI AS
+  metadata document, which is *not* a conformant OIDC OP metadata document. It is served
+  because wallets request that name during OID4VCI discovery.
+- **Serving both makes this service permissive**, so it no longer discriminates between
+  wallets on its own. Each metadata fetch therefore logs one line naming the construction
+  used, so a wallet's discovery style stays observable without a proxy capture in front of
+  it:
+
+  ```
+  oid4vci discovery: construction=oidc-concat doc=issuer exchange=<id>
+  ```
+
+  `construction` is `rfc8414-path-suffix` or `oidc-concat`; `doc` is `issuer`, `as` or
+  `openid-configuration`.
+
+### † The token endpoint by construction — an accommodation, not a route we advertise
+
+Issuer metadata carries no `token_endpoint`. It names `authorization_servers`, and under
+RFC 8414 that means the client fetches
+`<authorization_server>/.well-known/oauth-authorization-server` and reads `token_endpoint`
+out of *that* document. We serve it, at the path-insertion form and the concatenated form
+both, and it returns the discovered endpoint: `<issuer>/openid/token`.
+
+Some clients skip that fetch and **construct** the URL instead, by appending `/token` to
+`authorization_servers[0]`. Without a route at that path the token request meets a 404, so
+nothing downstream of the token can be observed at all.
+
+So the token endpoint is **also** reachable at the constructed path. Three things about it
+are load-bearing:
+
+- **It is a concession, not a dialect.** RFC 8414 discovery is mandated; constructing the
+  URL is a guess. Serving it does not make a client that uses it conformant, and whatever
+  reads `discovery-served` lines to tell real discovery from a constructed guess can still
+  tell the two apart here.
+- **The discovered route stays the advertised one.** `buildOid4vciAsMetadata` still names
+  `<issuer>/openid/token`, and issuer metadata still advertises no `token_endpoint` of its
+  own. ⛔ Advertising one would make every wallet look conformant and erase that
+  distinction for every product at once — which is why
+  `src/oid4vci/issuer-metadata.test.ts` asserts it has not happened.
+- **Serving it does not record it as discovery.** The constructed path writes an
+  `accommodation-served` journal line and *no* `discovery-served` line, so a client that
+  guesses still leaves no authorization-server discovery election behind. That absence is
+  the point, and it survives the accommodation intact.
+
+The reasoning and the rejected alternatives are in
+[`docs/adr/2026-08-26-accommodated-routes-record-themselves.md`](adr/2026-08-26-accommodated-routes-record-themselves.md).
+The register entry is `token-endpoint-by-convention` in
+[`docs/accommodations.md`](accommodations.md);
+an accommodation is only worth registering if something actually exercises it, and this
+one is pinned by the OID4VCI route tests alongside its strict alternative.
 
 ## Flow
 

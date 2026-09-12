@@ -1,6 +1,7 @@
 import {
   type ExchangeClient,
   type ExchangeProtocols,
+  type LaunchPreset,
   type ExchangeStatusResponse,
   HttpNotOkResponseError
 } from './exchange-client.js'
@@ -61,6 +62,34 @@ export class HttpExchangeClient implements ExchangeClient {
       if (typeof v === 'string') protoMap[k] = v
     }
     return protoMap
+  }
+
+  async fetchPresets(exchangeId: string): Promise<LaunchPreset[]> {
+    const url = `${this.baseUrl}/interactions/${exchangeId}/presets`
+    const headers = this.buildHeaders({ Accept: 'application/json' })
+    const res = await fetch(url, this.fetchOptions(headers))
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = (await res.json()) as { presets: LaunchPreset[] }
+    return data.presets
+  }
+
+  async recordInteractionMethod(
+    exchangeId: string,
+    payloadId: string,
+    payload: string
+  ): Promise<void> {
+    const url = `${this.baseUrl}/interactions/${exchangeId}/method`
+    const headers = this.buildHeaders({ 'Content-Type': 'application/json' })
+    try {
+      await fetch(url, {
+        method: 'POST',
+        ...this.fetchOptions(headers),
+        body: JSON.stringify({ payloadId, payload })
+      })
+    } catch {
+      // Swallowed on purpose — see the interface. An unreachable service
+      // costs a line of evidence; a thrown error here would cost the run.
+    }
   }
 
   async fetchExchangeStatus(vcapiUrl: string): Promise<ExchangeStatusResponse> {

@@ -4,8 +4,42 @@
 import { HTTPException } from 'hono/http-exception'
 import Keyv from 'keyv'
 import { createKeyvStore } from './keyv-store.js'
+import { journalExchangeEvent } from './journal/index.js'
 
 let keyv: Keyv<App.ExchangeDetailBase>
+
+/**
+ * States from which an exchange does not continue. Journalled as `terminal`.
+ *
+ * `'active'` is not one of them: a verify exchange sits in `active` while the
+ * asynchronous Open Badges pass runs, and it still resolves to `complete` or
+ * `invalid` afterwards.
+ */
+const TERMINAL_STATES: ReadonlySet<App.ExchangeState> = new Set([
+  'complete',
+  'invalid'
+])
+
+/**
+ * Journal an exchange that has just been persisted in a terminal state.
+ *
+ * Hooked into the persistence layer rather than into each of the five call
+ * sites that assign `state: 'complete' | 'invalid'` (`claimWorkflow`,
+ * `didAuthWorkflow`, the OID4VCI credential handler, the verify finaliser and
+ * the verify-task sweep). Those five have nothing in common except that they
+ * all end up here, and a sixth is exactly the kind of thing a later change
+ * adds — a durable record with a hole in it is worse than one with a duplicate
+ * line, because absence reads as "did not happen".
+ *
+ * Every terminal *write* is journalled, not every terminal *transition*.
+ * Detecting a transition would mean a read before each write purely to feed the
+ * journal, and re-completion is itself a fact worth recording: a wallet that
+ * drives an exchange to `complete` twice is a finding, not noise.
+ */
+const journalIfTerminal = (exchange: App.ExchangeDetailBase): void => {
+  if (!TERMINAL_STATES.has(exchange.state)) return
+  journalExchangeEvent(exchange, 'terminal', { state: exchange.state })
+}
 
 /**
  * Initializes the keyv store for exchange transaction data.
@@ -54,6 +88,7 @@ export const saveExchange = async (data: App.ExchangeDetailBase) => {
   if (!success) {
     throw new HTTPException(500, { message: 'Failed to save exchange.' })
   }
+  journalIfTerminal(data)
   return success
 }
 
@@ -117,6 +152,10 @@ export const saveExchangeWithCAS = async (
   if (!success) {
     throw new HTTPException(500, { message: 'Failed to save exchange.' })
   }
+  // The async verify path commits only through here, and it owns the one
+  // `'invalid'` transition in the service (a verify task that gave up), so the
+  // journal hook has to be on both writers.
+  journalIfTerminal(next)
   return { status: 'committed', exchange: next }
 }
 

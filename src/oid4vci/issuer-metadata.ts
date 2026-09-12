@@ -7,6 +7,7 @@
  * instances, so the metadata reflects exactly what this exchange will
  * issue.
  */
+import { buildOid4vciAsMetadata } from './as-metadata.js'
 import {
   credentialIssuerUrlForExchange,
   deriveCredentialConfigurationId
@@ -99,11 +100,29 @@ export const buildIssuerMetadata = (
 ): IssuerMetadata => {
   const issuer = credentialIssuerUrlForExchange(exchange)
   const configId = deriveCredentialConfigurationId(exchange.variables.vc)
+
+  /**
+   * ACCOMMODATION — `token-endpoint-inline`, VARIANT, **default off**.
+   *
+   * ⛔ Gated on the per-exchange opt-in and nothing else. Never elect this from
+   * a default, a tenant setting or a profile: serving it on every exchange
+   * erases `authorization-server-metadata-discovery` for every vendor at once
+   * (see `schema.ts`'s note on `oid4vciTokenEndpointInline`).
+   *
+   * The value is read straight off `buildOid4vciAsMetadata` so the inline copy
+   * cannot drift from the discovered one — there is exactly one source of truth
+   * for the token endpoint, and `issuer-metadata.test.ts` asserts they match.
+   */
+  const inlineTokenEndpoint = exchange.variables.oid4vciTokenEndpointInline
+    ? { token_endpoint: buildOid4vciAsMetadata(exchange).token_endpoint }
+    : {}
+
   return {
     credential_issuer: issuer,
     authorization_servers: [issuer],
     credential_endpoint: `${issuer}/openid/credential`,
     nonce_endpoint: `${issuer}/openid/nonce`,
+    ...inlineTokenEndpoint,
     credential_configurations_supported: {
       [configId]: buildSupportedConfiguration(exchange, config)
     }

@@ -444,11 +444,17 @@ describe('api', function () {
       expect(continuationResponse.status).toBe(200)
       expect(body).toBeDefined()
 
-      // First verify the basic structure
+      // VC-API returns the presentation wrapped: `{ verifiablePresentation: VP }`.
       expect(body.redirectUrl).toBeUndefined()
-      expect(body.type).toBeDefined() // ["VerifiablePresentation"]
-      expect(body.verifiableCredential).toBeDefined()
-      expect(body.verifiableCredential.length).toBe(1) // It will just be the mocked {}
+      expect(body.verifiablePresentation).toBeDefined()
+      expect(body.verifiablePresentation.type).toBeDefined() // ["VerifiablePresentation"]
+      expect(body.verifiablePresentation.verifiableCredential).toBeDefined()
+      expect(body.verifiablePresentation.verifiableCredential.length).toBe(1) // It will just be the mocked {}
+      // The old hybrid shape returned a bare VP that also carried a duplicated
+      // `verifiablePresentation` member. Assert it is gone, so the hack cannot
+      // creep back in unnoticed.
+      expect(body.type).toBeUndefined()
+      expect(body.verifiableCredential).toBeUndefined()
     })
   })
 })

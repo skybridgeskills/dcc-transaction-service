@@ -19,6 +19,12 @@ declare global {
       origin?: string
       /** When set, signing uses these rows; otherwise legacy behavior uses exchange tenant name. */
       issuerInstances?: IssuerInstance[]
+      /**
+       * Protocol profile this tenant's exchanges use when the exchange names
+       * none of its own, from `TENANT_PROFILE_<NAME>`. The middle layer of the
+       * three; see `protocol-profiles/resolve.ts`.
+       */
+      protocolProfileName?: string
     }
 
     interface Config {
@@ -26,6 +32,12 @@ declare global {
       defaultExchangeHost: string
       exchangeTtl: number
       statusService: string
+      /**
+       * Bearer token for the status service, which authenticates every write.
+       * Global rather than per-tenant: this service talks to status as one
+       * client today. Per-tenant tokens land if that stops being true.
+       */
+      statusServiceToken: string
       signingService: string
       defaultWorkflow: string
       defaultTenantName: string
@@ -36,6 +48,17 @@ declare global {
       uiShowDetails: boolean
       /** HS256 secret for OAuth access JWTs (client_credentials). Empty disables issuance. */
       accessJwtSecret: string
+      /**
+       * Filesystem path for the append-only exchange journal (JSONL), from
+       * `EXCHANGE_JOURNAL_PATH`. Undefined selects the no-op sink, which is
+       * the default: the journal records nothing and creates no file unless a
+       * deployment asks for it.
+       *
+       * Deliberately separate from `keyvFilePath`. The Keyv store is the live,
+       * TTL-evicted exchange record; the journal is the durable one. See
+       * `docs/adr/2026-08-11-exchange-journal-durable-record.md`.
+       */
+      exchangeJournalPath?: string
       keyvFilePath?: string
       redisUri?: string
       keyvWriteDelayMs: number
@@ -67,6 +90,56 @@ declare global {
        * `VERIFY_TASK_MAX_ATTEMPTS`.
        */
       verifyTaskMaxAttempts: number
+      /**
+       * Protocol profile served when neither the exchange nor its tenant names
+       * one, from `DEFAULT_PROTOCOL_PROFILE`. The last of the three resolution
+       * layers.
+       *
+       * ⚠️ Undefined is not a fallback to "whatever we did before" — with no
+       * layer naming a profile, resolution throws. See
+       * `protocol-profiles/resolve.ts` for why guessing is the worse failure.
+       */
+      defaultProtocolProfileName?: string
+    }
+
+    /**
+     * The `protocols` map an interaction URL resolves to — VCALM's
+     * "interaction protocols response": each key a protocol identifier, each
+     * value a URL that can be used to initiate the interaction.
+     *
+     * ⚠️ **Which keys appear is a protocol-profile decision**, not a constant,
+     * which is why there is an index signature. The named members below are
+     * the ones this service has always emitted and that callers read directly;
+     * the signature is what lets a profile add a spelling without a type change
+     * at every call site.
+     *
+     * ⚠️ **`interact` is deliberately NOT a member.** In VCALM it does not mean
+     * "our interaction URL" — it is a delegation mechanism, *"used to redirect
+     * a wallet to a different interaction URL, where the exchange will
+     * continue"*. Emitting our own interaction URL under it would tell a wallet
+     * to go somewhere else and land it back here. See
+     * `docs/protocol-profiles.md`.
+     */
+    interface ExchangeProtocols {
+      /** The interaction URL itself — the thing whose GET returns this map. */
+      iu: string
+      /** The exchange id URL, per VCALM's `vcapi` interaction protocol. */
+      vcapi: string
+      /**
+       * ⚠️ A wallet-specific convenience, not a VCALM protocol. Grandfathered:
+       * existing callers read it and legacy protocol keys are kept, not renamed.
+       */
+      lcw?: string
+      /** ⚠️ Deprecated in VCALM, retained indefinitely for backwards compatibility. */
+      OID4VCI?: string
+      /** ⚠️ Deprecated in VCALM, retained indefinitely for backwards compatibility. */
+      OID4VP?: string
+      /** The versioned spelling VCALM advises implementers to use. */
+      'oid4vci-1.0'?: string
+      /** The versioned spelling VCALM advises implementers to use. */
+      'oid4vp-1.0'?: string
+      verifiablePresentationRequest?: unknown
+      [key: string]: unknown
     }
 
     interface ErrorResponseBody {
@@ -101,6 +174,15 @@ declare global {
 
     interface ExchangeCreateInput {
       expires?: string
+      /**
+       * Caller-supplied component of the minted `exchangeId`. Validated by
+       * `vcApiExchangeCreateSchema`; see `lib/mint-exchange-id.ts`.
+       *
+       * A sibling of `variables`, not a member of it: it is an instruction to
+       * the id minter, consumed once at creation, not an exchange variable
+       * interpolated into credential templates.
+       */
+      exchangeIdPrefix?: string
       variables: Record<string, unknown> & {
         vc?: string
         redirectUrl?: string
@@ -114,6 +196,17 @@ declare global {
     type ExchangeState = 'pending' | 'active' | 'complete' | 'invalid'
 
     interface BaseVariables {
+      /** Post-signing corruption for negative test cases. See `schema.ts`. */
+      tamper?: 'proof' | 'claim' | 'issuer'
+      /**
+       * ACCOMMODATION — `token-endpoint-inline`, VARIANT, **default off**.
+       * Publish `token_endpoint` inline in the issuer metadata for a client
+       * that never performs RFC 8414 AS discovery. ⛔ Per-exchange opt-in only;
+       * serving it by default erases
+       * `authorization-server-metadata-discovery` for every vendor at once.
+       * See `schema.ts` for the full reasoning.
+       */
+      oid4vciTokenEndpointInline?: boolean
       redirectUrl?: string
       retrievalId?: string
       exchangeHost: string
@@ -148,6 +241,17 @@ declare global {
         verbose?: boolean
         timing?: boolean
       }
+      /**
+       * Protocol profile this exchange asks to be served under — the most
+       * specific of the three resolution layers, beating the tenant default
+       * and the app default.
+       *
+       * A NAME, never a definition. Definitions are the service's own
+       * versioned data (`protocol-profiles/registry.ts`); a caller that could
+       * supply one could make this service emit bytes no name accounts for,
+       * which is the thing named profiles exist to prevent.
+       */
+      protocolProfileName?: string
     }
 
     interface ExchangeDetailBase {
@@ -157,9 +261,120 @@ declare global {
 
       // VC-API metadata
       exchangeId: string
+      /**
+       * The prefix the creating caller asked for, if any. Retained on the
+       * record because the create request is spread onto it, and retaining it
+       * is the honest option: the value is already visible in `exchangeId`, so
+       * stripping it would hide the instruction without hiding its effect.
+       * Reading it is never necessary — parse `exchangeId` instead, which is
+       * what every off-service reader has to do anyway.
+       */
+      exchangeIdPrefix?: string
       expires: string
       state: ExchangeState
       variables: BaseVariables
+
+      // Observations about the client, recorded as they happen
+      /**
+       * Which well-known constructions this exchange actually served, in the
+       * order they were first fetched. See {@link DiscoveryElection}.
+       *
+       * Absent until a metadata document is fetched, which is the honest
+       * encoding: "no client has asked yet" and "a client asked in no
+       * construction" are not the same observation.
+       */
+      discoveryElections?: DiscoveryElection[]
+      /**
+       * Which interaction methods this exchange's interaction page displayed,
+       * in the order they were first shown. See {@link
+       * InteractionMethodElection}.
+       *
+       * Absent until something is shown, not `[]`. *"No interaction method has
+       * been shown"* and *"an interaction method was shown under no profile"*
+       * are not the same observation, and only one of them is a fact about a
+       * scan.
+       */
+      interactionMethodElections?: InteractionMethodElection[]
+    }
+
+    /**
+     * Which well-known layout a client used to reach a metadata document.
+     *
+     * `rfc8414-path-suffix` — well-known inserted after the host, issuer path
+     * appended. RFC 8414 §3.1, which OID4VCI adopts, for issuer identifiers
+     * that carry a path.
+     * `oidc-concat` — well-known appended to the issuer identifier, the OpenID
+     * Connect Discovery 1.0 style.
+     */
+    type DiscoveryConstruction = 'rfc8414-path-suffix' | 'oidc-concat'
+
+    /** Which metadata document was served. */
+    type DiscoveryDoc = 'issuer' | 'as' | 'openid-configuration'
+
+    /**
+     * One construction/document pair a client elected, with the time it was
+     * first seen.
+     *
+     * This service serves both constructions and therefore discriminates on
+     * neither; what a client *chose* is consequently a fact about the client
+     * and nothing else, and it is invisible unless it is written down. It is
+     * recorded on the exchange record as well as in the journal because the
+     * two have different readers: a caller polling `GET` on the exchange sees
+     * this field, and a reader working from the durable journal after the
+     * record has been evicted sees the `discovery-served` lines.
+     *
+     * A set, in first-fetch order, rather than a single value: a client may
+     * fetch one construction, the other, or both, and "tried both" is a
+     * different observation from "took the concatenated form". Repeat fetches
+     * of a pair already recorded do not append — every individual fetch is in
+     * the journal, and an unbounded array on a record a client can grow by
+     * polling is not.
+     */
+    interface DiscoveryElection {
+      construction: DiscoveryConstruction
+      doc: DiscoveryDoc
+      /** ISO 8601, at the first fetch of this construction/document pair. */
+      at: string
+    }
+
+    /**
+     * One interaction method a page displayed, with the construction it
+     * displayed it under.
+     *
+     * A set in first-election order, repeats not appended — the same shape and
+     * the same reasoning as {@link DiscoveryElection}, whose docblock is the
+     * long version. See `lib/interaction-method-election.ts`.
+     *
+     * ⚠️ **The set takes recognised elections only.**
+     * `interaction-method-shown` takes its payload from the client, so the
+     * client picks the bytes; the route adds an entry only for a payload the
+     * server itself can rebuild for an offerable preset. That bounds the set by
+     * the offerable set and makes every entry one this service can vouch for.
+     * The journal still takes every reported interaction method, including one
+     * that parses to nothing.
+     */
+    interface InteractionMethodElection {
+      /**
+       * The envelope key — `iu`, `OID4VP`, `lcw`.
+       *
+       * ⚠️ The join key every recorded run cites, which is why it is recorded
+       * beside the construction rather than in place of it.
+       */
+      payloadId: string
+      protocolProfileName: string
+      /**
+       * ⚠️ Where the name came from, and the two are NOT interchangeable.
+       *
+       * `payload` — the QR itself named it, so the record is a fact about the
+       * bytes that were on screen. `active` — the payload named nothing, so
+       * this is the profile the SERVER resolved at the moment the interaction
+       * method was shown. Still true, but true about a resolution rather than
+       * about the QR, and a later reader must be able to tell which. Mirrors
+       * `ResolvedProtocolProfileName.source`.
+       */
+      source: 'payload' | 'active'
+      /** ISO 8601, at the first election of this pair. */
+      at: string
     }
 
     interface DcqlClaim {
@@ -205,7 +420,65 @@ declare global {
       state?: string
       /** True once a direct_post response has been accepted (replay guard). */
       responseReceived?: boolean
+      /**
+       * Which query language this exchange asks in. Per-exchange rather than
+       * global so one test run can exercise both query languages — a DCQL
+       * exchange and a PEX exchange minutes apart, with no restart and no mode
+       * leaking between them.
+       * Recorded explicitly (never left implicit) so the exchange record
+       * states which language it used. Defaults to `dcql`.
+       */
+      queryLanguage?: Oid4vpQueryLanguage
+      /**
+       * How this exchange delivered the authorization request. Per-exchange
+       * for the same reason `queryLanguage` is: one test run exercises both
+       * arms minutes apart with no restart and no mode leaking between them.
+       * Recorded explicitly so the exchange record states which delivery it
+       * used. Defaults to `by-reference`.
+       */
+      delivery?: Oid4vpDelivery
     }
+
+    /**
+     * OID4VP credential query languages this verifier can speak — including
+     * **both at once**.
+     *
+     * ⚠️ `both` is reachable only from a protocol profile, never from the
+     * per-exchange knob, and the asymmetry is deliberate: `oid4vpQueryLanguage`
+     * on the exchange stays two-valued because a caller choosing a language is
+     * choosing one, while a *profile* can state the accommodation that carries
+     * `dcql_query` and `presentation_definition` in one request.
+     *
+     * ⚠️ The recorded value is three-valued because the RECORD has to be able
+     * to say what actually went out. Narrowing it to the knob's two values
+     * would make an exchange served under the accommodation claim on its own
+     * record to have asked in one language, which is the sort of quietly wrong
+     * attribution that is expensive to unpick later.
+     */
+    type Oid4vpQueryLanguage = 'dcql' | 'pex' | 'both'
+
+    /**
+     * How the authorization request reaches the wallet.
+     *
+     * `by-value` — every parameter inline in the `openid4vp://` URL. The ONLY
+     * conformant delivery under the `redirect_uri` Client Identifier prefix,
+     * because §5.9.3 forbids signing such a request while §5.10.1 / RFC 9101
+     * require a `request_uri` response to be a signed JWT.
+     *
+     * `by-reference` — `client_id` + `request_uri`, answered with unsigned
+     * `application/json`. ⚠️ Undefined in every published OID4VP version, and
+     * the default only because it is what this service has always emitted;
+     * moving it would change every by-reference construction at once. See
+     * `oid4vp/deep-link.ts`.
+     */
+    type Oid4vpDelivery = 'by-reference' | 'by-value'
+
+    /**
+     * DIF PE `constraints.limit_disclosure` value a PEX verify exchange asks
+     * for. When set, the emitted `presentation_definition` instructs a
+     * conformant wallet to return ONLY the matched fields.
+     */
+    type Oid4vpLimitDisclosure = 'required' | 'preferred'
 
     interface ExchangeDetailClaim extends ExchangeDetailBase {
       workflowId: 'claim'
@@ -453,6 +726,25 @@ declare global {
         trustedIssuers: string[]
         trustedRegistries?: string[]
         vprClaims: DcqlClaim[]
+        /** Requested at exchange creation; copied onto `oid4vp.queryLanguage`. */
+        /**
+         * ⚠️ Two-valued, unlike {@link Oid4vpQueryLanguage}. A caller choosing
+         * a query language is choosing one; the both-at-once accommodation is
+         * a profile, not a knob.
+         */
+        oid4vpQueryLanguage?: 'dcql' | 'pex'
+        /**
+         * Requested at exchange creation; copied onto `oid4vp.delivery`.
+         * Defaults to `by-reference` — see {@link Oid4vpDelivery} for why the
+         * default is the non-conformant arm and why it is nonetheless kept.
+         */
+        oid4vpDelivery?: Oid4vpDelivery
+        /**
+         * Requested at exchange creation; when set (PEX only) it is threaded
+         * into `buildPresentationDefinition` as `constraints.limit_disclosure`.
+         * Optional so exchanges that omit it emit an unchanged request.
+         */
+        vprLimitDisclosure?: Oid4vpLimitDisclosure
         oid4vp?: ExchangeOid4vpState
         results?: { default: VerificationResult }
         verifyTask?: VerifyTask

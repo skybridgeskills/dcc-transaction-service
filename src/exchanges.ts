@@ -17,17 +17,21 @@ import {
   participateInVerifyExchange,
   validateExchangeVerify
 } from './workflows/verifyWorkflow.js'
-import { getWalletInteractionUrl } from './lib/wallets/index.js'
+import { walletLinkFor } from './lib/wallets/index.js'
 import {
   buildOpenIdCredentialOfferDeepLinkByReference,
   credentialOfferUriForExchange
 } from './oid4vci/index.js'
 import {
+  buildAuthorizationRequest,
   buildOid4vpDeepLink,
+  buildOid4vpDeepLinkByValue,
   clientIdForExchange,
-  requestUriForExchange
+  requestUriForExchange,
+  resolveDelivery
 } from './oid4vp/index.js'
 import { HTTPException } from 'hono/http-exception'
+import { wireProfileForExchange } from './protocol-profiles/for-exchange.js'
 
 /** Allows the creation of one or a batch of exchanges for a particular tenant. */
 export const createExchangeBatch = async ({
@@ -233,30 +237,111 @@ export const participateInExchange = async ({
   }
 }
 
-export const getProtocols = (exchange: App.ExchangeDetailBase) => {
+/**
+ * The key sets emitted when no profile names any — i.e. every deployment
+ * today.
+ *
+ * ⚠️ **Both spellings go out by default, not just to profiles that ask.** VCALM
+ * advises implementers to use the versioned variants and keeps the unversioned
+ * ones as *"deprecated ... indefinitely retained for backwards compatibility"*,
+ * so serving both is the additive move: a wallet reading either finds the same
+ * bytes, and nothing that read the old spelling stops working.
+ *
+ * ⚠️ Deprecated first, deliberately — it is the id every recorded run cites,
+ * the id the method picker shows and the id `interaction-method-shown` records.
+ * Leading with the versioned spelling would split one construction's records
+ * across two names.
+ *
+ * Stated here AND in the authored profiles, like every other historical default
+ * during this migration; the knob retirement collapses the two.
+ */
+const DEFAULT_OID4VP_KEYS = ['OID4VP', 'oid4vp-1.0']
+const DEFAULT_OID4VCI_KEYS = ['OID4VCI', 'oid4vci-1.0']
+
+export const getProtocols = (
+  exchange: App.ExchangeDetailBase,
+  /**
+   * A render-time protocol profile election to carry on the two FETCHED URLs —
+   * the interaction URL and `request_uri`.
+   *
+   * ⚠️ **Only the fetched URLs, because only they are re-read by this
+   * service.** A bare VC-API URL or a wallet convenience link carries no
+   * construction, so a pin on one would be a name with nothing behind it. Those
+   * interaction methods simply do not vary by profile — and
+   * `protocol-profiles/offerable.ts` relies on exactly that: it dedupes
+   * candidates on the built bytes, so an interaction method the pin cannot ride
+   * collapses to one option without anybody listing which interaction methods
+   * those are.
+   *
+   * ⚠️ **Absent by default, and every existing caller omits it**, so no
+   * construction moves. The goldens are the guarantee.
+   */
+  { electionPin }: { electionPin?: string } = {}
+) => {
   const verifiablePresentationRequest =
     exchange.workflowId === 'verify'
       ? getVerifyVPR(exchange as App.ExchangeDetailVerify)
       : getDIDAuthVPR(exchange)
+  // ⚠️ `vcapi` is the FIRST `interact.service` entry's endpoint, so the order a
+  // profile states for `interactServices` decides it. An entry that carries no
+  // endpoint (`CredentialHandlerService`) placed first would empty this key —
+  // which is why the order is a stated profile field and not a presentational
+  // detail. No profile does that today.
+  // ⚠️ `interact` itself is absent when a profile states no services — some
+  // verifiers omit the member entirely, and being able to reproduce that is
+  // the point of the field. `coherence.ts` refuses a profile that drops the
+  // services while still offering a `vcapi` key, so this empty string is
+  // reachable only alongside an envelope that offers no such key.
+  const firstService = verifiablePresentationRequest.interact?.service[0]
   const serviceEndpoint =
-    verifiablePresentationRequest.interact.service[0].serviceEndpoint ?? ''
+    firstService && 'serviceEndpoint' in firstService
+      ? (firstService.serviceEndpoint ?? '')
+      : ''
   const isVerify = exchange.workflowId === 'verify'
-  const protocols: {
-    iu: string
-    vcapi: string
-    lcw?: string
-    OID4VCI?: string
-    OID4VP?: string
-    verifiablePresentationRequest: typeof verifiablePresentationRequest
-  } = {
-    iu: `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}?iuv=1`,
-    vcapi: serviceEndpoint,
-    lcw: isVerify
-      ? getWalletInteractionUrl('lcw', 'vcapiExchange', serviceEndpoint)
-      : getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint, {
-          challenge: exchange.variables.challenge
-        }),
-    verifiablePresentationRequest
+  const envelope = wireProfileForExchange(exchange)?.envelope
+
+  /**
+   * Write one construction under every key the profile names for it.
+   *
+   * ⚠️ **Every key carrying a construction gets the SAME string**, so a wallet
+   * reading either spelling finds identical bytes. That is what makes adding
+   * the versioned VCALM spellings additive rather than a second construction.
+   * A key list that is empty omits the construction from the envelope entirely.
+   */
+  const protocols: App.ExchangeProtocols = {} as App.ExchangeProtocols
+  const put = (
+    keys: string[] | undefined,
+    fallback: string[],
+    value: string | undefined
+  ): void => {
+    if (value === undefined) return
+    for (const key of keys ?? fallback) protocols[key] = value
+  }
+
+  put(
+    envelope?.interactionUrlKeys,
+    ['iu'],
+    `${exchange.variables.exchangeHost}/interactions/${exchange.exchangeId}?iuv=1${
+      electionPin ? `&protocolProfile=${encodeURIComponent(electionPin)}` : ''
+    }`
+  )
+  put(envelope?.vcapiKeys, ['vcapi'], serviceEndpoint)
+  // ⚠️ The `lcw` key is a GRANDFATHERED legacy protocol key — not a VCALM
+  // protocol, and the one place a product's own link rides in the envelope.
+  // Which product is legacy and decided here; which SHAPE is a profile field;
+  // where that shape points is product identity, in the wallet table.
+  put(
+    envelope?.walletConvenienceKeys,
+    ['lcw'],
+    walletLinkFor(
+      'lcw',
+      envelope?.walletConvenienceConstruction ??
+        (isVerify ? 'protocols-json-query' : 'issuer-auth-challenge-query'),
+      { serviceEndpoint, challenge: exchange.variables.challenge }
+    )
+  )
+  if (envelope?.emitVerifiablePresentationRequest ?? true) {
+    protocols.verifiablePresentationRequest = verifiablePresentationRequest
   }
 
   // OID4VCI 1.0 Pre-Authorized Code Flow is offered alongside VCALM for
@@ -265,22 +350,54 @@ export const getProtocols = (exchange: App.ExchangeDetailBase) => {
   // lazily mints the pre-authorized code on first GET, so we don't need
   // any state on the exchange for this protocol entry to be valid.
   if (exchange.workflowId === 'claim') {
-    protocols.OID4VCI = buildOpenIdCredentialOfferDeepLinkByReference(
-      credentialOfferUriForExchange(exchange as App.ExchangeDetailClaim)
+    put(
+      envelope?.oid4vciKeys,
+      DEFAULT_OID4VCI_KEYS,
+      buildOpenIdCredentialOfferDeepLinkByReference(
+        credentialOfferUriForExchange(exchange as App.ExchangeDetailClaim)
+      )
     )
   }
 
   // OID4VP 1.0 verifier binding is offered alongside VC-API / CHAPI for
-  // verify exchanges. The deep link references the authorization request
-  // by `request_uri`; the wallet GETs that to receive the request JSON.
-  // The request route lazily mints the single-use `state` on first GET,
-  // so no exchange state needs to be persisted for this entry to be valid.
+  // verify exchanges, in one of two deliveries (`oid4vp/deep-link.ts`).
+  //
+  // BY VALUE — every parameter inline. The only conformant delivery under the
+  // `redirect_uri` client_id prefix. Requires `state` to exist already, which
+  // `createExchangeVerify` guarantees for this arm.
+  //
+  // BY REFERENCE (default) — `client_id` + `request_uri`; the wallet GETs that
+  // to receive the request JSON, and the request route lazily mints the
+  // single-use `state` on first GET, so no exchange state need be persisted
+  // for this entry to be valid.
   if (isVerify) {
     const verify = exchange as App.ExchangeDetailVerify
-    protocols.OID4VP = buildOid4vpDeepLink({
-      clientId: clientIdForExchange(verify),
-      requestUri: requestUriForExchange(verify)
-    })
+    if (resolveDelivery(verify) === 'by-value') {
+      if (!verify.variables.oid4vp?.state) {
+        // Unreachable via `createExchangeVerify`, which mints for this arm.
+        // Loud rather than silently degrading to by-reference: a delivery that
+        // quietly becomes the other arm changes a second variable in a
+        // comparison meant to change one, and reports the wrong answer. This
+        // whole build exists to stop exactly that.
+        throw new Error(
+          `Exchange ${verify.exchangeId} requests by-value OID4VP delivery but has no oid4vp.state; it was created outside createExchangeVerify.`
+        )
+      }
+      put(
+        envelope?.oid4vpKeys,
+        DEFAULT_OID4VP_KEYS,
+        buildOid4vpDeepLinkByValue(buildAuthorizationRequest(verify))
+      )
+    } else {
+      put(
+        envelope?.oid4vpKeys,
+        DEFAULT_OID4VP_KEYS,
+        buildOid4vpDeepLink({
+          clientId: clientIdForExchange(verify),
+          requestUri: requestUriForExchange(verify, electionPin)
+        })
+      )
+    }
   }
 
   return protocols

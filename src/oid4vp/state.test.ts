@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest'
-import { consumeOid4vpResponse, ensureOid4vpState } from './state.js'
+import {
+  consumeOid4vpResponse,
+  ensureOid4vpState,
+  resolveDelivery
+} from './state.js'
 
 const fixture = (
   overrides: Partial<App.ExchangeDetailVerify['variables']> = {}
@@ -44,6 +48,38 @@ describe('ensureOid4vpState', () => {
     expect(a.exchange.variables.oid4vp?.state).not.toBe(
       b.exchange.variables.oid4vp?.state
     )
+  })
+})
+
+describe('resolveDelivery', () => {
+  /*
+  The default is the arm that is NOT spec-conformant, and that is deliberate:
+  a `redirect_uri` client_id cannot be passed by reference under any published
+  OID4VP version. It stays the default so the delivery comparison changes one
+  variable. Pinned here because a well-meaning "fix" to this default silently
+  rewrites what every future present-direction run measures.
+  */
+  test('defaults to by-reference', () => {
+    expect(resolveDelivery(fixture())).toBe('by-reference')
+  })
+
+  test('honours the creation-time request', () => {
+    expect(resolveDelivery(fixture({ oid4vpDelivery: 'by-value' }))).toBe(
+      'by-value'
+    )
+  })
+
+  test('the stamped state wins over the creation-time request', () => {
+    const exchange = fixture({
+      oid4vpDelivery: 'by-value',
+      oid4vp: { state: 'st', delivery: 'by-reference' }
+    })
+    expect(resolveDelivery(exchange)).toBe('by-reference')
+  })
+
+  test('ensureOid4vpState stamps the delivery onto the record', () => {
+    const r = ensureOid4vpState(fixture({ oid4vpDelivery: 'by-value' }))
+    expect(r.exchange.variables.oid4vp?.delivery).toBe('by-value')
   })
 })
 

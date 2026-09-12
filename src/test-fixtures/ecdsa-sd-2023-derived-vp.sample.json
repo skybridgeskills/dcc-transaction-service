@@ -1,0 +1,71 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/credentials/v2",
+    "https://w3id.org/security/suites/ed25519-2020/v1"
+  ],
+  "type": [
+    "VerifiablePresentation"
+  ],
+  "id": "urn:uuid:1c2f243d-c29c-4625-8636-42ce3e190e3e",
+  "holder": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6InY1ZGxwTlFXNnJ5Rkx6Sm1SLW5fbDA3WklNV1BRZEtablBIWVUxbXFoRFUifQ",
+  "verifiableCredential": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "OpenBadgeCredential"
+      ],
+      "issuer": {
+        "id": "did:web:issuer.example.com",
+        "type": "Profile",
+        "name": "Simulated Issuer"
+      },
+      "credentialStatus": {
+        "id": "https://issuer.example.com/statuses/1/status-lists/1#4242",
+        "type": "BitstringStatusListEntry",
+        "statusPurpose": "revocation",
+        "statusListIndex": "4242",
+        "statusListCredential": "https://issuer.example.com/statuses/1/status-lists/1"
+      },
+      "credentialSubject": {
+        "id": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6InY1ZGxwTlFXNnJ5Rkx6Sm1SLW5fbDA3WklNV1BRZEtablBIWVUxbXFoRFUifQ",
+        "type": "AchievementSubject",
+        "achievement": {
+          "id": "urn:uuid:7d15645f-72b0-4f3a-898a-98a43cd3b110",
+          "type": "Achievement",
+          "achievementType": "Competency",
+          "name": "Introductory Data Literacy",
+          "description": "Reads a small dataset, states what it does and does not support, and explains the difference.",
+          "criteria": {
+            "narrative": "Completes a guided analysis of a sample dataset and writes up its limitations."
+          }
+        },
+        "result": [
+          {
+            "type": "Result",
+            "status": "Completed"
+          }
+        ]
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:web:issuer.example.com#key-1",
+        "cryptosuite": "ecdsa-sd-2023",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "u2V0BhVhADlGoeAXbJe4tnfEo_I6qbsfCz2oOg6xZunWd8P2Wsfj4nZHAZKSBXle-K1vrjSGZOQ0hfA5iJULV7zAF5kT8elgjgCQClrvmqzPrgauR05jwJJ0Z7KyOjiNMC8GOX3hd0kAzimWMWEA0ljfMEeGaE0OAV7lE-ny18RQOxsRASjUOkttMqsxBVdzGhbF7uPQLDdENlQopl11bj28cGJnCeU1_N2o28TiKWEBF2jEA8JojbK9nTpvmB7H6B_Q_xcgPqYlA9EDmawX3X2mCkJlPG_nbbDf8NfkpHuKm5Z6WPP83xIW8QAaH8SCtWEBTb9mh9G4qZf5iy2QAE5r2BO2iFOk00RoLFL3LUO7NvP-DsybLpeCTzEtec1wc0nZA86Xjge_gpWRQ91mha98PWECKDiQd5sdY8E2nnKEIHj2OZF4V9_HUz_KQQxAKANk7i-kcHqJpvXuKyhlvNjYB5PrEGVVWRzR8CbpREd-4cPjrWEC1JMr0hTtoU6HtHC6sRbyUYvUM7qVSwnnLADbP9HzxRVAppHF0REv4ChDmZZkKyJJLigKRRzFtbbJFBW-l4l8CWEA65qtpWpChWK_mvdadN_XExwdW4RW2Qq1X8xE59I9XRxAXB9Qeu0u-VxL_2HdD32Efz7VibLQ7mBbUw7q2LqdwWEBPmNC08bC5IHSyCS2YzNeixjRe9lEaPAQ8qYaXUatNdooxQF6Ez7gP5etAO3mibtAC5XS2hhDq4dEJ4dNPZXwnWEC45V1-S-hBKdHrHoVT6NkxcD-n7YhoSIhCA7FxynvKmn2OkW9d-pIR_t1uKN0H6wBQg_rEyKaYxcTbBa5j2jcpWEA1RmiIfOGTu1_uRboI28no26IUeTMj2QiXrRGhqbdrzszfmSlsjNoDftN3nHcDxs8ptMWfMrRpzCTllAJmzhCwWEC9Vv5oK0bh5QvXZbcKLVF1C-AmGwOcab7j0u5z6xINfaKwEHbhtvhbANVNDQnG6TjeVZmOLvKJvIu7MhbziSExWECISB_U1QEKfba86o6Qu2nLmnmndF024_qMtpJlF6PZbKEMtfHm6oWd2LB3OKT7NfN_43I2AVJyqS27dlQ5uK3aWECBkukXD__nmuM1s3h29-QiN7-luWJw3bBCFtlBzbOrGZXlUXgQYPvzbMfd1ANDnexQBEz_5Os4CIjwxvFZNSuzowBYIIEbd7w-axDb4QuWHZ3sBtQPfC4WbvDrX7QjvdOH3--TAVggdfpfRoPS9XsGn3kreN_Kq-H2EgxgcgsXGcevJgOWbwUCWCCef7_qX7ZvQSyIGZD3tIhSbG93I2Lo97ODtJcURXanBYoDBAUGBwgREhMV"
+      }
+    }
+  ],
+  "proof": {
+    "type": "Ed25519Signature2020",
+    "created": "2026-09-12T03:39:49Z",
+    "verificationMethod": "did:jwk:eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6InY1ZGxwTlFXNnJ5Rkx6Sm1SLW5fbDA3WklNV1BRZEtablBIWVUxbXFoRFUifQ#0",
+    "proofPurpose": "authentication",
+    "challenge": "52ef9680-d436-462c-bba0-f7e262e1892d",
+    "domain": "redirect_uri:https://verifier.example.com/workflows/verify/exchanges/de8ef2aa-7ca5-46e7-a16a-b4b54c8abc8b/openid4vp/response",
+    "proofValue": "zVf8vMCHvF2QAJtMkVhzydh2r2Ady9i6iZDzcq4FA8XWTLTE57VBW2429xoY2DqqkYW8fwDQWTQ9cUgpZrQaYBhD"
+  }
+}

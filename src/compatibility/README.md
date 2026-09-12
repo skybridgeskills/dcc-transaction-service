@@ -7,8 +7,7 @@ redeploying.
 
 ## Architecture
 
-See `docs/plans/2026-04-17-compatibility-fix-architecture/00-design.md` for
-the full design. In short:
+The shape every fix follows:
 
 - Each fix is a pure function with the signature
   `(input, options?: { enabled?: boolean }) => { result, log: CheckResult[] }`.

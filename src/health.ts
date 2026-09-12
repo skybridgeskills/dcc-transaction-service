@@ -1,6 +1,28 @@
 import { getConfig } from './config.js'
 import { getExchangeData, saveExchange } from './transactionManager.js'
+import { checkReadiness, type ReadinessIO } from './lib/readiness.js'
 import type { Context } from 'hono'
+
+/**
+ * `GET /health/ready` — *can this service run an exchange right now?*
+ *
+ * Deliberately **not** `/healthz`, which stays exactly as it is below: that one
+ * is a liveness check that writes a Keyv record and sleeps
+ * `4 × keyvWriteDelayMs`, which is the wrong shape for readiness and is wired
+ * to a load balancer's target group. Repurposing it would break both jobs.
+ *
+ * The body is a per-dependency breakdown and never a bare boolean — see the
+ * module comment on `lib/readiness.ts` for why that distinction is the whole
+ * point. 200 when nothing is `unready`, 503 otherwise; the breakdown is
+ * identical either way, so a caller parses one shape.
+ *
+ * `io` is injectable for tests only; the route passes nothing.
+ */
+export const readinessCheck = async (c: Context, io?: ReadinessIO) => {
+  const readiness = await checkReadiness(getConfig(), io)
+  c.status(readiness.ready ? 200 : 503)
+  return c.json(readiness)
+}
 
 export const healthCheck = async (c: Context) => {
   const config = getConfig()
@@ -31,8 +53,10 @@ export const healthCheck = async (c: Context) => {
       throw new Error('Failed to retrieve exchange from Keyv')
     }
 
-    // TODO: consider checking dependency services here
-    // But mock out in tests
+    // Dependency services are deliberately NOT checked here. That is
+    // `/health/ready` above, which reports them one by one and mutates
+    // nothing; folding them in would make this route both slow and ambiguous,
+    // and it is on a load balancer's target group.
   } catch (e) {
     console.log(`exception in healthz: ${JSON.stringify(e)}`)
     c.status(503)

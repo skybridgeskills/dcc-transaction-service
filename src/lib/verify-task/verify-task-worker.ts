@@ -24,7 +24,7 @@ import type {
   EntityIdentityRegistry,
   Verifier
 } from '@digitalcredentials/verifier-core'
-import { getConfig, mapRegistryNamesToRegistries } from '../../config.js'
+import { getConfig, resolveTrustedRegistries } from '../../config.js'
 import {
   getExchangeData,
   saveExchangeWithCAS as defaultSaveExchangeWithCAS
@@ -41,10 +41,13 @@ export interface ProcessVerifyTaskDeps {
   saveExchangeWithCAS: typeof defaultSaveExchangeWithCAS
   /** Just the per-credential verify call (the only verifier-core method we use). */
   verifyCredential: Verifier['verifyCredential']
-  /** Resolves the registry list for this exchange (matches the sync pass). */
+  /**
+   * Resolves the registry list for this exchange (matches the sync pass).
+   * `undefined` skips the issuer-registry suite; `[]` would not.
+   */
   resolveRegistries: (
     exchange: App.ExchangeDetailVerify
-  ) => EntityIdentityRegistry[]
+  ) => EntityIdentityRegistry[] | undefined
   /** Resolves the OB suites to apply for one credential. */
   openbadgesSuitesFor: typeof defaultOpenbadgesSuitesFor
 }
@@ -296,15 +299,8 @@ export const mergeOpenBadgesResultsAt = (
  */
 const defaultResolveRegistries = (
   exchange: App.ExchangeDetailVerify
-): EntityIdentityRegistry[] => {
-  const config = getConfig()
-  const names =
-    exchange.variables.trustedRegistries &&
-    exchange.variables.trustedRegistries.length > 0
-      ? exchange.variables.trustedRegistries
-      : config.defaultTrustedRegistryNames
-  return mapRegistryNamesToRegistries(names, config.knownRegistries)
-}
+): EntityIdentityRegistry[] | undefined =>
+  resolveTrustedRegistries(exchange.variables.trustedRegistries, getConfig())
 
 /** Production wiring of {@link ProcessVerifyTaskDeps}. */
 export const defaultProcessVerifyTaskDeps = (): ProcessVerifyTaskDeps => ({

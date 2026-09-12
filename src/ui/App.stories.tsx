@@ -5,6 +5,7 @@ import {
   createMockVerifierCoreResult,
   createMockCredential
 } from '../test-fixtures/testData.js'
+import { MANY_PRESETS, PRESETS, DROPPED_PIN, VPR_PROFILE } from './preset-fixtures.js'
 
 const mockProtocolsVerify = {
   vcapi: 'https://example.com/workflows/verify/exchanges/test-123',
@@ -21,6 +22,19 @@ const mockProtocolsDidAuth = {
   iu: 'https://example.com/workflows/didAuth/exchanges/test-did/protocols?iuv=1'
 }
 
+/**
+ * ⚠️ **Put the story at a URL before it renders.** `App` reads `?payload=` and
+ * `?protocolProfile=` out of `window.location` — that URL is the audience
+ * discriminator, and an operator always arrives from a test case carrying one.
+ * A story that could not set it could not show the operator's view at all.
+ */
+const atUrl =
+  (search: string) =>
+  (Story: () => JSX.Element): JSX.Element => {
+    window.history.replaceState(null, '', `/interactions/story-1${search}`)
+    return <Story />
+  }
+
 const meta: Meta<typeof App> = {
   title: 'App',
   component: App,
@@ -36,6 +50,7 @@ export const Pending: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'pending'
     })
   }
@@ -45,6 +60,7 @@ export const Active: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'active'
     })
   }
@@ -55,6 +71,7 @@ export const Complete: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete'
     })
   }
@@ -64,6 +81,7 @@ export const Invalid: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'invalid'
     })
   }
@@ -74,6 +92,7 @@ export const PendingToComplete: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: ['pending', 'pending', 'active', 'complete'],
       workflowId: 'verify',
       variables: {
@@ -92,6 +111,7 @@ export const VerifySuccess: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'verify',
       variables: {
@@ -110,6 +130,7 @@ export const VerifyFailureFatal: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'invalid',
       workflowId: 'verify',
       variables: {
@@ -129,6 +150,7 @@ export const VerifyFailureMixed: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'invalid',
       workflowId: 'verify',
       variables: {
@@ -145,6 +167,7 @@ export const VerifyDetailsDisabled: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'invalid',
       workflowId: 'verify',
       variables: {
@@ -163,6 +186,7 @@ export const ClaimComplete: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsClaim,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'claim',
       variables: {
@@ -179,6 +203,7 @@ export const ClaimInvalid: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsClaim,
+      presets: PRESETS,
       states: 'invalid',
       workflowId: 'claim',
       variables: {
@@ -192,6 +217,7 @@ export const DidAuthComplete: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsDidAuth,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'didAuth',
       variables: {
@@ -211,6 +237,7 @@ export const DidAuthInvalid: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsDidAuth,
+      presets: PRESETS,
       states: 'invalid',
       workflowId: 'didAuth',
       variables: {
@@ -286,6 +313,7 @@ export const VerifyVerbose: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'verify',
       variables: {
@@ -306,6 +334,7 @@ export const VerifyWithTiming: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'verify',
       variables: {
@@ -324,6 +353,7 @@ export const VerifyFatalOnly: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'invalid',
       workflowId: 'verify',
       variables: {
@@ -339,6 +369,7 @@ export const VerifyOBSchemaWarning: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'verify',
       variables: {
@@ -354,6 +385,7 @@ export const CollapsedHeadlineVisible: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'verify',
       variables: {
@@ -369,6 +401,7 @@ export const AllSkippedRecognition: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
       protocols: mockProtocolsVerify,
+      presets: PRESETS,
       states: 'complete',
       workflowId: 'verify',
       variables: {
@@ -617,5 +650,91 @@ function mixedRegistryFailureResult(): App.VerificationResult {
         counts: { passed: 1, failed: 0, skipped: 0 }
       }
     ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The preset picker — concept G.
+//
+// ⚠️ **These are the shipped design's acceptance, at both widths.** Every story
+// below was a review finding: one list, search that promotes rather than hides,
+// a checkbox governing list membership only, a bounded list only when Advanced
+// is ticked, an expected refusal that reads as an option, and a mismatch refusal
+// that fires on a DROPPED pin.
+// ---------------------------------------------------------------------------
+
+/** The user's view: the plain rows, which must never scroll. */
+export const PickerPlain: Story = {
+  name: 'Picker — plain (480px)',
+  decorators: [atUrl('')],
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: PRESETS,
+      states: 'active'
+    })
+  }
+}
+
+/** ⚠️ 360 px — the width where the retired interaction method line wrapped out of view. */
+export const PickerNarrow: Story = {
+  name: 'Picker — plain (360px)',
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  decorators: [atUrl('')],
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: PRESETS,
+      states: 'active'
+    })
+  }
+}
+
+/**
+ * ⚠️ The operator's view. Tick **Include advanced options**: the rows append
+ * without moving one the user was about to tap, and the decode block appears
+ * beside the QR — one control, one effect, one place.
+ */
+export const PickerAdvanced: Story = {
+  name: 'Picker — advanced (arrives pinned)',
+  decorators: [atUrl(`?payload=iu&protocolProfile=${VPR_PROFILE}`)],
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: PRESETS,
+      states: 'active'
+    })
+  }
+}
+
+/**
+ * ⚠️ Many constructions. The advanced list is bounded and scrolls INTERNALLY —
+ * the QR must stay on screen, because the QR is the thing being scanned.
+ */
+export const PickerManyProfiles: Story = {
+  name: 'Picker — 26 constructions',
+  decorators: [atUrl('')],
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: MANY_PRESETS,
+      states: 'active'
+    })
+  }
+}
+
+/**
+ * ⚠️ **The QR/preset mismatch, on a DROPPED pin.** The row names a construction
+ * the payload does not carry. Red is reserved for this and nothing else.
+ */
+export const PickerMismatch: Story = {
+  name: 'Picker — QR/preset mismatch',
+  decorators: [atUrl(`?payload=iu&protocolProfile=${VPR_PROFILE}`)],
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: [PRESETS[0]!, DROPPED_PIN],
+      states: 'active'
+    })
   }
 }

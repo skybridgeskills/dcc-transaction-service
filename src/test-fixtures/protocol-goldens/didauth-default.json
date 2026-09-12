@@ -1,0 +1,45 @@
+{
+  "name": "didauth-default",
+  "workflow": "didAuth",
+  "why": "The didAuth VPR — three interact services and a bare-host `domain`.",
+  "exercisedOnTheWire": true,
+  "variables": {},
+  "protocols": {
+    "iu": "http://localhost:4005/interactions/{exchangeId}?iuv=1",
+    "vcapi": "http://localhost:4005/workflows/didAuth/exchanges/{exchangeId}",
+    "lcw": "https://lcw.app/request.html?issuer=localhost&auth_type=bearer&challenge={challenge}&vc_request_url=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2FdidAuth%2Fexchanges%2F{exchangeId}",
+    "verifiablePresentationRequest": {
+      "query": {
+        "type": "DIDAuthentication"
+      },
+      "interact": {
+        "service": [
+          {
+            "type": "VerifiableCredentialApiExchangeService",
+            "serviceEndpoint": "http://localhost:4005/workflows/didAuth/exchanges/{exchangeId}"
+          },
+          {
+            "type": "UnmediatedPresentationService2021",
+            "serviceEndpoint": "http://localhost:4005/workflows/didAuth/exchanges/{exchangeId}"
+          },
+          {
+            "type": "CredentialHandlerService"
+          }
+        ]
+      },
+      "challenge": "{challenge}",
+      "domain": "http://localhost:4005",
+      "acceptedCryptosuites": [
+        {
+          "cryptosuite": "eddsa-rdfc-2022"
+        },
+        {
+          "cryptosuite": "ecdsa-rdfc-2019"
+        },
+        {
+          "cryptosuite": "ed25519-signature-2020"
+        }
+      ]
+    }
+  }
+}

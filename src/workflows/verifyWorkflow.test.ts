@@ -21,7 +21,7 @@ import {
   createMockCredential,
   createMockVerifierCoreResult
 } from '../test-fixtures/testData.js'
-import { getWalletInteractionUrl } from '../lib/wallets/index.js'
+import { walletLinkFor } from '../lib/wallets/index.js'
 import { participateInExchange } from '../exchanges.js'
 import { HTTPException } from 'hono/http-exception'
 import type { ProblemDetailResponse } from '../lib/errors/problem-details.js'
@@ -108,6 +108,39 @@ describe('verifyWorkflow', function () {
     expect(exchange.variables.features).toEqual({
       details: config.getConfig().uiShowDetails
     })
+  })
+
+  /*
+  The by-value delivery has no `.../openid4vp/request` GET to mint `state`
+  lazily on — `getProtocols` builds the complete request while assembling the
+  interaction envelope, so the token has to exist by then. The by-reference
+  arm keeps its lazy mint untouched: it is the baseline construction for
+  delivery comparisons and is worth nothing unless its exchange record is
+  unchanged.
+  */
+  test('by-value creation mints the OID4VP state up front', function () {
+    const validated = validateExchangeVerify({
+      ...testData,
+      variables: { ...testData.variables, oid4vpDelivery: 'by-value' }
+    })
+    const exchange = createExchangeVerify({
+      workflow: getWorkflow('verify'),
+      data: validated,
+      config: config.getConfig()
+    })
+    expect(exchange.variables.oid4vpDelivery).toBe('by-value')
+    expect(exchange.variables.oid4vp?.state).toBeTruthy()
+    expect(exchange.variables.oid4vp?.delivery).toBe('by-value')
+  })
+
+  test('by-reference creation leaves the state unminted, as before', function () {
+    const validated = validateExchangeVerify(testData)
+    const exchange = createExchangeVerify({
+      workflow: getWorkflow('verify'),
+      data: validated,
+      config: config.getConfig()
+    })
+    expect(exchange.variables.oid4vp).toBeUndefined()
   })
 })
 
@@ -294,6 +327,32 @@ describe('applyVerificationResults', function () {
   })
 })
 
+/**
+ * Narrow `participateInExchange`'s result to the verify workflow's initial-step
+ * shape.
+ *
+ * `participateInExchange` fans out across every workflow branch, so its inferred
+ * return is not narrowed at the call site. Assert the shape here rather than
+ * casting at each assertion: a cast would keep compiling if the return shape
+ * changed, where this fails loudly and names what it expected.
+ */
+function assertIsVprResult(result: unknown): asserts result is {
+  verifiablePresentationRequest: {
+    query: { type: string }[]
+    interact: unknown
+  }
+} {
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !('verifiablePresentationRequest' in result)
+  ) {
+    throw new Error(
+      `expected a verifiablePresentationRequest, got: ${JSON.stringify(result)}`
+    )
+  }
+}
+
 describe('participateInExchange - Empty Body Handling', function () {
   test('handles empty body (undefined) correctly for verify workflow', async function () {
     const exchange = createMockExchange()
@@ -308,6 +367,7 @@ describe('participateInExchange - Empty Body Handling', function () {
 
     // Should return a VPR (Verifiable Presentation Request)
     expect(result).toHaveProperty('verifiablePresentationRequest')
+    assertIsVprResult(result)
     expect(result.verifiablePresentationRequest).toHaveProperty('query')
     expect(result.verifiablePresentationRequest).toHaveProperty('interact')
     expect(result.verifiablePresentationRequest.query[0].type).toBe(
@@ -333,6 +393,7 @@ describe('participateInExchange - Empty Body Handling', function () {
 
     // Should return a VPR (Verifiable Presentation Request)
     expect(result).toHaveProperty('verifiablePresentationRequest')
+    assertIsVprResult(result)
     expect(result.verifiablePresentationRequest).toHaveProperty('query')
     expect(result.verifiablePresentationRequest).toHaveProperty('interact')
     expect(result.verifiablePresentationRequest.query[0].type).toBe(
@@ -358,6 +419,7 @@ describe('participateInExchange - Empty Body Handling', function () {
 
     // Should return a VPR (Verifiable Presentation Request)
     expect(result).toHaveProperty('verifiablePresentationRequest')
+    assertIsVprResult(result)
     expect(result.verifiablePresentationRequest).toHaveProperty('query')
     expect(result.verifiablePresentationRequest).toHaveProperty('interact')
     expect(result.verifiablePresentationRequest.query[0].type).toBe(
@@ -376,7 +438,11 @@ describe('LCW Protocol URL Generation', function () {
     const serviceEndpoint =
       'https://verifierplus.org/workflows/verify/exchanges/ae2b438a-8471-4b00-82ec-a688d1857245'
 
-    const lcwUrl = getWalletInteractionUrl('lcw', 'vcapi', serviceEndpoint)!
+    // Same assertion, same expected string — only the call site moved, from a
+    // vendor-named builder to the shape it was always building.
+    const lcwUrl = walletLinkFor('lcw', 'issuer-auth-challenge-query', {
+      serviceEndpoint
+    })!
 
     expect(lcwUrl).toBe(
       `https://lcw.app/request.html?issuer=verifierplus.org&auth_type=bearer&vc_request_url=${encodeURIComponent(serviceEndpoint)}`
@@ -415,7 +481,16 @@ describe('LCW Protocol URL Generation', function () {
         { cryptosuite: 'ecdsa-rdfc-2019' },
         { cryptosuite: 'ed25519-signature-2020' }
       ],
-      acceptedMethods: [{ method: 'did:key' }, { method: 'did:web' }]
+      // `jwk` is in the advertised acceptance alongside the resolver that can
+      // actually resolve it. Shipped wallets bind their holder key with it; a
+      // VPR narrower than the instrument turns a conformant wallet's correct
+      // refusal into a finding against it.
+      //
+      // These are DID Method NAMES, per the VP Request spec — the `did:`-
+      // prefixed form this assertion previously pinned was the bug, not the
+      // intent. The shape is enforced against the spec in
+      // `lib/verifier-acceptance.test.ts`.
+      acceptedMethods: [{ method: 'key' }, { method: 'web' }, { method: 'jwk' }]
     })
     expect(vpr.acceptedCryptosuites).toEqual([
       { cryptosuite: 'eddsa-rdfc-2022' },

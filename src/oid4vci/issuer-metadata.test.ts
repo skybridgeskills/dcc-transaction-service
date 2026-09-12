@@ -7,6 +7,7 @@ const baseConfig: App.Config = {
   defaultExchangeHost: 'https://issuer.example',
   exchangeTtl: 600,
   statusService: '',
+  statusServiceToken: '',
   signingService: 'http://localhost:4006',
   defaultWorkflow: 'didAuth',
   defaultTenantName: 'default',
@@ -112,5 +113,63 @@ describe('buildIssuerMetadata', () => {
       md.credential_configurations_supported.OpenBadgeCredential
         .credential_definition['@context']
     ).toContain('https://www.w3.org/ns/credentials/v2')
+  })
+})
+
+/**
+ * ACCOMMODATION — `token-endpoint-inline`, VARIANT, default off.
+ *
+ * ⛔ The first test here is the load-bearing one. Serving `token_endpoint`
+ * inline on every exchange would make every wallet look conformant and erase,
+ * for every product at once, whatever reads `discovery-served` lines to tell
+ * real discovery from a constructed guess. Default-off is the property that
+ * keeps that distinction, so it is pinned rather than assumed.
+ */
+describe('token-endpoint-inline accommodation', () => {
+  test('DEFAULT OFF — no token_endpoint inline unless the exchange opts in', () => {
+    const md = buildIssuerMetadata(exchange(), baseConfig)
+    expect(md.token_endpoint).toBeUndefined()
+    expect(Object.keys(md)).not.toContain('token_endpoint')
+    // The strict route stays the advertised one.
+    expect(md.authorization_servers).toEqual([
+      'https://issuer.example/workflows/claim/exchanges/abc-123'
+    ])
+  })
+
+  test('opt-in serves token_endpoint inline AND keeps authorization_servers', () => {
+    const md = buildIssuerMetadata(
+      exchange({
+        variables: {
+          challenge: 'chal',
+          exchangeHost: 'https://issuer.example',
+          vc: '{"@context":["https://www.w3.org/ns/credentials/v2"],"type":["VerifiableCredential"]}',
+          oid4vciTokenEndpointInline: true
+        }
+      }),
+      baseConfig
+    )
+    expect(md.token_endpoint).toBe(
+      'https://issuer.example/workflows/claim/exchanges/abc-123/openid/token'
+    )
+    // The accommodation ADDS; it never replaces the strict route.
+    expect(md.authorization_servers).toEqual([
+      'https://issuer.example/workflows/claim/exchanges/abc-123'
+    ])
+    expect(() => issuerMetadataSchema.parse(md)).not.toThrow()
+  })
+
+  test('the inline value is the SAME value AS metadata discovers — one source of truth', async () => {
+    const { buildOid4vciAsMetadata } = await import('./as-metadata.js')
+    const ex = exchange({
+      variables: {
+        challenge: 'chal',
+        exchangeHost: 'https://issuer.example',
+        vc: '{"@context":["https://www.w3.org/ns/credentials/v2"],"type":["VerifiableCredential"]}',
+        oid4vciTokenEndpointInline: true
+      }
+    })
+    const inline = buildIssuerMetadata(ex, baseConfig).token_endpoint
+    const discovered = buildOid4vciAsMetadata(ex).token_endpoint
+    expect(inline).toBe(discovered)
   })
 })

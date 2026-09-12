@@ -1,6 +1,7 @@
 import type {
   ExchangeClient,
   ExchangeProtocols,
+  LaunchPreset,
   ExchangeState,
   ExchangeStatusResponse,
   ExchangeStatusVariables
@@ -8,6 +9,12 @@ import type {
 
 export interface FakeExchangeClientOptions {
   protocols: Record<string, string>
+  /**
+   * What `fetchPresets` answers with. ⚠️ An `Error` is stored and thrown, so a
+   * story or a test can exercise the failure the UI must show — this call is
+   * allowed to reject, unlike `recordInteractionMethod`.
+   */
+  presets?: LaunchPreset[] | Error
   /** A single state or a sequence that advances on each fetchExchangeStatus call. */
   states: ExchangeState | ExchangeState[]
   /** Optional; merged into every `fetchExchangeStatus` response (e.g. for Storybook). */
@@ -17,6 +24,7 @@ export interface FakeExchangeClientOptions {
 
 export class FakeExchangeClient implements ExchangeClient {
   private readonly protocols: Record<string, string>
+  private readonly presets: LaunchPreset[] | Error
   private readonly states: ExchangeState[]
   private readonly workflowId?: string
   private readonly variables?: ExchangeStatusVariables
@@ -24,6 +32,7 @@ export class FakeExchangeClient implements ExchangeClient {
 
   constructor(options: FakeExchangeClientOptions) {
     this.protocols = options.protocols
+    this.presets = options.presets ?? []
     this.states = Array.isArray(options.states)
       ? options.states
       : [options.states]
@@ -44,6 +53,22 @@ export class FakeExchangeClient implements ExchangeClient {
 
   async fetchProtocols(_exchangeId: string): Promise<Record<string, string>> {
     return this.protocols
+  }
+
+  async fetchPresets(_exchangeId: string): Promise<LaunchPreset[]> {
+    if (this.presets instanceof Error) throw this.presets
+    return this.presets
+  }
+
+  /** Interaction methods reported to this fake, in order — asserted on by the UI tests. */
+  readonly interactionMethodsRecorded: Array<{ exchangeId: string; payloadId: string; payload: string }> = []
+
+  async recordInteractionMethod(
+    exchangeId: string,
+    payloadId: string,
+    payload: string
+  ): Promise<void> {
+    this.interactionMethodsRecorded.push({ exchangeId, payloadId, payload })
   }
 
   async fetchExchangeStatus(_vcapiUrl: string): Promise<ExchangeStatusResponse> {

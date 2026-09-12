@@ -1,0 +1,188 @@
+{
+  "name": "verify-pex-limit-disclosure-preferred",
+  "workflow": "verify",
+  "why": "The other value is a different emitted byte, not a shade of the same one.",
+  "exercisedOnTheWire": false,
+  "variables": {
+    "vprContext": [
+      "https://www.w3.org/2018/credentials/v1"
+    ],
+    "vprCredentialType": [
+      "VerifiableCredential",
+      "OpenBadgeCredential"
+    ],
+    "trustedIssuers": [],
+    "vprClaims": [
+      {
+        "path": [
+          "credentialSubject",
+          "achievement",
+          "name"
+        ],
+        "values": [
+          "Welding"
+        ]
+      }
+    ],
+    "oid4vpQueryLanguage": "pex",
+    "vprLimitDisclosure": "preferred"
+  },
+  "protocols": {
+    "iu": "http://localhost:4005/interactions/{exchangeId}?iuv=1",
+    "vcapi": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}",
+    "lcw": "https://lcw.app/request?request=%7B%22protocols%22%3A%7B%22vcapi%22%3A%22http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%22%7D%7D",
+    "verifiablePresentationRequest": {
+      "query": [
+        {
+          "type": "QueryByExample",
+          "credentialQuery": {
+            "example": {
+              "type": [
+                "VerifiableCredential",
+                "OpenBadgeCredential"
+              ],
+              "@context": [
+                "https://www.w3.org/2018/credentials/v1"
+              ]
+            }
+          }
+        },
+        {
+          "type": "DIDAuthentication",
+          "acceptedCryptosuites": [
+            {
+              "cryptosuite": "eddsa-rdfc-2022"
+            },
+            {
+              "cryptosuite": "ecdsa-rdfc-2019"
+            },
+            {
+              "cryptosuite": "ed25519-signature-2020"
+            }
+          ],
+          "acceptedMethods": [
+            {
+              "method": "key"
+            },
+            {
+              "method": "web"
+            },
+            {
+              "method": "jwk"
+            }
+          ]
+        }
+      ],
+      "interact": {
+        "service": [
+          {
+            "type": "VerifiableCredentialApiExchangeService",
+            "serviceEndpoint": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}"
+          },
+          {
+            "type": "UnmediatedPresentationService2021",
+            "serviceEndpoint": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}"
+          }
+        ]
+      },
+      "challenge": "{challenge}",
+      "domain": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}",
+      "acceptedCryptosuites": [
+        {
+          "cryptosuite": "eddsa-rdfc-2022"
+        },
+        {
+          "cryptosuite": "ecdsa-rdfc-2019"
+        },
+        {
+          "cryptosuite": "ed25519-signature-2020"
+        }
+      ]
+    },
+    "OID4VP": "openid4vp://?client_id=redirect_uri%3Ahttp%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Fresponse&request_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Frequest",
+    "oid4vp-1.0": "openid4vp://?client_id=redirect_uri%3Ahttp%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Fresponse&request_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Frequest"
+  },
+  "oid4vpRequest": {
+    "response_type": "vp_token",
+    "response_mode": "direct_post",
+    "client_id": "redirect_uri:http://localhost:4005/workflows/verify/exchanges/{exchangeId}/openid4vp/response",
+    "response_uri": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}/openid4vp/response",
+    "nonce": "{challenge}",
+    "state": "{state}",
+    "presentation_definition": {
+      "id": "presentation",
+      "input_descriptors": [
+        {
+          "id": "credential",
+          "constraints": {
+            "fields": [
+              {
+                "path": [
+                  "$.type",
+                  "$['type']"
+                ],
+                "filter": {
+                  "type": "array",
+                  "contains": {
+                    "const": "VerifiableCredential"
+                  }
+                }
+              },
+              {
+                "path": [
+                  "$.credentialSubject.achievement.name",
+                  "$['credentialSubject']['achievement']['name']"
+                ],
+                "filter": {
+                  "type": "string",
+                  "enum": [
+                    "Welding"
+                  ]
+                }
+              }
+            ],
+            "limit_disclosure": "preferred"
+          },
+          "format": {
+            "ldp_vc": {
+              "proof_type": [
+                "DataIntegrityProof",
+                "Ed25519Signature2020"
+              ]
+            }
+          }
+        }
+      ],
+      "format": {
+        "ldp_vc": {
+          "proof_type": [
+            "DataIntegrityProof",
+            "Ed25519Signature2020"
+          ]
+        }
+      }
+    },
+    "client_metadata": {
+      "vp_formats_supported": {
+        "ldp_vc": {
+          "proof_type_values": [
+            "DataIntegrityProof"
+          ],
+          "cryptosuite_values": [
+            "eddsa-rdfc-2022",
+            "ecdsa-rdfc-2019"
+          ]
+        },
+        "ldp_vp": {
+          "proof_type_values": [
+            "DataIntegrityProof"
+          ],
+          "cryptosuite_values": [
+            "eddsa-rdfc-2022",
+            "ecdsa-rdfc-2019"
+          ]
+        }
+      }
+    }
+  }
+}

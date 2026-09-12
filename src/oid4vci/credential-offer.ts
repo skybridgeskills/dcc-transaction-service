@@ -67,6 +67,17 @@ export const buildCredentialOffer = (
     )
   }
   const configId = deriveCredentialConfigurationId(exchange.variables.vc)
+
+  // ⚠️ Only the pre-authorized-code grant has an arm built, and the refusal is
+  // NOT here: `coherence.ts` pins `oid4vci.grants` to exactly that value, and
+  // every registry entry is parsed at module load — so a profile offering a
+  // grant this service cannot honour fails at startup rather than at the first
+  // wallet request. A guard here as well would be unreachable, and unreachable
+  // defence reads as a live risk to the next person.
+  //
+  // The arm that adds `authorization-code` lifts that pin and wires this
+  // builder in the same change; the pin is what makes doing one without the
+  // other impossible.
   return {
     credential_issuer: credentialIssuerUrlForExchange(exchange),
     credential_configuration_ids: [configId],

@@ -18,12 +18,25 @@ const VC_RECOGNITION_URL_KEY = /^REGISTRY_VC_RECOGNITION_([A-Z0-9_]+)_URL$/
 
 const OIDF_TRUST_ANCHOR_EC_KEY = /^REGISTRY_OIDF_([A-Z0-9_]+)_TRUST_ANCHOR_EC$/
 
-/** Built-in DCC registry entries; merged with env-driven OIDF + VC recognition rows. */
+/**
+ * Built-in DCC registry entries; merged with env-driven OIDF + VC recognition rows.
+ *
+ * These four URLs are the ones the DCC's own products ship — see
+ * `learner-credential-wallet/app.config.js` (`KnownDidRegistries`) and
+ * `dcc-web-verifier-plus/data/knownRegistries.ts`. Keeping the list identical to
+ * theirs is deliberate: "in a trusted registry" then means here what it means
+ * everywhere else in the DCC ecosystem, rather than something we invented.
+ */
 const STATIC_KNOWN_REGISTRIES: Record<string, EntityIdentityRegistry> = {
+  'DCC Pilot Registry': {
+    name: 'DCC Pilot Registry',
+    type: 'dcc-legacy',
+    url: 'https://digitalcredentials.github.io/issuer-registry/registry.json'
+  },
   'DCC Sandbox Registry': {
     name: 'DCC Sandbox Registry',
     type: 'dcc-legacy',
-    url: 'https://credentials-sandbox.dcconsortium.org/registry.json'
+    url: 'https://digitalcredentials.github.io/sandbox-registry/registry.json'
   },
   'DCC Community Registry': {
     name: 'DCC Community Registry',
@@ -130,8 +143,15 @@ const buildKnownRegistries = (
 
 /**
  * Map registry names to full EntityIdentityRegistry objects for verifier-core.
- * Falls back to creating a dcc-legacy registry with a default URL pattern
- * for unknown registries.
+ *
+ * A name that is itself an `http(s)` URL is taken as an ad-hoc `dcc-legacy`
+ * registry. Any other unknown name **throws**.
+ *
+ * This used to fabricate `https://example.com/<slug>.json` for unknown names,
+ * which is how the default `'DCC Issuer Registry'` — a name that was never a key
+ * here — spent four months being fetched from `example.com` and reported only as
+ * a soft "could not be checked". A trust source is the wrong place for a helpful
+ * default: an unresolvable name is a configuration error, not a registry to invent.
  */
 export const mapRegistryNamesToRegistries = (
   registryNames: string[],
@@ -142,16 +162,40 @@ export const mapRegistryNamesToRegistries = (
     if (name in knownRegistries) {
       return knownRegistries[name]
     }
-    // For unknown registries, try to construct a reasonable default
-    // This assumes the registry name might be a URL or we use a default pattern
-    return {
-      name,
-      type: 'dcc-legacy',
-      url: name.startsWith('http')
-        ? name
-        : `https://example.com/${name.toLowerCase().replace(/\s+/g, '-')}.json`
+    if (name.startsWith('http')) {
+      return { name, type: 'dcc-legacy', url: name }
     }
+    throw new Error(
+      `unknown registry ${JSON.stringify(name)}: not a configured registry ` +
+        `and not an http(s) URL. Known registries: ` +
+        `${Object.keys(knownRegistries).join(', ')}`
+    )
   })
+}
+
+/**
+ * Registries to consult for one verify exchange, or `undefined` to **skip** the
+ * issuer-registry suite entirely.
+ *
+ * ⚠️ `undefined` and `[]` are not the same thing. verifier-core's
+ * `issuer-registry-check` skips only on a falsy `context.registries`; an empty
+ * array is truthy, so it runs the lookup against zero registries and reports a
+ * bare `failure` — "Issuer was not found in any known DID registry" — without
+ * even the "could not be checked" softener. Returning `undefined` is what
+ * produces the honest `skipped`.
+ */
+export const resolveTrustedRegistries = (
+  exchangeTrustedRegistries: string[] | undefined,
+  config: App.Config = getConfig()
+): EntityIdentityRegistry[] | undefined => {
+  const names =
+    exchangeTrustedRegistries && exchangeTrustedRegistries.length > 0
+      ? exchangeTrustedRegistries
+      : config.defaultTrustedRegistryNames
+  if (names.length === 0) {
+    return undefined
+  }
+  return mapRegistryNamesToRegistries(names, config.knownRegistries)
 }
 
 const parseIssuerInstancesForTenant = (
@@ -183,16 +227,36 @@ const parseUiShowDetails = (raw: string | undefined): boolean => {
   return true
 }
 
+/**
+ * The tenant's protocol profile name, from `TENANT_PROFILE_<NAME>`.
+ *
+ * ⚠️ The suffix is UPPERCASED, matching `TENANT_ISSUER_*` rather than
+ * `TENANT_ORIGIN_*`. Tenant names are derived by lowercasing whatever followed
+ * `TENANT_TOKEN_`, so an uppercase lookup is the one that works regardless of
+ * how the declaring variable was cased. An empty value reads as unset, so
+ * `TENANT_PROFILE_ACME=` in an env file names nothing rather than naming `''`.
+ */
+const parseProtocolProfileForTenant = (
+  env: typeof process.env,
+  tenantNameLower: string
+): string | undefined => {
+  const raw = env[`TENANT_PROFILE_${tenantNameLower.toUpperCase()}`]
+  const name = typeof raw === 'string' ? raw.trim() : ''
+  return name || undefined
+}
+
 const parseTenantsFromEnv = (env: typeof process.env) => {
   const tenants: Record<string, App.Tenant> = {}
   for (const [key, value] of Object.entries(env)) {
     if (key.startsWith('TENANT_TOKEN_') && value) {
       const tenantName = key.slice(13).toLowerCase()
       const issuerInstances = parseIssuerInstancesForTenant(env, tenantName)
+      const protocolProfileName = parseProtocolProfileForTenant(env, tenantName)
       tenants[tenantName] = {
         tenantName,
         tenantToken: value,
-        ...(issuerInstances.length > 0 ? { issuerInstances } : {})
+        ...(issuerInstances.length > 0 ? { issuerInstances } : {}),
+        ...(protocolProfileName ? { protocolProfileName } : {})
       }
       if (env[`TENANT_ORIGIN_${tenantName}`]) {
         tenants[tenantName].origin = env[`TENANT_ORIGIN_${tenantName}`]
@@ -211,6 +275,7 @@ const parseConfig = (): App.Config => {
       process.env.DEFAULT_EXCHANGE_HOST ?? defaultExchangeHost,
     exchangeTtl: parseInt(process.env.EXCHANGE_TTL ?? '0') || defaultTtlSeconds,
     statusService: process.env.STATUS_SERVICE ?? '',
+    statusServiceToken: process.env.STATUS_SERVICE_TOKEN ?? '',
     signingService: process.env.SIGNING_SERVICE ?? defaultSigningService,
 
     defaultWorkflow: process.env.DEFAULT_WORKFLOW ?? defaultWorkflow,
@@ -221,6 +286,19 @@ const parseConfig = (): App.Config => {
     tenants,
     tenantAuthenticationEnabled: Object.keys(tenants).length > 0,
 
+    /**
+     * Filesystem path for the append-only exchange journal (JSONL).
+     *
+     * Unset — the default — makes the journal a no-op sink: no file is opened
+     * or created and no lifecycle event is recorded. The journal is opt-in
+     * because it is unbounded by construction (no TTL, never truncated by this
+     * service), so a deployment has to choose where that growth lives.
+     *
+     * An empty value is treated as unset, so `EXCHANGE_JOURNAL_PATH=` in an
+     * env file disables the journal rather than resolving to `''`.
+     */
+    exchangeJournalPath: process.env.EXCHANGE_JOURNAL_PATH || undefined,
+
     // Keyv backend configuration
     keyvFilePath: process.env.PERSIST_TO_FILE,
     redisUri: process.env.REDIS_URI ?? undefined,
@@ -228,10 +306,24 @@ const parseConfig = (): App.Config => {
     keyvExpiredCheckDelayMs:
       parseInt(process.env.KEYV_EXPIRED_CHECK_DELAY ?? '0') || 4 * 3600 * 1000, // 4 hours
 
-    // Verification workflow configuration - registry names (mapped to full config below)
+    /**
+     * Registry names consulted when an exchange names none of its own.
+     *
+     * **Empty by default**, which skips the issuer-registry suite — see
+     * {@link resolveTrustedRegistries}. Empty because the issuers this service
+     * drives are in none of the four DCC registries (nor are the VC Playground
+     * issuers), so the only verdict a live lookup can produce here is a red
+     * about our own issuer, on a check that is non-fatal and gates nothing.
+     * `skipped` says what is true — we did not ask.
+     *
+     * Set `DEFAULT_TRUSTED_REGISTRIES` to a comma-separated list of names from
+     * {@link STATIC_KNOWN_REGISTRIES} (or `http(s)` URLs) to turn checks back on.
+     */
     defaultTrustedRegistryNames: process.env.DEFAULT_TRUSTED_REGISTRIES
-      ? process.env.DEFAULT_TRUSTED_REGISTRIES.split(',').map((r) => r.trim())
-      : ['DCC Sandbox Registry', 'DCC Issuer Registry'],
+      ? process.env.DEFAULT_TRUSTED_REGISTRIES.split(',')
+          .map((r) => r.trim())
+          .filter((r) => r.length > 0)
+      : [],
 
     accessJwtSecret: process.env.ACCESS_JWT_SECRET ?? '',
 
@@ -253,8 +345,28 @@ const parseConfig = (): App.Config => {
      * Override with `VERIFY_TASK_MAX_ATTEMPTS`; defaults to 2.
      */
     verifyTaskMaxAttempts:
-      parseInt(process.env.VERIFY_TASK_MAX_ATTEMPTS ?? '0') || 2
+      parseInt(process.env.VERIFY_TASK_MAX_ATTEMPTS ?? '0') || 2,
+
+    /**
+     * Protocol profile served when neither the exchange nor its tenant names
+     * one — the last of the three resolution layers.
+     *
+     * ⚠️ Unset means "no layer names a profile", and resolution throws rather
+     * than choosing. That is deliberate: a deployment that has not said which
+     * profile it serves cannot have its bytes attributed to a name, and a
+     * service that guesses produces records nobody can reproduce.
+     */
+    defaultProtocolProfileName:
+      process.env.DEFAULT_PROTOCOL_PROFILE?.trim() || undefined
   }
+
+  // Fail fast on a misconfigured trust source. `mapRegistryNamesToRegistries`
+  // throws on an unknown name; doing it here means a typo costs one clear
+  // startup error rather than months of vacuous "could not be checked" verdicts.
+  mapRegistryNamesToRegistries(
+    config.defaultTrustedRegistryNames,
+    config.knownRegistries
+  )
 
   // Only if no tenants are configured, use the default tenant
   if (Object.keys(config.tenants).length === 0) {
@@ -262,10 +374,15 @@ const parseConfig = (): App.Config => {
       process.env,
       defaultTenantName
     )
+    const protocolProfileName = parseProtocolProfileForTenant(
+      process.env,
+      defaultTenantName
+    )
     config.tenants[defaultTenantName] = {
       tenantName: defaultTenantName,
       tenantToken: defaultTenantToken,
-      ...(issuerInstances.length > 0 ? { issuerInstances } : {})
+      ...(issuerInstances.length > 0 ? { issuerInstances } : {}),
+      ...(protocolProfileName ? { protocolProfileName } : {})
     }
   }
 

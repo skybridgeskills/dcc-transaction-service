@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { JsonLdField, JsonLdFieldAllowEmpty } from '../jsonld-field.js'
 import { issuerSchema } from '../issuer/schema.js'
-import { proofSchema } from '../proof/schema.js'
+import { proofSetSchema } from '../proof/schema.js'
 import {
   zodProblemDetails,
   PARSING_ERROR,
@@ -9,7 +9,7 @@ import {
 } from '../../errors/problem-details.js'
 
 export { issuerSchema } from '../issuer/schema.js'
-export { proofSchema } from '../proof/schema.js'
+export { proofSchema, proofSetSchema } from '../proof/schema.js'
 
 /** VCDM 1.1 context URL (https://www.w3.org/2018/credentials/v1) */
 export const CREDENTIAL_CONTEXT_V1 = 'https://www.w3.org/2018/credentials/v1'
@@ -55,7 +55,7 @@ export const credentialV1Schema = z
     expirationDate: z.string().optional(),
     credentialSubject: subjectSchema,
     credentialStatus: vcCredentialStatus.optional(),
-    proof: proofSchema.optional(),
+    proof: proofSetSchema.optional(),
     name: z.string().optional(),
     renderMethod: z.array(renderMethodSchema).optional()
   })
@@ -71,7 +71,7 @@ export const credentialV2Schema = z
     validUntil: z.string().optional(),
     credentialSubject: subjectSchema,
     credentialStatus: vcCredentialStatus,
-    proof: proofSchema.optional(),
+    proof: proofSetSchema.optional(),
     name: z.string().optional(),
     renderMethod: z.array(renderMethodSchema).optional()
   })

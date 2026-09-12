@@ -1,0 +1,61 @@
+{
+  "name": "claim-default",
+  "workflow": "claim",
+  "why": "The claim envelope and the OID4VCI credential offer, by reference.",
+  "exercisedOnTheWire": true,
+  "variables": {
+    "vc": "{\"@context\":[\"https://www.w3.org/2018/credentials/v1\",\"https://purl.imsglobal.org/spec/ob/v3p0/context.json\"],\"type\":[\"VerifiableCredential\",\"OpenBadgeCredential\"],\"credentialSubject\":{\"type\":[\"AchievementSubject\"]}}",
+    "retrievalId": "g1"
+  },
+  "protocols": {
+    "iu": "http://localhost:4005/interactions/{exchangeId}?iuv=1",
+    "vcapi": "http://localhost:4005/workflows/claim/exchanges/{exchangeId}",
+    "lcw": "https://lcw.app/request.html?issuer=localhost&auth_type=bearer&challenge={challenge}&vc_request_url=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F{exchangeId}",
+    "verifiablePresentationRequest": {
+      "query": {
+        "type": "DIDAuthentication"
+      },
+      "interact": {
+        "service": [
+          {
+            "type": "VerifiableCredentialApiExchangeService",
+            "serviceEndpoint": "http://localhost:4005/workflows/claim/exchanges/{exchangeId}"
+          },
+          {
+            "type": "UnmediatedPresentationService2021",
+            "serviceEndpoint": "http://localhost:4005/workflows/claim/exchanges/{exchangeId}"
+          },
+          {
+            "type": "CredentialHandlerService"
+          }
+        ]
+      },
+      "challenge": "{challenge}",
+      "domain": "http://localhost:4005",
+      "acceptedCryptosuites": [
+        {
+          "cryptosuite": "eddsa-rdfc-2022"
+        },
+        {
+          "cryptosuite": "ecdsa-rdfc-2019"
+        },
+        {
+          "cryptosuite": "ed25519-signature-2020"
+        }
+      ]
+    },
+    "OID4VCI": "openid-credential-offer://?credential_offer_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F{exchangeId}%2Fopenid%2Fcredential-offer",
+    "oid4vci-1.0": "openid-credential-offer://?credential_offer_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F{exchangeId}%2Fopenid%2Fcredential-offer"
+  },
+  "credentialOffer": {
+    "credential_issuer": "http://localhost:4005/workflows/claim/exchanges/{exchangeId}",
+    "credential_configuration_ids": [
+      "OpenBadgeCredential"
+    ],
+    "grants": {
+      "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
+        "pre-authorized_code": "{preAuthorizedCode}"
+      }
+    }
+  }
+}

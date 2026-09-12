@@ -1,5 +1,9 @@
 import { saveExchange } from '../transactionManager.js'
-import { vcApiExchangeCreateSchema, baseVariablesSchema } from '../schema.js'
+import {
+  vcApiExchangeCreateSchema,
+  baseVariablesSchema,
+  profileKnobConflicts
+} from '../schema.js'
 import {
   type CheckResult,
   type PresentationVerificationResult
@@ -20,13 +24,27 @@ import {
 } from '../lib/errors/problem-details.js'
 import { HTTPException } from 'hono/http-exception'
 import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
-import { mapRegistryNamesToRegistries } from '../config.js'
+import { resolveTrustedRegistries } from '../config.js'
 import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
+import { mintExchangeId } from '../lib/mint-exchange-id.js'
+import { journalExchangeEvent } from '../journal/index.js'
+import {
+  ensureOid4vpState,
+  resolveDelivery,
+  resolveQueryLanguage
+} from '../oid4vp/state.js'
 import { getVerifier } from '../lib/verifier.js'
 import { applyFix } from '../compatibility/apply.js'
 import { prepareVcalmParticipationMessage } from '../compatibility/vcalm-participation-message/index.js'
 import { prepareVerifiableEntity } from '../compatibility/verifiable-entity/index.js'
 import { arrayOf } from '../utils.js'
+import { wireProfileForExchange } from '../protocol-profiles/for-exchange.js'
+import {
+  vprAcceptedMethods,
+  vprDomain,
+  vprInteract,
+  vprInteractServices
+} from '../lib/vpr-wire.js'
 
 // Extract context URLs from the named Map using short names
 const CONTEXT_URL_V1 =
@@ -49,8 +67,36 @@ export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
         })
         .optional()
     )
+    // ⚠️ The profile-superseded knobs — `oid4vpQueryLanguage`,
+    // `oid4vpDelivery`, `vprLimitDisclosure` — are deliberately NOT re-declared
+    // here. Redefining a field `baseVariablesSchema` already names identically
+    // is a no-op, so do not add one. (`vprAdvertiseCryptosuites` is not a knob
+    // at all, deprecated or otherwise — see `schema.ts`.)
+    //
+    // ⚠️ The fields BELOW that are still re-declared are re-declared because
+    // they genuinely differ — `vprContext` gains `.url()`, `vprClaims` gains
+    // `id`, and the verify arm makes them required. Do not "tidy" those away by
+    // analogy; Zod strips what it does not name, and that is why the pattern
+    // existed in the first place.
   })
 })
+  .superRefine((data, ctx) => {
+    // ⚠️ One caller, one request, two statements about the same wire field.
+    // There is no more-specific layer to break the tie, and serving either one
+    // silently would make the profile name a lie about the bytes.
+    for (const knob of profileKnobConflicts(
+      data.variables as unknown as Record<string, unknown>
+    )) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['variables', knob],
+        message: `This request names the protocol profile "${String(
+          (data.variables as unknown as Record<string, unknown>)
+            .protocolProfileName
+        )}" and also sets \`${knob}\`, which that profile supersedes. Set one or the other: the knob still works on its own, and the profile states every wire field including this one.`
+      })
+    }
+  })
 
 export const validateExchangeVerify = (data: unknown) => {
   return exchangeCreateSchemaVerify.parse(data)
@@ -68,7 +114,7 @@ export const createExchangeVerify = ({
   const exchange: App.ExchangeDetailVerify = {
     ...data,
     workflowId: 'verify',
-    exchangeId: crypto.randomUUID(),
+    exchangeId: mintExchangeId(data.exchangeIdPrefix),
     tenantName: data.variables.tenantName ?? config.defaultTenantName,
     variables: {
       ...data.variables,
@@ -79,13 +125,49 @@ export const createExchangeVerify = ({
       trustedIssuers: data.variables.trustedIssuers ?? [],
       trustedRegistries: data.variables.trustedRegistries ?? [],
       vprClaims: data.variables.vprClaims?.filter((c) => c !== undefined) ?? []
+      // ⚠️ Do not re-spread the profile-superseded knobs here conditionally.
+      // `...data.variables` above already carries them, so each conditional
+      // spread would set a field to the value it already holds. Three
+      // declarations of one knob is what made this surface worth replacing.
     },
     expires:
       data.expires ??
       new Date(Date.now() + config.exchangeTtl * 1000).toISOString(),
     state: 'pending'
   }
-  return exchange
+  // BY-VALUE NEEDS `state` AT ENVELOPE-BUILD TIME, not at first request GET.
+  //
+  // The by-reference arm mints `state` lazily in the `.../openid4vp/request`
+  // route, because nothing before that GET has to know it. By value there IS
+  // no GET: `getProtocols` builds the complete authorization request while it
+  // assembles the interaction envelope, so the token must already exist.
+  //
+  // Minted here ONLY for the by-value arm, deliberately. Minting for both
+  // would change the by-reference exchange record — and by-reference is the
+  // baseline construction for delivery comparisons, which is worth nothing if
+  // it is not byte-identical to every present-direction run recorded before it.
+  const withState =
+    resolveDelivery(exchange) === 'by-value'
+      ? ensureOid4vpState(exchange).exchange
+      : exchange
+  // The elected delivery goes on the mint line, and it is not cosmetic.
+  //
+  // On the by-value arm there is no `.../openid4vp/request` GET at all, so the
+  // only service-side write points between mint and the response POST are these
+  // two — a refusal in between leaves an exchange record saying nothing
+  // happened. Worse, an absent `request-served` line is ambiguous on its own:
+  // it means either *the wallet never fetched* or *this arm issues no fetch*.
+  // Stamping the delivery here is what lets a reader tell those apart without
+  // inferring it from the presence of a GET that, on one arm, cannot occur.
+  journalExchangeEvent(withState, 'mint', {
+    expires: withState.expires,
+    delivery: resolveDelivery(withState),
+    queryLanguage: resolveQueryLanguage(withState),
+    ...(data.exchangeIdPrefix
+      ? { exchangeIdPrefix: data.exchangeIdPrefix }
+      : {})
+  })
+  return withState
 }
 
 const getCredentialQuery = ({
@@ -157,29 +239,65 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
     credentialQuery: cq
   }))
 
+  // The advertised acceptance equals the actual acceptance. `did:jwk` is here
+  // because shipped wallets bind their holder key with it and our verifier
+  // resolves it (see `lib/verifier-document-loader.ts`); a VPR narrower than
+  // the instrument turns a conformant wallet's correct refusal into a finding
+  // against the wallet, which this service forbids. Widen this list only
+  // alongside the resolver — never ahead of it.
+  // The shape of this VPR — a query ARRAY carrying QueryByExample entries plus
+  // a constrained DIDAuthentication entry — is a function of the workflow, and
+  // the workflow is named on the exchange. What a profile states is the values
+  // within that shape; what the exchange states is the credential types and
+  // claims. Nothing here is left to an unnamed default.
+  //
+  // ⚠️ Order at every read below: active profile → the historical default. No
+  // per-exchange knob exists for any VPR field today, so there is no third
+  // term; if one is ever added it goes FIRST, for the reason given in
+  // `lib/vpr-wire.ts`.
+  const wire = wireProfileForExchange(exchange)
+
+  // DID Method NAMES, not DID scheme-plus-method: the VP Request spec
+  // (https://w3c-ccg.github.io/vp-request-spec/) takes `key`, never
+  // `did:key`. The prefixed form is an earlier spelling this service emitted,
+  // and a verifier that compares against the bare name matches nothing and
+  // refuses before signing — a fault of ours presenting as its failure.
+  // ⚠️ Each of the three below is a field some verifiers OMIT and we
+  // emit — every row of that differential is something we add. A stricter
+  // parser choking on an optional field is the shape of the defect, so each is
+  // separately omissible rather than bundled.
+  const acceptedMethods = vprAcceptedMethods(wire, {
+    form: 'bare-name',
+    methods: ['key', 'web', 'jwk']
+  })
   const didAuthQuery = {
     type: 'DIDAuthentication' as const,
-    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES],
-    acceptedMethods: [{ method: 'did:key' }, { method: 'did:web' }]
+    ...((wire?.vpr?.emitDidAuthenticationAcceptedCryptosuites ?? true)
+      ? { acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES] }
+      : {}),
+    // An empty method list omits the key. Some verifiers emit
+    // `acceptedMethods` WITHOUT `acceptedCryptosuites`, which is why the two
+    // are separate questions here.
+    ...(acceptedMethods.length > 0 ? { acceptedMethods } : {})
   }
 
   const vpr = {
     query: [...queryByExampleEntries, didAuthQuery],
-    interact: {
-      service: [
-        {
-          type: 'VerifiableCredentialApiExchangeService',
-          serviceEndpoint
-        },
-        {
-          type: 'UnmediatedPresentationService2021',
-          serviceEndpoint
-        }
-      ]
-    },
+    ...vprInteract(
+      vprInteractServices(wire, serviceEndpoint, [
+        'VerifiableCredentialApiExchangeService',
+        'UnmediatedPresentationService2021'
+      ])
+    ),
     challenge: exchange.variables.challenge,
-    domain: serviceEndpoint,
-    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES]
+    domain: vprDomain(
+      wire,
+      { exchangeHost: exchange.variables.exchangeHost, serviceEndpoint },
+      'service-endpoint'
+    ),
+    ...((wire?.vpr?.emitAcceptedCryptosuites ?? true)
+      ? { acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES] }
+      : {})
   }
   return vpr
 }
@@ -682,12 +800,11 @@ export const participateInVerifyExchange = async ({
     config
   })
 
-  const registries = mapRegistryNamesToRegistries(
-    exchange.variables.trustedRegistries &&
-      exchange.variables.trustedRegistries.length > 0
-      ? exchange.variables.trustedRegistries
-      : config.defaultTrustedRegistryNames,
-    config.knownRegistries
+  // `undefined` (not `[]`) is what skips the issuer-registry suite — see
+  // `resolveTrustedRegistries`.
+  const registries = resolveTrustedRegistries(
+    exchange.variables.trustedRegistries,
+    config
   )
 
   // Pass the RAW post-compat presentation. verifier-core's TS interface

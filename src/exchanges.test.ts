@@ -85,6 +85,79 @@ describe('getProtocols', () => {
     expect(protocols.OID4VCI).toBeUndefined()
   })
 
+  /*
+  The delivery arms. `by-reference` is the default: it is the baseline
+  construction every other delivery is compared against. `by-value` is the
+  conformant arm under the `redirect_uri` client_id prefix.
+  See `oid4vp/deep-link.ts`.
+  */
+  test('verify OID4VP defaults to the by-reference delivery', () => {
+    const exchange = createMockExchange({
+      exchangeId: 'test-verify-byref',
+      variables: { ...createMockExchange().variables, exchangeHost }
+    })
+
+    const protocols = getProtocols(exchange)
+
+    const url = new URL(protocols.OID4VP!)
+    expect(url.searchParams.get('request_uri')).toBe(
+      `${exchangeHost}/workflows/verify/exchanges/test-verify-byref/openid4vp/request`
+    )
+    expect(url.searchParams.get('client_id')).toBe(
+      `redirect_uri:${exchangeHost}/workflows/verify/exchanges/test-verify-byref/openid4vp/response`
+    )
+    // Nothing else: by reference is client_id + request_uri and no more.
+    expect([...url.searchParams.keys()].sort()).toEqual([
+      'client_id',
+      'request_uri'
+    ])
+  })
+
+  test('verify OID4VP by-value inlines the whole request, no request_uri', () => {
+    const base = createMockExchange()
+    const exchange = createMockExchange({
+      exchangeId: 'test-verify-byvalue',
+      variables: {
+        ...base.variables,
+        exchangeHost,
+        oid4vpDelivery: 'by-value',
+        // `getProtocols` cannot mint or persist; `createExchangeVerify` does
+        // it for this arm, so the fixture stands in for that.
+        oid4vp: { state: 'st-fixed', responseReceived: false }
+      }
+    })
+
+    const protocols = getProtocols(exchange)
+
+    const params = new URL(protocols.OID4VP!).searchParams
+    expect(params.has('request_uri')).toBe(false)
+    expect(params.get('response_type')).toBe('vp_token')
+    expect(params.get('response_mode')).toBe('direct_post')
+    expect(params.get('state')).toBe('st-fixed')
+    expect(params.get('response_uri')).toBe(
+      `${exchangeHost}/workflows/verify/exchanges/test-verify-byvalue/openid4vp/response`
+    )
+    expect(JSON.parse(params.get('client_metadata')!)).toHaveProperty(
+      'vp_formats_supported'
+    )
+  })
+
+  test('by-value without a minted state throws rather than degrading', () => {
+    const base = createMockExchange()
+    const exchange = createMockExchange({
+      exchangeId: 'test-verify-nostate',
+      variables: {
+        ...base.variables,
+        exchangeHost,
+        oid4vpDelivery: 'by-value'
+      }
+    })
+    // Silently falling back to by-reference would change a second variable in
+    // a comparison meant to change one, and report the wrong answer — the one
+    // failure this build exists to prevent.
+    expect(() => getProtocols(exchange)).toThrow(/no oid4vp.state/)
+  })
+
   test('preserves a custom exchangeHost on iu', () => {
     const customHost = 'https://issuer.example'
     const exchange: App.ExchangeDetailDidAuth = {

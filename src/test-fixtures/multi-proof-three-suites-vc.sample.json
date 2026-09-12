@@ -1,0 +1,52 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/credentials/v2",
+    "https://examples.vcplayground.org/contexts/alumni/v2.json",
+    "https://w3id.org/security/suites/ed25519-2020/v1"
+  ],
+  "type": [
+    "VerifiableCredential",
+    "AlumniCredential"
+  ],
+  "name": "Alumni Credential",
+  "description": "Test fixture: a credential carrying three proofs. No real holder data.",
+  "validFrom": "2026-08-10T00:00:00Z",
+  "credentialSubject": {
+    "id": "did:key:zDnaeWNNdFmChupej1hytqmTm5nbiY2sLmj61DNSJDZHUXmts",
+    "alumniOf": {
+      "identifier": "did:example:c276e12ec21ebfeb1f712ebc6f1",
+      "name": "Example University"
+    }
+  },
+  "issuer": "did:key:zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z",
+  "id": "urn:uuid:9a1d8635-a1df-430a-b03f-94a84818c7aa",
+  "proof": [
+    {
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z#zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z",
+      "cryptosuite": "ecdsa-rdfc-2019",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z223rWAaDUUAMKTrJZnoqqNBqdzHMEuqLjDUia8VU3uvj1eNQGjfVjXBkMYUtgWp8vPEkXNEjiAcrPdcTT7pt6wNj"
+    },
+    {
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z#zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "assertionMethod",
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://examples.vcplayground.org/contexts/alumni/v2.json",
+        "https://w3id.org/security/suites/ed25519-2020/v1"
+      ],
+      "proofValue": "z4mpdtK37FqK6J6Nm7JVJ1JbGfzEXfBuEumNsvKn2Nz22cZythBN7vSNdw6gWcX5P1pGKvgkKv57XTQrpd4yegSF8"
+    },
+    {
+      "id": "urn:uuid:0a7e594c-3d3b-48f3-bab2-fd8579c7a289",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z#zDnaebAMtrfK5DDSMCoKbGN8DJnnUHCvJr7EpRGJ6XPMf456z",
+      "cryptosuite": "ecdsa-sd-2023",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "u2V0AhVhAOAhpZiAKU0IIQpm03o0Z40tJUrxgKzvYPCRYltxjWO2OBGva7yHrXpGn0yxQXr0NSdftP1ATNLBPbebzCii7GVgjgCQDOw87lFNPfaioHi-NBInSLh55IJi-vAXksDlGSJHgTs9YIH4u8AnbV5iwFp1IpRJnnqk0whnc2DeMz85cH78rD8eHh1hArCluQGFS7DUJwz_VM7SyZd78Psn7tUfqbWtgNEJ1lSmlP1DlzFPNYDvpPcReHZlU2FmDLYWrA2k4dZqo0SBPbVhAK_yIJFZkqL-e-PQuABtmBW1NmLg5A67sajaw2eVK9VC5K6kCFPXa7UrnuayLAkzWsU_Hro8iYMf7vokEnSeW0lhAiCu8VY-p5rZxTUSvJo8K_kE6b_AB6TN-ZkSDK_u5ZciGRFOjpa2sQWoE50hA-K_K8IW0DOGHTfTqi4iwlVmrZVhA7udRJvseQgoBT-UABL82gU6lJtRmHTglfaN7LZr8hZB3alCVeqIb2NdoJQEIzOhOLE67yIKsG4tzzgb-4LqjQ1hAcQAy9LeH2EvjBOD7iUTcsf38G3uUPoFK2NsxewNYZQr0niYKhxYdqO5htEbFOfIXNb4O4xrAt_QVhX3gsvZMU1hAb4vkBny9W1v520nzluAV5_otiPZCsVBBStRS9e-_BHjQhT6Nlz4rUQXh5TCDKHt63kAqg8rI08FQf7uZrK2dN1hARDXWYsKEYFNdWZofRgNC9FoPcpdzt2Po6HY868aCkFPHsYHmKFWq78iDf2g8HYy_DilPb7LdxOgLrBKUTIy3K4FnL2lzc3Vlcg"
+    }
+  ]
+}

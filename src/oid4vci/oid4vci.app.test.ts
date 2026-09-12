@@ -243,6 +243,100 @@ describe('OID4VCI · GET /.well-known/oauth-authorization-server/...', () => {
   })
 })
 
+/**
+ * The same documents reachable by OIDC-Discovery-style concatenation —
+ * well-known appended to the issuer identifier rather than inserted after the
+ * host. Wallets that compute this form would otherwise 404 at discovery and
+ * abandon the flow before token/nonce/credential.
+ *
+ * The load-bearing assertions here are the deep-equality ones: they are what
+ * stops the two constructions drifting apart.
+ */
+describe('OID4VCI · discovery by OIDC-style concatenation', () => {
+  test('issuer metadata is byte-identical to the path-suffix route', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const canonical = await app.request(
+      `/.well-known/openid-credential-issuer/workflows/claim/exchanges/${exchangeId}`
+    )
+    const concat = await app.request(
+      `/workflows/claim/exchanges/${exchangeId}/.well-known/openid-credential-issuer`
+    )
+    expect(concat.status).toBe(200)
+    expect(concat.headers.get('content-type')).toContain('json')
+    const concatBody = issuerMetadataSchema.parse(await concat.json())
+    expect(concatBody).toEqual(await canonical.json())
+    expect(concatBody.credential_endpoint.endsWith('/openid/credential')).toBe(
+      true
+    )
+  })
+
+  test('AS metadata is byte-identical to the path-suffix route', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const canonical = await app.request(
+      `/.well-known/oauth-authorization-server/workflows/claim/exchanges/${exchangeId}`
+    )
+    const concat = await app.request(
+      `/workflows/claim/exchanges/${exchangeId}/.well-known/oauth-authorization-server`
+    )
+    expect(concat.status).toBe(200)
+    const concatBody = oid4vciAsMetadataSchema.parse(await concat.json())
+    expect(concatBody).toEqual(await canonical.json())
+    expect(concatBody.grant_types_supported).toEqual([PRE_AUTHORIZED_GRANT])
+  })
+
+  test('openid-configuration serves the same document as AS metadata', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const asMetadata = await app.request(
+      `/workflows/claim/exchanges/${exchangeId}/.well-known/oauth-authorization-server`
+    )
+    const openidConfiguration = await app.request(
+      `/workflows/claim/exchanges/${exchangeId}/.well-known/openid-configuration`
+    )
+    expect(openidConfiguration.status).toBe(200)
+    expect(oid4vciAsMetadataSchema.parse(await openidConfiguration.json())).toEqual(
+      await asMetadata.json()
+    )
+  })
+
+  test('returns 404 for a non-claim exchange', async () => {
+    const setup = getDataForExchangeSetupPost(
+      'default',
+      'http://localhost:4005',
+      'didAuth'
+    )
+    const r = await app.request('/exchange', {
+      method: 'POST',
+      body: JSON.stringify(setup),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const wallet = (await r.json()) as App.DCCWalletQuery[]
+    const url = new URL(wallet[0]!.directDeepLink)
+    const vcRequestUrl = decodeURIComponent(
+      url.searchParams.get('vc_request_url')!
+    )
+    const exchangeId = new URL(vcRequestUrl).pathname
+      .split('/exchanges/')[1]!
+      .split('/')[0]
+    const response = await app.request(
+      `/workflows/didAuth/exchanges/${exchangeId}/.well-known/openid-credential-issuer`
+    )
+    expect(response.status).toBe(404)
+  })
+
+  test('returns 404 for an unknown exchange id', async () => {
+    for (const wellKnown of [
+      'openid-credential-issuer',
+      'oauth-authorization-server',
+      'openid-configuration'
+    ]) {
+      const response = await app.request(
+        `/workflows/claim/exchanges/missing/.well-known/${wellKnown}`
+      )
+      expect(response.status).toBe(404)
+    }
+  })
+})
+
 const fetchOffer = async (exchangeId: string) => {
   const r = await app.request(
     `/workflows/claim/exchanges/${exchangeId}/openid/credential-offer`
@@ -323,6 +417,139 @@ describe('OID4VCI · POST /openid/token', () => {
     expect(r.status).toBe(400)
     const body = (await r.json()) as { error: string }
     expect(body.error).toBe('invalid_request')
+  })
+})
+
+/**
+ * ACCOMMODATION — `token-endpoint-by-convention`.
+ *
+ * The token endpoint at the path a client reaches by appending `/token` to
+ * `authorization_servers[0]` instead of fetching
+ * `.well-known/oauth-authorization-server` and reading `token_endpoint` out of
+ * it. Served because a shipped backend does exactly that and 404s off the end
+ * of the flow, taking every downstream measurement with it.
+ *
+ * The two load-bearing assertions are the last two: the metadata still
+ * advertises the DISCOVERED endpoint, and the constructed one is not what we
+ * publish. Advertising it would make every wallet look conformant and erase
+ * the measurement — see `routes.oid4vciTokenByConvention` in `hono.ts`.
+ */
+describe('OID4VCI · POST /token — the constructed path', () => {
+  const conventionalTokenRequest = async (
+    exchangeId: string,
+    body: URLSearchParams
+  ) =>
+    app.request(`/workflows/claim/exchanges/${exchangeId}/token`, {
+      method: 'POST',
+      body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+
+  test('redeems a pre-auth code, exactly as the discovered path does', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const offer = await fetchOffer(exchangeId)
+    const code = offer.grants[PRE_AUTHORIZED_GRANT]!['pre-authorized_code']
+
+    const response = await conventionalTokenRequest(
+      exchangeId,
+      new URLSearchParams({
+        grant_type: PRE_AUTHORIZED_GRANT,
+        'pre-authorized_code': code
+      })
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toContain('no-store')
+    const body = (await response.json()) as {
+      access_token: string
+      token_type: string
+    }
+    expect(body.token_type).toBe('Bearer')
+    expect(body.access_token.length).toBeGreaterThan(20)
+  })
+
+  test('answers the same spec-shaped errors, so the two routes cannot drift', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const r = await conventionalTokenRequest(
+      exchangeId,
+      new URLSearchParams({ grant_type: 'authorization_code', code: 'abc' })
+    )
+    expect(r.status).toBe(400)
+    expect(((await r.json()) as { error: string }).error).toBe(
+      'unsupported_grant_type'
+    )
+  })
+
+  test('a code redeemed on one route cannot be replayed on the other', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const offer = await fetchOffer(exchangeId)
+    const params = new URLSearchParams({
+      grant_type: PRE_AUTHORIZED_GRANT,
+      'pre-authorized_code':
+        offer.grants[PRE_AUTHORIZED_GRANT]!['pre-authorized_code']
+    })
+    expect((await conventionalTokenRequest(exchangeId, params)).status).toBe(200)
+    const replayed = await tokenRequest(exchangeId, params)
+    expect(replayed.status).toBe(400)
+    expect(((await replayed.json()) as { error: string }).error).toBe(
+      'invalid_grant'
+    )
+  })
+
+  test('is not available for a non-claim exchange', async () => {
+    const setup = getDataForExchangeSetupPost(
+      'default',
+      'http://localhost:4005',
+      'didAuth'
+    )
+    const r = await app.request('/exchange', {
+      method: 'POST',
+      body: JSON.stringify(setup),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const wallet = (await r.json()) as App.DCCWalletQuery[]
+    const vcRequestUrl = decodeURIComponent(
+      new URL(wallet[0]!.directDeepLink).searchParams.get('vc_request_url')!
+    )
+    const exchangeId = new URL(vcRequestUrl).pathname
+      .split('/exchanges/')[1]!
+      .split('/')[0]
+    const response = await app.request(
+      `/workflows/didAuth/exchanges/${exchangeId}/token`,
+      {
+        method: 'POST',
+        body: new URLSearchParams({ grant_type: PRE_AUTHORIZED_GRANT }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }
+    )
+    expect(response.status).toBe(400)
+  })
+
+  // ⛔ The fix this accommodation is NOT. Serving the constructed path and
+  // publishing it are different decisions: publish it and a wallet that never
+  // performed RFC 8414 discovery becomes indistinguishable from one that did,
+  // for every vendor at once.
+  test('the advertised token_endpoint is still the discovered one', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const response = await app.request(
+      `/.well-known/oauth-authorization-server/workflows/claim/exchanges/${exchangeId}`
+    )
+    const md = oid4vciAsMetadataSchema.parse(await response.json())
+    expect(md.token_endpoint.endsWith('/openid/token')).toBe(true)
+    expect(md.token_endpoint.endsWith(`/exchanges/${exchangeId}/token`)).toBe(
+      false
+    )
+  })
+
+  test('issuer metadata still advertises no token_endpoint of its own', async () => {
+    const { exchangeId } = await createClaimExchange()
+    const response = await app.request(
+      `/.well-known/openid-credential-issuer/workflows/claim/exchanges/${exchangeId}`
+    )
+    const md = (await response.json()) as Record<string, unknown>
+    expect(md).not.toHaveProperty('token_endpoint')
+    expect(md.authorization_servers).toEqual([
+      expect.stringContaining(`/exchanges/${exchangeId}`)
+    ])
   })
 })
 

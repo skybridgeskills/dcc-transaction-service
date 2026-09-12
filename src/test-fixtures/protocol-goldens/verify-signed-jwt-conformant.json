@@ -1,0 +1,148 @@
+{
+  "name": "verify-signed-jwt-conformant",
+  "workflow": "verify",
+  "why": "⚠️ The conformant arm: a genuinely signed request-object JWT under the `decentralized_identifier` client_id prefix. CONFORMANT and ACCEPTED are separate claims and this fixture speaks only to the first — no wallet has accepted it. Profile-only; no knob can reach it. ⚠️ Like the accommodation and unlike every other golden here, it was captured AFTER the change because the construction did not exist before; `oid4vp/signed-request-object.app.test.ts` is its acceptance and was confirmed failing before the change. ⚠️ The signature segment is produced by a DOUBLE, not by a key — see `test-fixtures/signing-service-double.ts`. It pins the ENVELOPE and the claims, never the cryptography.",
+  "exercisedOnTheWire": false,
+  "variables": {
+    "vprContext": [
+      "https://www.w3.org/2018/credentials/v1"
+    ],
+    "vprCredentialType": [
+      "VerifiableCredential",
+      "OpenBadgeCredential"
+    ],
+    "trustedIssuers": [],
+    "vprClaims": []
+  },
+  "protocols": {
+    "iu": "http://localhost:4005/interactions/{exchangeId}?iuv=1",
+    "vcapi": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}",
+    "lcw": "https://lcw.app/request?request=%7B%22protocols%22%3A%7B%22vcapi%22%3A%22http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%22%7D%7D",
+    "verifiablePresentationRequest": {
+      "query": [
+        {
+          "type": "QueryByExample",
+          "credentialQuery": {
+            "example": {
+              "type": [
+                "VerifiableCredential",
+                "OpenBadgeCredential"
+              ],
+              "@context": [
+                "https://www.w3.org/2018/credentials/v1"
+              ]
+            }
+          }
+        },
+        {
+          "type": "DIDAuthentication",
+          "acceptedCryptosuites": [
+            {
+              "cryptosuite": "eddsa-rdfc-2022"
+            },
+            {
+              "cryptosuite": "ecdsa-rdfc-2019"
+            },
+            {
+              "cryptosuite": "ed25519-signature-2020"
+            }
+          ],
+          "acceptedMethods": [
+            {
+              "method": "key"
+            },
+            {
+              "method": "web"
+            },
+            {
+              "method": "jwk"
+            }
+          ]
+        }
+      ],
+      "interact": {
+        "service": [
+          {
+            "type": "VerifiableCredentialApiExchangeService",
+            "serviceEndpoint": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}"
+          },
+          {
+            "type": "UnmediatedPresentationService2021",
+            "serviceEndpoint": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}"
+          }
+        ]
+      },
+      "challenge": "{challenge}",
+      "domain": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}",
+      "acceptedCryptosuites": [
+        {
+          "cryptosuite": "eddsa-rdfc-2022"
+        },
+        {
+          "cryptosuite": "ecdsa-rdfc-2019"
+        },
+        {
+          "cryptosuite": "ed25519-signature-2020"
+        }
+      ]
+    },
+    "OID4VP": "openid4vp://?client_id=decentralized_identifier%3Adid%3Aweb%3Aexample.test%3Aui%3Adouble-entity&request_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Frequest",
+    "oid4vp-1.0": "openid4vp://?client_id=decentralized_identifier%3Adid%3Aweb%3Aexample.test%3Aui%3Adouble-entity&request_uri=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fverify%2Fexchanges%2F{exchangeId}%2Fopenid4vp%2Frequest"
+  },
+  "oid4vpRequest": {
+    "contentType": "application/oauth-authz-req+jwt",
+    "jwtSegments": 3,
+    "signatureSegmentEmpty": false,
+    "header": {
+      "alg": "EdDSA",
+      "typ": "oauth-authz-req+jwt",
+      "kid": "did:web:example.test:ui:double-entity#z6MkDoubleEntityKeyForTestsOnly000000000000"
+    },
+    "payload": {
+      "response_type": "vp_token",
+      "response_mode": "direct_post",
+      "client_id": "decentralized_identifier:did:web:example.test:ui:double-entity",
+      "response_uri": "http://localhost:4005/workflows/verify/exchanges/{exchangeId}/openid4vp/response",
+      "nonce": "{challenge}",
+      "state": "{state}",
+      "dcql_query": {
+        "credentials": [
+          {
+            "id": "credential",
+            "format": "ldp_vc",
+            "meta": {
+              "type_values": [
+                [
+                  "https://www.w3.org/2018/credentials#VerifiableCredential"
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "client_metadata": {
+        "vp_formats_supported": {
+          "ldp_vc": {
+            "proof_type_values": [
+              "DataIntegrityProof"
+            ],
+            "cryptosuite_values": [
+              "eddsa-rdfc-2022",
+              "ecdsa-rdfc-2019"
+            ]
+          },
+          "ldp_vp": {
+            "proof_type_values": [
+              "DataIntegrityProof"
+            ],
+            "cryptosuite_values": [
+              "eddsa-rdfc-2022",
+              "ecdsa-rdfc-2019"
+            ]
+          }
+        },
+        "require_signed_request_object": true
+      }
+    }
+  }
+}

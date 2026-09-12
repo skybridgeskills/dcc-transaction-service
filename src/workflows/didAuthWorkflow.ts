@@ -6,6 +6,14 @@ import { saveExchange } from '../transactionManager.js'
 import { VERIFIABLE_CRYPTOSUITES } from '../lib/verifiable-cryptosuites.js'
 import { problemDetailResponse } from '../lib/errors/problem-details.js'
 import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
+import { mintExchangeId } from '../lib/mint-exchange-id.js'
+import { journalExchangeEvent } from '../journal/index.js'
+import { wireProfileForExchange } from '../protocol-profiles/for-exchange.js'
+import {
+  vprDomain,
+  vprInteract,
+  vprInteractServices
+} from '../lib/vpr-wire.js'
 
 export const exchangeCreateSchemaDidAuth = vcApiExchangeCreateSchema.extend({})
 
@@ -26,7 +34,7 @@ export const createExchangeDidAuth = ({
     ...data,
     workflowId: workflow.id,
     tenantName: data.variables.tenantName ?? config.defaultTenantName,
-    exchangeId: crypto.randomUUID(),
+    exchangeId: mintExchangeId(data.exchangeIdPrefix),
     variables: {
       ...data.variables,
       challenge: crypto.randomUUID(),
@@ -37,6 +45,12 @@ export const createExchangeDidAuth = ({
       new Date(Date.now() + config.exchangeTtl * 1000).toISOString(),
     state: 'pending'
   }
+  journalExchangeEvent(exchange, 'mint', {
+    expires: exchange.expires,
+    ...(data.exchangeIdPrefix
+      ? { exchangeIdPrefix: data.exchangeIdPrefix }
+      : {})
+  })
   return exchange
 }
 
@@ -47,28 +61,37 @@ export const createExchangeDidAuth = ({
 export const getDIDAuthVPR = (exchange: App.ExchangeDetailBase) => {
   const serviceEndpoint = `${exchange.variables.exchangeHost}/workflows/${exchange.workflowId}/exchanges/${exchange.exchangeId}`
 
+  // ⚠️ A BARE `DIDAuthentication` query — no `acceptedCryptosuites` and no
+  // `acceptedMethods` on it, unlike the verify VPR. That difference is on the
+  // wire today and is reproduced, not converged; a profile states it as
+  // `emitDidAuthenticationAcceptedCryptosuites: false`.
+  //
+  // ⚠️ `domain` is the bare exchange host here and the full service endpoint in
+  // the verify VPR. Also a live differential, also unexplained, also reproduced
+  // rather than tidied — change it and a record written before the change and
+  // one written after it are not comparable.
+  const wire = wireProfileForExchange(exchange)
+
   return {
     query: {
       type: 'DIDAuthentication'
     },
-    interact: {
-      service: [
-        {
-          type: 'VerifiableCredentialApiExchangeService',
-          serviceEndpoint
-        },
-        {
-          type: 'UnmediatedPresentationService2021',
-          serviceEndpoint
-        },
-        {
-          type: 'CredentialHandlerService'
-        }
-      ]
-    },
+    ...vprInteract(
+      vprInteractServices(wire, serviceEndpoint, [
+        'VerifiableCredentialApiExchangeService',
+        'UnmediatedPresentationService2021',
+        'CredentialHandlerService'
+      ])
+    ),
     challenge: exchange.variables.challenge,
-    domain: exchange.variables.exchangeHost,
-    acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES]
+    domain: vprDomain(
+      wire,
+      { exchangeHost: exchange.variables.exchangeHost, serviceEndpoint },
+      'exchange-host'
+    ),
+    ...((wire?.vpr?.emitAcceptedCryptosuites ?? true)
+      ? { acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES] }
+      : {})
   }
 }
 

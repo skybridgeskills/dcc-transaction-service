@@ -15,8 +15,10 @@ const VALID_WORKFLOWS = ['didAuth', 'claim', 'verify'] as const
  *   rollups on every check, suite, and call.
  *
  * Universally accepted across workflows even though only `verify`
- * forwards them to verifier-core today (see Q10 in
- * `docs/plans/2026-04-19-verifier-core-2-results-consumption/00-questions.md`).
+ * forwards them to verifier-core today. Accepting them everywhere
+ * keeps the flag surface one thing a caller has to learn rather
+ * than a per-workflow table, and a workflow that later gains a
+ * verifier pass needs no new flag.
  */
 export interface VerifierCliOptions {
   verbose?: boolean
@@ -27,6 +29,18 @@ export interface CliArgs {
   workflowId: string
   profileName: string
   open: boolean
+  /**
+   * Registered protocol profile to run the exchange under
+   * (`--protocol-profile`), or `undefined` when the flag was not
+   * passed. Absent rather than empty for the same reason
+   * {@link options} omits absent flags: it must not clobber a
+   * profile file's own `protocolProfileName`.
+   *
+   * ⚠️ Not validated here. The service already refuses an
+   * unregistered name with a `400`, and a second copy of the
+   * registry in the CLI would be a copy that can drift.
+   */
+  protocolProfileName?: string
   /**
    * CLI-set verifier options. **Only contains keys for flags
    * actually passed**; absent flags are omitted so they cannot
@@ -60,7 +74,8 @@ export function parseArgs(argv: string[]): CliArgs | null {
         open: { type: 'boolean', default: true },
         'no-open': { type: 'boolean', default: false },
         verbose: { type: 'boolean', short: 'v', default: false },
-        timing: { type: 'boolean', short: 't', default: false }
+        timing: { type: 'boolean', short: 't', default: false },
+        'protocol-profile': { type: 'string' }
       },
       allowPositionals: true
     })
@@ -90,7 +105,20 @@ export function parseArgs(argv: string[]): CliArgs | null {
     ...(parsed.values.timing === true && { timing: true })
   }
 
-  return { workflowId, profileName, open, options }
+  const protocolProfileName = parsed.values['protocol-profile'] as
+    | string
+    | undefined
+
+  return {
+    workflowId,
+    profileName,
+    open,
+    // Same conditional-spread discipline as `options`: an absent flag
+    // leaves the key off entirely so it cannot overwrite a profile
+    // file's own `protocolProfileName` during the merge in main().
+    ...(protocolProfileName !== undefined && { protocolProfileName }),
+    options
+  }
 }
 
 function printUsage() {
@@ -104,6 +132,11 @@ Options:
   --no-open       Don't auto-open the interaction URL in the browser
   -v, --verbose   Request unfolded verifier results (every check, not just failures)
   -t, --timing    Request timing data on every check, suite, and call
+  --protocol-profile <name>
+                  Registered protocol profile to run the exchange under, by
+                  NAME (see docs/protocol-profiles.md). Overrides a profile
+                  file's own protocolProfileName. An unregistered name is
+                  refused by the server with a 400.
 
 Environment variables:
   CLI_BASE_URL       Server base URL (default: http://localhost:4004)
@@ -115,6 +148,7 @@ Examples:
   pnpm transaction claim ob3
   pnpm transaction verify ob3 --no-open
   pnpm transaction verify ob3 -vt
+  pnpm transaction verify ob3 --protocol-profile vcapi-vpr-bare-origin-domain
 `)
 }
 
@@ -163,7 +197,7 @@ async function main() {
   const parsed = parseArgs(process.argv)
   if (!parsed) process.exit(1)
 
-  const { workflowId, profileName, open, options } = parsed
+  const { workflowId, profileName, open, protocolProfileName, options } = parsed
 
   const baseUrl = process.env.CLI_BASE_URL ?? 'http://localhost:4004'
   const authToken = process.env.CLI_TENANT_TOKEN
@@ -182,11 +216,17 @@ async function main() {
       exchangeHost: process.env.CLI_EXCHANGE_HOST
     }),
     ...profileVars,
+    // After `profileVars`, so the flag wins — the same precedence
+    // `mergeVerifierOptions` gives the option flags.
+    ...(protocolProfileName !== undefined && { protocolProfileName }),
     ...(mergedOptions !== undefined && { options: mergedOptions })
   }
 
   console.log(`Creating ${workflowId} exchange (profile: ${profileName})...`)
   console.log(`  Server: ${baseUrl}`)
+  if (variables.protocolProfileName !== undefined) {
+    console.log(`  Protocol profile: ${variables.protocolProfileName}`)
+  }
 
   const client = new HttpExchangeClient(baseUrl, authToken)
 
@@ -208,8 +248,7 @@ async function main() {
 }
 
 const isCli =
-  process.argv[1]?.endsWith('/cli.ts') ||
-  process.argv[1]?.endsWith('/cli.js')
+  process.argv[1]?.endsWith('/cli.ts') || process.argv[1]?.endsWith('/cli.js')
 
 if (isCli) {
   main()

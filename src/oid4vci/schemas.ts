@@ -151,6 +151,21 @@ export const issuerMetadataSchema = z.object({
   authorization_servers: z.array(z.string().url()).nonempty(),
   credential_endpoint: z.string().url(),
   nonce_endpoint: z.string().url(),
+  /**
+   * ACCOMMODATION — `token-endpoint-inline`, VARIANT, **default off**, set per
+   * exchange by `oid4vciTokenEndpointInline`.
+   *
+   * ⛔ **Optional on purpose, and it must stay optional.** Serving this on
+   * every exchange erases, for every product at once, whatever reads
+   * `discovery-served` lines to tell real discovery from a constructed guess
+   * — see the note on the variable in `schema.ts` and the one at `hono.ts`'s
+   * `oid4vciTokenByConvention`.
+   *
+   * When present it MUST carry the same value `buildOid4vciAsMetadata` names,
+   * which is what `oid4vci/issuer-metadata.test.ts` asserts: the accommodation
+   * may not become a second, divergent source of truth for the token endpoint.
+   */
+  token_endpoint: z.string().url().optional(),
   credential_configurations_supported: z.record(
     z.string(),
     credentialConfigurationSupportedSchema

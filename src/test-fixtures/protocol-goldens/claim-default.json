@@ -10,7 +10,7 @@
   "protocols": {
     "iu": "http://localhost:4005/interactions/{exchangeId}?iuv=1",
     "vcapi": "http://localhost:4005/workflows/claim/exchanges/{exchangeId}",
-    "lcw": "https://lcw.app/request.html?issuer=localhost&auth_type=bearer&challenge={challenge}&vc_request_url=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F{exchangeId}",
+    "lcw": "https://lcw.app/request.html?issuer=localhost&auth_type=bearer&challenge={challenge}&vc_request_url=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F{exchangeId}%2Fbare-vp",
     "verifiablePresentationRequest": {
       "query": {
         "type": "DIDAuthentication"

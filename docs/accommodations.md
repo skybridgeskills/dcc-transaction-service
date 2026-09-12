@@ -188,6 +188,65 @@ accommodation was built, served, and changed nothing. It is kept here, default
 off, because the refutation is worth more than the removal — the next person to
 reach for this fix should read that it was already tried and disproved.
 
+### `bare-vp-participate-response` — concession, served
+
+The VC-API participate response served **bare** — a top-level
+`VerifiablePresentation` carrying `verifiableCredential` — at a second address,
+`…/workflows/claim/exchanges/<id>/bare-vp`, instead of wrapped in the
+`{ verifiablePresentation }` envelope the strict route returns
+(`participateHandler`, `src/hono.ts`).
+
+**A concession, and nothing sanctions it.** VC-API §"Participate in an exchange"
+returns the wrapped form. The bare form is what the Learner Credential Wallet's
+legacy credential-request path reads: it builds a DID-auth VP, POSTs it directly
+to the link's `vc_request_url`, and then looks at the response body's
+**top-level** `type`. The envelope has none, so the exchange completes, the
+credential is issued and signed, and the wallet stores nothing. Without this
+doorway there is no DID-bound claim path into that wallet at all — its
+VC-API/VCALM path classifies the exchange as a presentation request and discards
+the issued VP inside the wallet, and it implements no OID4VCI.
+
+**Elective, and the election is an address.** Both shapes are live on the same
+exchange: which body you get is which URL you POST to. There is no negotiation,
+no per-client state, and nothing to consult — the link the client followed *is*
+the election, which is why it works for a deep link copied out of a QR that was
+never rendered by our own interaction page. ⛔ The rejected alternative was
+branching the strict route on the interaction page's last-shown method: that is
+a payload variant rather than a route, it is wrong whenever the page was not
+used, and an operator flipping the picker would poison a later VCALM POST.
+
+**The strict route stays live and exercised.** `routes.exchangeDetail` is
+unchanged and still returns `{ verifiablePresentation }`. `app.test.ts` runs a
+claim against it and asserts the body carries no top-level `type` and no
+top-level `verifiableCredential` — reaching it through `strictParticipatePath`,
+which builds the URL from the workflow and exchange id, deliberately **not** by
+reading `vc_request_url` out of the wallet link, which now points at this
+doorway. `bare-vp-doorway.app.test.ts` asserts both bodies against the same
+fixture and the same signed DID-auth, so the pair shows the arms differ only in
+the envelope.
+
+**What it costs to read a result here.** A completion on this doorway is not
+evidence that the client speaks VC-API participate — only that it speaks the
+bare form. Uptake is measurable: `accommodation-served` carrying
+`accommodation: 'bare-vp-participate-response'`, against a spec-shaped
+`submission` on the same exchange. ⚠️ The line is written **on arrival**, before
+the DID-auth is judged, so a client that came in this door and then failed the
+proof still leaves the record that it came in this door.
+
+⚠️ **The `lcw` protocols key — and therefore `directDeepLink` and `vprDeepLink`
+from batch create — point at this doorway on claim exchanges.** That is a change
+to a shared API surface and it is deliberate: those are the fields
+`dcc-workflow-coordinator` and `dcc-admin-dashboard` hand to a learner, and they
+are exactly where the claim was failing. `vcapi` and the interaction URL are
+untouched, `didAuth` and `verify` links are untouched, and
+`protocol-goldens/claim-default.json` is the single fixture that moved.
+
+⚠️ **Retirement condition, so this entry can be closed rather than
+rediscovered:** a wallet that unwraps `{ verifiablePresentation }` needs nothing
+here. If the Learner Credential Wallet learns to, this doorway has no remaining
+client and should be removed — keeping the entry, per the rule above about
+accommodations that are no longer served.
+
 ## Adding one
 
 Before adding an accommodation, answer these in the code comment that introduces

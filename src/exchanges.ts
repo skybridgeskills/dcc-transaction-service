@@ -326,6 +326,31 @@ export const getProtocols = (
     }`
   )
   put(envelope?.vcapiKeys, ['vcapi'], serviceEndpoint)
+  /**
+   * ACCOMMODATION — the endpoint the wallet-convenience link points at on a
+   * claim exchange: the `bare-vp` doorway, not the strict participate route.
+   * See `docs/accommodations.md` (`bare-vp-participate-response`) and
+   * `routes.bareVpParticipate`.
+   *
+   * ⚠️ **`vcapi` above and the interaction URL are deliberately NOT repointed.**
+   * A VCALM client still reaches the strict route and still receives
+   * `{ verifiablePresentation }`. The strict alternative staying live is what
+   * makes this an accommodation rather than a rewrite.
+   *
+   * ⚠️ **Claim only.** `participateInDidAuthExchange` returns `{ redirectUrl }`
+   * — there is no presentation to serve bare, so the doorway would have nothing
+   * to do and `didauth-default.json` must not move. `verify` takes the other
+   * construction entirely (`protocols-json-query`, at a different LCW path).
+   *
+   * ⚠️ **Derived from `serviceEndpoint`, never stated a second time.** A second
+   * place the exchange address is spelled is a second place it can disagree.
+   * Empty stays empty: a profile that puts a service carrying no endpoint first
+   * already yields `''` here, and appending to that would invent a URL.
+   */
+  const walletConvenienceEndpoint =
+    exchange.workflowId === 'claim' && serviceEndpoint
+      ? `${serviceEndpoint}/bare-vp`
+      : serviceEndpoint
   // ⚠️ The `lcw` key is a GRANDFATHERED legacy protocol key — not a VCALM
   // protocol, and the one place a product's own link rides in the envelope.
   // Which product is legacy and decided here; which SHAPE is a profile field;
@@ -337,7 +362,10 @@ export const getProtocols = (
       'lcw',
       envelope?.walletConvenienceConstruction ??
         (isVerify ? 'protocols-json-query' : 'issuer-auth-challenge-query'),
-      { serviceEndpoint, challenge: exchange.variables.challenge }
+      {
+        serviceEndpoint: walletConvenienceEndpoint,
+        challenge: exchange.variables.challenge
+      }
     )
   )
   if (envelope?.emitVerifiablePresentationRequest ?? true) {

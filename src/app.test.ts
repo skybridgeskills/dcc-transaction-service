@@ -85,9 +85,7 @@ describe('api', function () {
       const walletQuerys = body as unknown as App.DCCWalletQuery[]
       const walletQuery = walletQuerys.find((q) => q.retrievalId === 'someId')
       expect(walletQuery).toBeDefined()
-      const url = walletQuery?.vprDeepLink ?? ''
-      const serviceEndpoint = extractServiceEndpoint(url)
-      const path = new URL(serviceEndpoint).pathname
+      const path = strictParticipatePath(walletQuery, 'didAuth')
 
       const initResponse = await app.request(path, {
         method: 'POST',
@@ -358,10 +356,7 @@ describe('api', function () {
 
     test('does the VPR exchange for DID Auth', async function () {
       const walletQuery = await doSetup(app)
-      const url = walletQuery?.vprDeepLink ?? ''
-
-      const serviceEndpoint = extractServiceEndpoint(url)
-      const initiationURIPath = new URL(serviceEndpoint).pathname
+      const initiationURIPath = strictParticipatePath(walletQuery, 'didAuth')
 
       const initiationResponse = await app.request(initiationURIPath, {
         method: 'POST' // empty body to initiate a VC-API exchange
@@ -404,10 +399,7 @@ describe('api', function () {
 
     test('does the VPR exchange for credential issuance', async function () {
       const walletQuery = await doSetup(app, 'claim')
-      const url = walletQuery?.vprDeepLink ?? ''
-
-      const serviceEndpoint = extractServiceEndpoint(url)
-      const initiationURIPath = new URL(serviceEndpoint).pathname
+      const initiationURIPath = strictParticipatePath(walletQuery, 'claim')
 
       const initiationResponse = await app.request(initiationURIPath, {
         method: 'POST'
@@ -481,9 +473,7 @@ describe('single-use exchange enforcement', function () {
 
   test('initial VPR request transitions exchange to active', async function () {
     const walletQuery = await doSetup(app)
-    const url = walletQuery?.vprDeepLink ?? ''
-    const serviceEndpoint = extractServiceEndpoint(url)
-    const path = new URL(serviceEndpoint).pathname
+    const path = strictParticipatePath(walletQuery, 'didAuth')
 
     const initResponse = await app.request(path, {
       method: 'POST',
@@ -499,9 +489,7 @@ describe('single-use exchange enforcement', function () {
 
   test('completed didAuth exchange returns 400 on second attempt', async function () {
     const walletQuery = await doSetup(app)
-    const url = walletQuery?.vprDeepLink ?? ''
-    const serviceEndpoint = extractServiceEndpoint(url)
-    const path = new URL(serviceEndpoint).pathname
+    const path = strictParticipatePath(walletQuery, 'didAuth')
 
     const initResponse = await app.request(path, {
       method: 'POST',
@@ -534,9 +522,7 @@ describe('single-use exchange enforcement', function () {
 
   test('completed exchange rejects empty-body VPR request too', async function () {
     const walletQuery = await doSetup(app)
-    const url = walletQuery?.vprDeepLink ?? ''
-    const serviceEndpoint = extractServiceEndpoint(url)
-    const path = new URL(serviceEndpoint).pathname
+    const path = strictParticipatePath(walletQuery, 'didAuth')
 
     const initResponse = await app.request(path, {
       method: 'POST',
@@ -566,9 +552,7 @@ describe('single-use exchange enforcement', function () {
 
   test('didAuth completion stores the proof signer as holder, not a spoofed `holder`', async function () {
     const walletQuery = await doSetup(app)
-    const url = walletQuery?.vprDeepLink ?? ''
-    const serviceEndpoint = extractServiceEndpoint(url)
-    const path = new URL(serviceEndpoint).pathname
+    const path = strictParticipatePath(walletQuery, 'didAuth')
 
     const initResponse = await app.request(path, {
       method: 'POST',
@@ -603,9 +587,7 @@ describe('single-use exchange enforcement', function () {
 
   test('claim completion stores credential and sets complete', async function () {
     const walletQuery = await doSetup(app, 'claim')
-    const url = walletQuery?.vprDeepLink ?? ''
-    const serviceEndpoint = extractServiceEndpoint(url)
-    const path = new URL(serviceEndpoint).pathname
+    const path = strictParticipatePath(walletQuery, 'claim')
 
     const initResponse = await app.request(path, {
       method: 'POST',
@@ -637,9 +619,7 @@ describe('single-use exchange enforcement', function () {
 
   test('completed claim exchange returns 400 on second attempt', async function () {
     const walletQuery = await doSetup(app, 'claim')
-    const url = walletQuery?.vprDeepLink ?? ''
-    const serviceEndpoint = extractServiceEndpoint(url)
-    const path = new URL(serviceEndpoint).pathname
+    const path = strictParticipatePath(walletQuery, 'claim')
 
     const initResponse = await app.request(path, {
       method: 'POST',
@@ -693,16 +673,31 @@ const doSetup = async (app: AppType, workflowId = 'didAuth') => {
   return walletQuery
 }
 
-const extractServiceEndpoint = (walletUrl: string): string => {
-  const parsed = new URL(walletUrl)
-  return decodeURIComponent(parsed.searchParams.get('vc_request_url')!)
+/**
+ * The STRICT VC-API participate route for an exchange.
+ *
+ * ⚠️ **Built, not mined from the wallet link.** This used to read
+ * `vc_request_url` out of `directDeepLink` / `vprDeepLink`, but on a claim
+ * exchange that parameter now points at the `bare-vp` accommodation doorway
+ * (`docs/accommodations.md`). Mining it would silently migrate every assertion
+ * below onto the concession — including the one pinning that the strict body
+ * carries no top-level `type` — and the strict alternative staying exercised is
+ * what makes a result gathered on the accommodation readable at all.
+ *
+ * The exchange id comes from `iu`, which is the interaction URL and is the same
+ * on both arms.
+ */
+const strictParticipatePath = (
+  walletQuery: App.DCCWalletQuery | undefined,
+  workflowId: string
+): string => {
+  const exchangeId = new URL(walletQuery!.iu!).pathname.split('/').pop()!
+  return `/workflows/${workflowId}/exchanges/${exchangeId}`
 }
 
 const doSetupWithDirectDeepLink = async (app: AppType) => {
   const walletQuery = await doSetup(app)
-  const url = walletQuery?.directDeepLink ?? ''
-  const serviceEndpoint = extractServiceEndpoint(url)
-  const path = new URL(serviceEndpoint).pathname
+  const path = strictParticipatePath(walletQuery, 'didAuth')
 
   const initResponse = await app.request(path, {
     method: 'POST',

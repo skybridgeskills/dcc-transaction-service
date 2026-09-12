@@ -182,6 +182,32 @@ const routes = {
   legacyExchangeDetail: '/exchange/:exchangeId', // This might not be used anymore if it is not referenced by the exchange creation
   exchangeCreate: '/workflows/:workflowId/exchanges',
   exchangeDetail: '/workflows/:workflowId/exchanges/:exchangeId',
+  /**
+   * ACCOMMODATION — `bare-vp-participate-response` in the accommodations
+   * register. The VC-API participate route again, returning the presentation
+   * BARE (top-level `type` / `verifiableCredential`) instead of wrapped in
+   * `{ verifiablePresentation }`.
+   *
+   * ⚠️ **A concession, not a dialect.** VC-API §"Participate in an exchange"
+   * returns the wrapped form and nothing sanctions the bare one. A completion
+   * here is NOT evidence that the client speaks VC-API participate — only that
+   * it speaks the bare form.
+   *
+   * Elective: both shapes are live on the same exchange, and which body you get
+   * is which URL you POST to — visible on the wire, with no state and no
+   * negotiation. `routes.exchangeDetail` is unchanged and still returns the
+   * envelope, which `app.test.ts` pins.
+   *
+   * ⛔ NOT a query parameter on `exchangeDetail`. That would leave the route
+   * identical and make this a payload variant on the strict route — which
+   * ADR 2026-08-26 distinguishes by emitted bytes, and to which it explicitly
+   * does NOT generalise `accommodation-served`. A distinct path is a distinct
+   * route, which is the case that ADR covers.
+   *
+   * ⛔ NOT named for the product that needs it. See
+   * `docs/adr/2026-08-24-protocol-profile-surface.md` §7.
+   */
+  bareVpParticipate: '/workflows/:workflowId/exchanges/:exchangeId/bare-vp',
   protocols: '/workflows/:workflowId/exchanges/:exchangeId/protocols',
   interaction: '/interactions/:exchangeId',
   /**
@@ -408,6 +434,114 @@ const tokenEndpointHandler =
   }
 
 /**
+ * Strip the VC-API participation envelope, leaving the presentation bare.
+ *
+ * ⚠️ **A pure envelope change** — the VP and its proof are untouched, so nothing
+ * cryptographic moves. This is the outbound mirror of
+ * `compatibility/vcalm-participation-message/wrap-bare-presentation.ts`, which
+ * accepts a bare VP on the way IN; the two are the same construction seen from
+ * opposite directions.
+ *
+ * ⚠️ **Anything that is not the envelope passes through untouched.** The claim
+ * workflow returns `{ redirectUrl }` when no credential template is configured,
+ * and the initial step of an exchange returns
+ * `{ verifiablePresentationRequest }`. Neither is a participation envelope and
+ * neither is a bare-VP client's to parse; unwrapping speculatively would
+ * corrupt them.
+ */
+const unwrapParticipationResult = (result: unknown): unknown => {
+  if (!result || typeof result !== 'object') return result
+  const envelope = (result as Record<string, unknown>).verifiablePresentation
+  if (!envelope || typeof envelope !== 'object') return result
+  return envelope
+}
+
+/**
+ * What {@link participateHandler} needs from its context: the two variables the
+ * app-level middleware sets, plus the body `validator('json', validateJson)`
+ * has already parsed.
+ *
+ * ⚠️ Stated rather than inferred because the handler is a factory registered on
+ * two routes. Written out here, `c.req.valid('json')` stays type-checked at both
+ * of them; the alternative is a cast at the call site, which would silently
+ * accept a registration that forgot the validator middleware.
+ */
+type ParticipateContext = Context<
+  { Variables: { config: App.Config; workflow: App.Workflow } },
+  string,
+  { out: { json: JSONObject } }
+>
+
+/**
+ * VC-API participation, shared by the strict route and the bare-VP doorway.
+ *
+ * `route` is the only difference between them, and — as with
+ * {@link tokenEndpointHandler} — it exists to be written down rather than to
+ * change behaviour. The exchange is processed identically, the persisted record
+ * is byte-identical on both arms, and the ONLY divergence is the envelope of
+ * the response and one journal line.
+ *
+ * ⚠️ **The accommodated route writes `accommodation-served`, and no strict
+ * event it stands in for.** It still writes `submission` — via
+ * `participateAndJournal`, on the same `arm: 'vc-api'` — because the inbound
+ * DID-auth is real and spec-shaped, and pretending otherwise would lose a
+ * genuine submission. What it must never do is let a completion here read as
+ * evidence that the client parses the VC-API envelope. See
+ * `docs/adr/2026-08-26-accommodated-routes-record-themselves.md`.
+ *
+ * ⚠️ **The unwrap is HERE and not in `participateInClaimExchange`.** The
+ * workflow keeps returning the spec shape, so the decision cannot be tripped by
+ * a future caller reaching that function another way, and the exchange record
+ * stays identical on both arms — the arms are told apart by the journal, never
+ * by the credential.
+ */
+const participateHandler =
+  (route: 'vcapi' | 'bare-vp') => async (c: ParticipateContext) => {
+    const exchange = await getExchangeData(
+      c.req.param('exchangeId')!,
+      c.var.workflow.id
+    )
+
+    if (route === 'bare-vp') {
+      if (exchange.workflowId !== 'claim') {
+        throw new HTTPException(400, {
+          message:
+            'The bare-vp participate doorway is only available for claim exchanges'
+        })
+      }
+      // Journalled on arrival, before the DID-auth is judged: a client that
+      // came in this door and then presented a bad proof still came in this
+      // door, and that is the fact this line carries. Writing it only on
+      // success would lose exactly the case the accommodation was built for.
+      journalExchangeEvent(exchange, 'accommodation-served', {
+        accommodation: 'bare-vp-participate-response',
+        endpoint: 'participate',
+        ...requestAttribution(c)
+      })
+    }
+
+    // Wrapped, not called directly: three `throw HTTPException(400)` sites in
+    // `preparePresentationForVerify` end this request without ever reaching
+    // `saveExchange`, which is what writes `terminal`. See
+    // `lib/journalled-participation.ts` — the invariant is that whatever ends
+    // the request ends it in the journal too.
+    const result = await participateAndJournal({
+      data: c.req.valid('json'),
+      config: c.var.config,
+      workflow: c.var.workflow,
+      exchange,
+      arm: 'vc-api',
+      attribution: requestAttribution(c)
+    })
+
+    return c.json(
+      (route === 'bare-vp'
+        ? unwrapParticipationResult(result)
+        : result) as Record<string, unknown>
+    )
+  }
+
+/**
  * Publish a configured `did:web` issuer's DID document at the identifier's own
  * URL, by proxying the signing service that derives it.
  *
@@ -593,27 +727,20 @@ export const app = new Hono()
     routes.exchangeDetail,
     validator('json', validateJson),
     addWorkflowByParam,
-    async (c) => {
-      const exchange = await getExchangeData(
-        c.req.param('exchangeId')!,
-        c.var.workflow.id
-      )
-      // Wrapped, not called directly: three `throw HTTPException(400)` sites in
-      // `preparePresentationForVerify` end this request without ever reaching
-      // `saveExchange`, which is what writes `terminal`. See
-      // `lib/journalled-participation.ts` — the invariant is that whatever ends
-      // the request ends it in the journal too.
-      return c.json(
-        await participateAndJournal({
-          data: c.req.valid('json'),
-          config: c.var.config,
-          workflow: c.var.workflow,
-          exchange,
-          arm: 'vc-api',
-          attribution: requestAttribution(c)
-        })
-      )
-    }
+    participateHandler('vcapi')
+  )
+
+  /*
+  ACCOMMODATION — the same handler at a second address, returning the
+  presentation bare. See `routes.bareVpParticipate` for why it is a route and
+  not a parameter, and `docs/accommodations.md` for what it costs to read a
+  result gathered here.
+  */
+  .post(
+    routes.bareVpParticipate,
+    validator('json', validateJson),
+    addWorkflowByParam,
+    participateHandler('bare-vp')
   )
 
   // Get Exchange State

@@ -53,8 +53,11 @@ const createClaimExchange = async () => {
     url.searchParams.get('vc_request_url')!
   )
   const path = new URL(vcRequestUrl).pathname
-  // path is /workflows/claim/exchanges/<id>/<txId> for the directDeepLink
-  // OR /workflows/claim/exchanges/<id> for the vprDeepLink
+  // ⚠️ The EXCHANGE ID only — never the endpoint. On a claim exchange this
+  // parameter points at the `bare-vp` accommodation doorway
+  // (`/workflows/claim/exchanges/<id>/bare-vp`, see `docs/accommodations.md`),
+  // so the trailing segment is deliberately discarded: every test below builds
+  // the OID4VCI URL it wants from this id.
   const exchangeId = path.split('/exchanges/')[1]!.split('/')[0]
   return { exchangeId }
 }

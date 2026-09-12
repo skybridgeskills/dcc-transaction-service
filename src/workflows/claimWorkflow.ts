@@ -187,9 +187,13 @@ export const participateInClaimExchange = async ({
   // and the client still stores nothing, because the envelope is neither of
   // the two shapes it knows. Emitting the spec's shape is the fix.
   //
-  // ⚠️ LCW compatibility: LCW reads a bare VP and will not find the credential in
-  // this envelope. If LCW must keep working against this service, negotiate the
-  // shape per client rather than reinstating the duplicated member.
+  // ⚠️ A client that reads a bare VP does not get one from here. It is served at
+  // a second address instead — `routes.bareVpParticipate`, the
+  // `bare-vp-participate-response` accommodation — which shares this function and
+  // strips the envelope on the way out. ⛔ Do not reinstate the duplicated member,
+  // and do not branch this function on the caller: the whole point of a second
+  // doorway is that this one keeps returning the spec shape unconditionally.
+  // See `docs/accommodations.md`.
   return { verifiablePresentation }
 }
 

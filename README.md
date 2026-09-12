@@ -143,14 +143,15 @@ open the Learner Credential Wallet and a [CHAPI](https://chapi.io) request that 
 a CHAPI-enabled wallet. In both cases the deep link or CHAPI request will prompt the wallet to
 submit a DID Authentication to the exchange endpoint, which will return the signed credential.
 
-The object will look something like so: (TODO update)
+The object will look something like so, for a `claim` exchange:
 
 ```json
 [
   {
     "retrievalId": "someId",
-    "directDeepLink": "https://lcw.app/request.html?issuer=issuer.example.com&auth_type=bearer&challenge=27485032-e0bc-4d74-bb5a-bb778cd7f8e3&vc_request_url=http://localhost:4005/exchange/993cce5e-58a8-41ce-a055-bef4a8253379/27485032-e0bc-4d74-bb5a-bb778cd7f8e3",
-    "vprDeepLink": "https://lcw.app/request.html?issuer=issuer.example.com&auth_type=bearer&vc_request_url=http://localhost:4005/exchange/993cce5e-58a8-41ce-a055-bef4a8253379",
+    "iu": "http://localhost:4005/interactions/993cce5e-58a8-41ce-a055-bef4a8253379?iuv=1",
+    "directDeepLink": "https://lcw.app/request.html?issuer=localhost&auth_type=bearer&challenge=27485032-e0bc-4d74-bb5a-bb778cd7f8e3&vc_request_url=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F993cce5e-58a8-41ce-a055-bef4a8253379%2Fbare-vp",
+    "vprDeepLink": "https://lcw.app/request.html?issuer=localhost&auth_type=bearer&challenge=27485032-e0bc-4d74-bb5a-bb778cd7f8e3&vc_request_url=http%3A%2F%2Flocalhost%3A4005%2Fworkflows%2Fclaim%2Fexchanges%2F993cce5e-58a8-41ce-a055-bef4a8253379%2Fbare-vp",
     "chapiVPR": {
       "query": {
         "type": "DIDAuthentication"
@@ -159,7 +160,11 @@ The object will look something like so: (TODO update)
         "service": [
           {
             "type": "VerifiableCredentialApiExchangeService",
-            "serviceEndpoint": "http://localhost:4005/exchange/993cce5e-58a8-41ce-a055-bef4a8253379/27485032-e0bc-4d74-bb5a-bb778cd7f8e3"
+            "serviceEndpoint": "http://localhost:4005/workflows/claim/exchanges/993cce5e-58a8-41ce-a055-bef4a8253379"
+          },
+          {
+            "type": "UnmediatedPresentationService2021",
+            "serviceEndpoint": "http://localhost:4005/workflows/claim/exchanges/993cce5e-58a8-41ce-a055-bef4a8253379"
           },
           {
             "type": "CredentialHandlerService"
@@ -184,17 +189,19 @@ Authentication
 Called by the wallet to complete the exchange. Receives the requested DID Authentication and returns
 the signed Verifiable Credential after verifying the DID Authentication.
 
-NOTE: the object returned from the initial setup call to the exchanger returns two deepLinks:
+NOTE: `directDeepLink` and `vprDeepLink` carry the **same string**. They are kept as two fields
+because existing callers read both; the one-step / two-step distinction they once named is no
+longer a property of the link. A wallet may POST an empty body first to receive the
+[DIDAuthentication Verifiable Presentation
+Request](https://w3c-ccg.github.io/vp-request-spec/#did-authentication), or submit its DID
+Authentication directly — the same endpoint answers both.
 
-- `directDeepLink` which prompts the wallet to bypass the `POST /exchange/{exchangeId}` initiation
-  call, and instead simply instead immediately submit the DID Authentication. The signed credential
-  is returned from this call. So this is a one-step process.
-- `vprDeepLink` which prompts the wallet to first call the initiation endpoint, from which the
-  [DIDAuthentication Verifiable Presentation
-  Request](https://w3c-ccg.github.io/vp-request-spec/#did-authentication) is returned, and after
-  which the wallet then submits its DID Authentication. So this is a two-step process.
-
-At the moment, the [Learner Credential Wallet](https://lcw.app) only supports the directDeepLink.
+⚠️ On a **claim** exchange, the `vc_request_url` inside these links points at the `bare-vp`
+accommodation doorway, which answers with a bare verifiable presentation rather than the VC-API
+`{ verifiablePresentation }` envelope. The strict route is unchanged and is what `iu` and the
+`vcapi` protocols key still name. See [the accommodations register](docs/accommodations.md)
+(`bare-vp-participate-response`) for why, and for what a result gathered on that doorway does and
+does not tell you.
 
 - GET /workflows/:workflowId/exchanges/:exchangeId
 

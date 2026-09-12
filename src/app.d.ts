@@ -820,6 +820,17 @@ declare global {
 
     interface DCCWalletQuery {
       retrievalId: string
+      /**
+       * The interaction URL for this exchange.
+       *
+       * ⚠️ Returned by `createExchangeBatch` since interaction URLs existed, and
+       * simply missing from this interface until now. It is the one field here
+       * that is the same on every arm — the two deep links below carry a
+       * construction, and on a claim exchange they carry an accommodation (see
+       * `docs/accommodations.md`), while this one names the exchange and
+       * nothing else.
+       */
+      iu: string
       directDeepLink: string
       vprDeepLink: string
       chapiVPR?: VPR

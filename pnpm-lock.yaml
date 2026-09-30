@@ -61,7 +61,7 @@ importers:
         version: 6.0.1(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4))
       '@digitalcredentials/verifier-core':
         specifier: github:skybridgeskills/dcc-verifier-core#main
-        version: https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/e6a1fe182247577574a9105767d89f3caf4078de(msrcrypto@1.5.8)(react-native-securerandom@1.0.1(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)))
+        version: https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/69cc7df03c328e62b049634c78843446b78bc5cf(msrcrypto@1.5.8)(react-native-securerandom@1.0.1(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)))
       '@hono/node-server':
         specifier: ^1.14.4
         version: 1.19.11(hono@4.12.8)
@@ -628,8 +628,8 @@ packages:
     resolution: {integrity: sha512-QbfdAo4czT4gqCyS9c+YMMw8Vy5h1/pVmjpRrsTPGfBjWudHoT8OAa5VCfxdsiCFFdXZnGSqruPslt1W8RC/hw==}
     engines: {node: '>=18'}
 
-  '@digitalcredentials/verifier-core@https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/e6a1fe182247577574a9105767d89f3caf4078de':
-    resolution: {tarball: https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/e6a1fe182247577574a9105767d89f3caf4078de}
+  '@digitalcredentials/verifier-core@https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/69cc7df03c328e62b049634c78843446b78bc5cf':
+    resolution: {tarball: https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/69cc7df03c328e62b049634c78843446b78bc5cf}
     version: 2.0.0
     engines: {node: '>=24.0'}
 
@@ -5310,7 +5310,7 @@ snapshots:
       - msrcrypto
       - react-native-securerandom
 
-  '@digitalcredentials/verifier-core@https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/e6a1fe182247577574a9105767d89f3caf4078de(msrcrypto@1.5.8)(react-native-securerandom@1.0.1(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)))':
+  '@digitalcredentials/verifier-core@https://codeload.github.com/skybridgeskills/dcc-verifier-core/tar.gz/69cc7df03c328e62b049634c78843446b78bc5cf(msrcrypto@1.5.8)(react-native-securerandom@1.0.1(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.4)))':
     dependencies:
       '@digitalcredentials/data-integrity': 2.6.0
       '@digitalcredentials/did-io': 1.0.2

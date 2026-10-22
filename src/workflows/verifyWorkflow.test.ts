@@ -285,7 +285,6 @@ describe('applyVerificationResults', function () {
         {
           id: 'cryptographic.proof.signature-valid',
           suite: 'proof',
-          check: 'proof.signature-valid',
           outcome: { status: 'success', message: 'Valid' },
           fatal: true
         }
@@ -295,7 +294,7 @@ describe('applyVerificationResults', function () {
           verified: true,
           verifiableCredential: credential1,
           results: [
-            { id: 'cryptographic.proof.signature-valid', suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' } }
+            { id: 'cryptographic.proof.signature-valid', suite: 'proof', outcome: { status: 'success', message: 'Valid' } }
           ],
           summary: []
         },
@@ -303,7 +302,7 @@ describe('applyVerificationResults', function () {
           verified: true,
           verifiableCredential: credential2,
           results: [
-            { id: 'cryptographic.proof.signature-valid', suite: 'proof', check: 'proof.signature-valid', outcome: { status: 'success', message: 'Valid' } }
+            { id: 'cryptographic.proof.signature-valid', suite: 'proof', outcome: { status: 'success', message: 'Valid' } }
           ],
           summary: []
         }
@@ -777,6 +776,7 @@ describe('preparePresentationForVerify', function () {
 describe('applyVerificationResults - debug + compatLog', function () {
   const compatEntry = (id: string): App.CheckResult => ({
     id: `compat.${id.replace(/:/g, '.')}`,
+    suite: 'compat',
     outcome: { status: 'success', message: `applied ${id}` }
   })
 
@@ -787,7 +787,6 @@ describe('applyVerificationResults - debug + compatLog', function () {
     presentationResults: [
       {
         id: 'cryptographic.proof.signature-valid',
-        check: 'proof.signature-valid',
         suite: 'proof',
         outcome: { status: 'success', message: 'ok' }
       }
@@ -799,7 +798,6 @@ describe('applyVerificationResults - debug + compatLog', function () {
         phase: 'cryptographic',
         suite: 'proof',
         status: 'success',
-        verified: true,
         message: '1 of 1 checks passed',
         counts: { passed: 1, failed: 0, skipped: 0 }
       }
@@ -907,7 +905,6 @@ const passingCredentialResult = (
     {
       id: 'cryptographic.proof.signature-valid',
       suite: 'proof',
-      check: 'proof.signature-valid',
       outcome: { status: 'success', message: 'ok' }
     }
   ],
@@ -917,7 +914,6 @@ const passingCredentialResult = (
       phase: 'cryptographic',
       suite: 'proof',
       status: 'success',
-      verified: true,
       message: '1 of 1 checks passed',
       counts: { passed: 1, failed: 0, skipped: 0 }
     }
@@ -968,7 +964,6 @@ const buildPresentationResult = (
     {
       id: 'cryptographic.proof.signature-valid',
       suite: 'proof',
-      check: 'proof.signature-valid',
       outcome: { status: 'success', message: 'ok' }
     }
   ],
@@ -978,7 +973,6 @@ const buildPresentationResult = (
       phase: 'cryptographic',
       suite: 'proof',
       status: 'success',
-      verified: true,
       message: '1 of 1 checks passed',
       counts: { passed: 1, failed: 0, skipped: 0 }
     }
@@ -1143,7 +1137,6 @@ describe('participateInVerifyExchange — sync/async branching', function () {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '1 of 1 checks passed',
           counts: { passed: 1, failed: 0, skipped: 0 }
         }
@@ -1204,7 +1197,6 @@ describe('trusted-issuer registry-check filter', function () {
               phase: 'trust',
               suite: 'registry',
               status: 'success',
-              verified: true,
               message: '1 of 1 checks passed',
               counts: { passed: 1, failed: 0, skipped: 0 }
             }
@@ -1213,7 +1205,6 @@ describe('trusted-issuer registry-check filter', function () {
             {
               id: 'trust.registry.issuer-registered',
               suite: 'registry',
-              check: 'registry.issuer-registered',
               outcome: {
                 status: 'success',
                 message: 'Issuer found',
@@ -1260,7 +1251,6 @@ describe('participateInVerifyExchange — end-to-end worker drain', () => {
     const obCheck: CheckResult = {
       id: 'semantic.openbadges.recognize',
       suite: 'openbadges',
-      check: 'openbadges.recognize',
       outcome: { status: 'success', message: 'recognized' }
     }
     const obWorkerResult = (): CredentialVerificationResult => ({
@@ -1273,7 +1263,6 @@ describe('participateInVerifyExchange — end-to-end worker drain', () => {
           phase: 'semantic',
           suite: 'openbadges',
           status: 'success',
-          verified: true,
           message: '1 of 1 checks passed',
           counts: { passed: 1, failed: 0, skipped: 0 }
         }

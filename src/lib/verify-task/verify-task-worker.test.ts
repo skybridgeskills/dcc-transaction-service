@@ -1,5 +1,4 @@
 import type {
-  CheckResult as CoreCheckResult,
   CredentialVerificationResult,
   VerifiableCredential,
   VerifyCredentialCall
@@ -31,7 +30,6 @@ const proofSummary: App.SuiteSummary = {
   phase: 'cryptographic',
   suite: 'proof',
   status: 'success',
-  verified: true,
   message: '1 of 1 checks passed',
   counts: { passed: 1, failed: 0, skipped: 0 }
 }
@@ -46,37 +44,21 @@ const idFor = (suite: string, check: string): string => {
   return `${phaseFor(suite)}.${suite}.${localPart}`
 }
 
-/**
- * Producer-side helpers used to build `App.CheckResult` literals
- * for tests in this file. Tests that hand the same id values to a
- * mocked `verifyCredential` (whose return type is verifier-core's
- * still-`check`/`suite`-bearing `CheckResult`) call {@link toCoreCheck}
- * to add those legacy fields back at the boundary.
- */
+/** Producer-side helpers used to build `App.CheckResult` literals for tests in this file. */
 const checkSuccess = (suite: string, check: string): App.CheckResult => ({
   id: idFor(suite, check),
+  suite,
   outcome: { status: 'success', message: 'ok' }
 })
 
 const checkFailure = (suite: string, check: string): App.CheckResult => ({
   id: idFor(suite, check),
+  suite,
   outcome: {
     status: 'failure',
     problems: [{ type: 'urn:test', title: 't', detail: 'd' }]
   },
   fatal: true
-})
-
-/** Adapt an `App.CheckResult` to verifier-core's still-required `check`/`suite`. */
-const toCoreCheck = (
-  r: App.CheckResult,
-  suite: string,
-  check: string
-): CoreCheckResult => ({
-  ...r,
-  id: r.id,
-  suite,
-  check
 })
 
 const buildBaseResult = (
@@ -104,7 +86,6 @@ describe('mergeOpenBadgesResultsAt', () => {
     phase: 'semantic',
     suite: 'openbadges',
     status: 'success',
-    verified: true,
     message: '1 of 1 checks passed',
     counts: { passed: 1, failed: 0, skipped: 0 }
   }
@@ -130,7 +111,13 @@ describe('mergeOpenBadgesResultsAt', () => {
     const next = mergeOpenBadgesResultsAt(merged, 0, {
       verified: false,
       results: [ob],
-      summary: [{ ...obSummary, status: 'failure', verified: false }]
+      summary: [
+        {
+          ...obSummary,
+          status: 'failure',
+          fatalFailureAt: idFor('openbadges', 'openbadges.result-ref')
+        }
+      ]
     })
 
     expect(next.credentialResults[0].verified).toBe(false)
@@ -205,12 +192,14 @@ describe('mergeOpenBadgesResultsAt', () => {
     const merged = buildBaseResult([true])
     const oldReg: App.CheckResult = {
       id: 'trust.registry.did-resolver-test',
+      suite: 'registry',
       outcome: { status: 'success', message: 'prior sync result' }
     }
     merged.credentialResults[0].results.push(oldReg)
 
     const newReg: App.CheckResult = {
       id: 'trust.registry.did-resolver-test',
+      suite: 'registry',
       outcome: {
         status: 'failure',
         problems: [{ type: 'urn:test', title: 'registry', detail: 'OB pass result' }]
@@ -220,7 +209,13 @@ describe('mergeOpenBadgesResultsAt', () => {
     const next = mergeOpenBadgesResultsAt(merged, 0, {
       verified: false,
       results: [newReg],
-      summary: [{ ...obSummary, status: 'failure', verified: false }]
+      summary: [
+        {
+          ...obSummary,
+          status: 'failure',
+          fatalFailureAt: idFor('openbadges', 'openbadges.result-ref')
+        }
+      ]
     })
 
     const registryChecks = next.credentialResults[0].results.filter((r) =>
@@ -309,11 +304,7 @@ const setupWorker = async (opts: {
         verified: true,
         verifiableCredential: call.credential as VerifiableCredential,
         results: [
-          toCoreCheck(
-            checkSuccess('openbadges', 'openbadges.result-ref'),
-            'openbadges',
-            'openbadges.result-ref'
-          )
+          checkSuccess('openbadges', 'openbadges.result-ref')
         ],
         summary: [
           {
@@ -321,7 +312,6 @@ const setupWorker = async (opts: {
             phase: 'semantic',
             suite: 'openbadges',
             status: 'success',
-            verified: true,
             message: '1 of 1 checks passed',
             counts: { passed: 1, failed: 0, skipped: 0 }
           }
@@ -375,11 +365,7 @@ describe('processVerifyTask', () => {
         verified: false,
         verifiableCredential: call.credential as VerifiableCredential,
         results: [
-          toCoreCheck(
-            checkFailure('openbadges', 'openbadges.result-ref'),
-            'openbadges',
-            'openbadges.result-ref'
-          )
+          checkFailure('openbadges', 'openbadges.result-ref')
         ],
         summary: [
           {
@@ -387,7 +373,7 @@ describe('processVerifyTask', () => {
             phase: 'semantic',
             suite: 'openbadges',
             status: 'failure',
-            verified: false,
+            fatalFailureAt: idFor('openbadges', 'openbadges.result-ref'),
             message: '1 of 1 checks failed (0 passed)',
             counts: { passed: 0, failed: 1, skipped: 0 }
           }
@@ -443,14 +429,13 @@ describe('processVerifyTask', () => {
         return {
           verified: true,
           verifiableCredential: call.credential as VerifiableCredential,
-          results: [toCoreCheck(checkSuccess('openbadges', 'x'), 'openbadges', 'x')],
+          results: [checkSuccess('openbadges', 'x')],
           summary: [
             {
               id: 'semantic.openbadges',
               phase: 'semantic',
               suite: 'openbadges',
               status: 'success',
-              verified: true,
               message: '1 of 1 checks passed',
               counts: { passed: 1, failed: 0, skipped: 0 }
             }

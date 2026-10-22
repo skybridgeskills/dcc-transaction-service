@@ -1,4 +1,6 @@
 import type {
+  CheckResult as VerifierCoreCheckResult,
+  CredentialVerificationResult as VerifierCoreCredentialVerificationResult,
   EntityIdentityRegistry,
   SuiteSummary as VerifierCoreSuiteSummary,
   TaskTiming as VerifierCoreTaskTiming
@@ -521,28 +523,16 @@ declare global {
     }
 
     /**
-     * Check result from verifier-core suite-based verification.
-     * Replaces the legacy VerificationStepResult format.
+     * Re-export of verifier-core's `CheckResult` for use by app code.
+     *
+     * ⚠️ An alias, not a copy: a hand copy drifts, and the last one
+     * dropped `suite`, `halts` and the failure outcome's `payload` —
+     * which is where `trust.registry.issuer` reports its registry
+     * matches. Service-local synthetic rows (compat-fix log entries)
+     * use the reserved `"compat.<obj-type>.<fix-name>"` id namespace
+     * and `suite: 'compat'`, so UI consumers can prefix-filter them out.
      */
-    interface CheckResult {
-      /**
-       * Dot-separated namespaced id assigned by `verifier-core`
-       * post-`runSuites` (e.g. `"cryptographic.core.proof-exists"`).
-       * Service-local synthetic checks (compat-fix log entries) use
-       * the reserved `"compat.<obj-type>.<fix-name>"` namespace so
-       * UI consumers can prefix-filter them out.
-       */
-      id: string
-      /** Discriminated outcome */
-      outcome:
-        | { status: 'success'; message: string; payload?: unknown }
-        | { status: 'failure'; problems: ProblemDetail[] }
-        | { status: 'skipped'; reason: string }
-      /** Whether this check failure is fatal to overall verification */
-      fatal?: boolean
-      /** Per-check timing; only present when verifier-core was called with `timing: true`. */
-      timing?: TaskTiming
-    }
+    type CheckResult = VerifierCoreCheckResult
 
     /** Re-export of verifier-core's `SuiteSummary` for use by app code. */
     type SuiteSummary = VerifierCoreSuiteSummary
@@ -550,67 +540,14 @@ declare global {
     type TaskTiming = VerifierCoreTaskTiming
 
     /**
-     * Per-credential verification result from verifier-core.
-     *
-     * Field name `verifiableCredential` mirrors verifier-core's public
-     * shape (post-1.0) and the W3C / VCALM property name, so the result
-     * object can be spread into a VCALM exchange's per-step variables and
-     * accessed via `results.<step>.credentialResults[i].verifiableCredential.…`.
+     * Re-export of verifier-core's per-credential verification result.
+     * `results[]` carries every check that ran; `summary[]` is the
+     * per-suite rollup. Field name `verifiableCredential` mirrors the
+     * W3C / VCALM property name, so the result can be spread into a
+     * VCALM exchange's per-step variables and read via
+     * `results.<step>.credentialResults[i].verifiableCredential.…`.
      */
-    interface CredentialVerificationResult {
-      /** True if no check returned a failure outcome */
-      verified: boolean
-      /** The parsed credential that was verified */
-      verifiableCredential: unknown
-      /**
-       * Flat array of results from all suites for this credential. In
-       * non-verbose mode (the default since verifier-core 2.0.0), this
-       * carries only failures and explicit `<suite>.applies` skips;
-       * passes are folded into {@link summary}. In verbose mode it
-       * carries every check.
-       */
-      results: CheckResult[]
-      /**
-       * Per-suite rollup. Always populated by verifier-core 2.x
-       * regardless of `verbose`. Primary surface for UI rendering.
-       *
-       * Optional during the multi-phase migration in the
-       * `verifier-core-2-results-consumption` plan; phase 7 makes it
-       * required.
-       */
-      summary: SuiteSummary[]
-      /**
-       * Stable id of the matched recognizer (e.g. `"obv3p0.openbadge"`)
-       * when the recognition pipeline produced a normalized form.
-       */
-      recognizedProfile?: string
-      /**
-       * Normalized view of the credential, produced by a recognizer.
-       * Cast to the recognizer-specific shape based on
-       * {@link recognizedProfile}.
-       */
-      normalizedVerifiableCredential?: unknown
-      /** Inclusive top-level timing; only present when `timing: true`. */
-      timing?: TaskTiming
-      /** True when produced under a non-default suite-phase filter. */
-      partial?: boolean
-    }
-
-    /**
-     * Legacy verification step result format.
-     * @deprecated Kept for backward compatibility. Use CheckResult instead.
-     */
-    interface VerificationStepResult {
-      id: string
-      valid: boolean
-      error?: {
-        name: string
-        message: string
-        stackTrace?: unknown
-      }
-      foundInRegistries?: string[]
-      registriesNotLoaded?: string[]
-    }
+    type CredentialVerificationResult = VerifierCoreCredentialVerificationResult
 
     /**
      * Verification result matching the new verifier-core format.

@@ -4,10 +4,7 @@ import {
   baseVariablesSchema,
   profileKnobConflicts
 } from '../schema.js'
-import {
-  type CheckResult,
-  type PresentationVerificationResult
-} from '@digitalcredentials/verifier-core'
+import { type PresentationVerificationResult } from '@digitalcredentials/verifier-core'
 import { isOpenBadgeCredential } from '@digitalcredentials/verifier-core/openbadges'
 import { z } from 'zod'
 import { newVerifyTask } from '../lib/verify-task/verify-task.js'
@@ -384,30 +381,6 @@ const isTrustRegistryCheck = (r: App.CheckResult): boolean =>
   r.id.startsWith('trust.registry.')
 
 /**
- * Bridge `verifier-core`'s still-optional `CheckResult.id` to
- * `App.CheckResult.id`, which is required.
- *
- * verifier-core 2.x emits a stable id (`<phase>.<suite>.<localPart>`)
- * post-`runSuites` for every check it produces; the optional typing
- * is purely for backwards-compat with hand-constructed literals in
- * older callers. We assert the field is present and synthesize a
- * deterministic fallback from `suite + check` if a producer somehow
- * forgot, so downstream consumers can rely on `id` without
- * widening the App type.
- */
-const ensureCheckResultId = (r: CheckResult): App.CheckResult => {
-  const id = r.id ?? `${r.suite}.${r.check}`
-  return { ...(r as App.CheckResult), id }
-}
-
-const ensureCredentialResultIds = (
-  cr: import('@digitalcredentials/verifier-core').CredentialVerificationResult
-): App.CredentialVerificationResult => ({
-  ...(cr as unknown as App.CredentialVerificationResult),
-  results: cr.results.map(ensureCheckResultId)
-})
-
-/**
  * Validate trusted issuers against credential issuer.
  *
  * Searches the credential's verification results for registry suite checks
@@ -526,16 +499,7 @@ export const applyVerificationResults = async ({
     timing: topTiming,
     partial: topPartial
   } = result
-  // Normalize verifier-core's optional-`id` shape onto our local
-  // required-`id` `App.CheckResult` once at the boundary, so the rest
-  // of this function (and every consumer downstream) deals only in
-  // `App.*` types.
-  const presentationResults = result.presentationResults.map(
-    ensureCheckResultId
-  )
-  const credentialResults = result.credentialResults.map(
-    ensureCredentialResultIds
-  )
+  const { presentationResults, credentialResults } = result
 
   // Extract and validate claims if specified
   let claimsValidation: App.VerificationResult['claimsValidation'] | undefined

@@ -10,9 +10,17 @@
  * Lives behind a function so a future per-exchange knob (e.g. opt-in/out
  * of specific OB checks, tightened or relaxed achievement vocab) lands
  * in one place without rippling through the worker.
+ *
+ * ⚠️ `openBadgesSuite` (semantic checks plus JSON Schema validation
+ * against the OBv3 schemas verifier-core bundles) is exported from
+ * `@digitalcredentials/verifier-core/openbadges/schema`, NOT from
+ * `/openbadges`. Importing it from `/openbadges` type-errors under `tsc`,
+ * but would otherwise hand the worker `[undefined]` and crash the async
+ * pass — every worker test injects its own resolver, so only
+ * `openbadges-suite-resolver.test.ts` would notice.
  */
 import type { VerificationSuite } from '@digitalcredentials/verifier-core'
-import { openBadgesSuite } from '@digitalcredentials/verifier-core/openbadges'
+import { openBadgesSuite } from '@digitalcredentials/verifier-core/openbadges/schema'
 
 /**
  * Returns the Open Badges suites to apply when re-verifying

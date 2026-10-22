@@ -20,7 +20,6 @@
  * required); production callers use {@link defaultProcessVerifyTaskDeps}.
  */
 import type {
-  CredentialVerificationResult,
   EntityIdentityRegistry,
   Verifier
 } from '@digitalcredentials/verifier-core'
@@ -248,37 +247,17 @@ export const mergeOpenBadgesResultsAt = (
   index: number,
   obResult: {
     verified: boolean
-    /**
-     * `CheckResult`s in either shape (verifier-core's still-required-
-     * `check`/`suite` + optional-`id`, or App's id-only). The bridge
-     * normalizes to `App.CheckResult` (required `id`) before merging.
-     */
-    results: ReadonlyArray<
-      | App.CheckResult
-      | CredentialVerificationResult['results'][number]
-    >
+    results: readonly App.CheckResult[]
     summary: App.SuiteSummary[]
   }
 ): App.VerificationResult => {
   const prev = merged.credentialResults[index]
   if (!prev) return merged
 
-  // Bridge verifier-core's still-optional-`id` `CheckResult` shape to
-  // our hard-cut `App.CheckResult` (required `id`) at the boundary,
-  // synthesizing a deterministic fallback if a producer omits `id`.
-  const obAppResults: App.CheckResult[] = obResult.results.map((r) => {
-    // Preserve referential identity when `id` is already present so
-    // tests / consumers can assert on the original object.
-    if ((r as App.CheckResult).id) return r as App.CheckResult
-    const rec = r as unknown as Record<string, unknown>
-    const id = `${rec.suite ?? 'unknown'}.${rec.check ?? 'unknown'}`
-    return { ...(r as App.CheckResult), id }
-  })
-
   const updatedCr: App.CredentialVerificationResult = {
     ...prev,
     verified: prev.verified && obResult.verified,
-    results: mergeResults(prev.results, obAppResults),
+    results: mergeResults(prev.results, obResult.results),
     summary: mergeSummaries(prev.summary, obResult.summary)
   }
 

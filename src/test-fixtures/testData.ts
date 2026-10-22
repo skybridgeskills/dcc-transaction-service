@@ -104,7 +104,6 @@ export const createMockVerifierCoreResult = (
     ? [
         {
           id: 'cryptographic.proof.signature-valid',
-          check: 'proof.signature-valid',
           suite: 'proof',
           outcome: { status: 'success', message: 'Presentation signature is valid' },
           fatal: true
@@ -113,7 +112,6 @@ export const createMockVerifierCoreResult = (
     : [
         {
           id: 'cryptographic.proof.signature-valid',
-          check: 'proof.signature-valid',
           suite: 'proof',
           outcome: {
             status: 'failure',
@@ -135,7 +133,6 @@ export const createMockVerifierCoreResult = (
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '1 of 1 checks passed',
           counts: { passed: 1, failed: 0, skipped: 0 }
         }
@@ -146,7 +143,7 @@ export const createMockVerifierCoreResult = (
           phase: 'cryptographic',
           suite: 'proof',
           status: 'failure',
-          verified: false,
+          fatalFailureAt: 'cryptographic.proof.signature-valid',
           message: '1 of 1 checks failed (0 passed)',
           counts: { passed: 0, failed: 1, skipped: 0 }
         }
@@ -162,7 +159,6 @@ export const createMockVerifierCoreResult = (
               phase: 'cryptographic',
               suite: 'core',
               status: 'success',
-              verified: true,
               message: '1 of 1 checks passed',
               counts: { passed: 1, failed: 0, skipped: 0 }
             },
@@ -171,7 +167,6 @@ export const createMockVerifierCoreResult = (
               phase: 'cryptographic',
               suite: 'proof',
               status: 'success',
-              verified: true,
               message: '1 of 1 checks passed',
               counts: { passed: 1, failed: 0, skipped: 0 }
             },
@@ -180,7 +175,6 @@ export const createMockVerifierCoreResult = (
               phase: 'trust',
               suite: 'registry',
               status: 'success',
-              verified: true,
               message: '1 of 1 checks passed',
               counts: { passed: 1, failed: 0, skipped: 0 }
             }
@@ -188,20 +182,17 @@ export const createMockVerifierCoreResult = (
           results: [
             {
               id: 'cryptographic.core.id-valid',
-              check: 'core.id-valid',
               suite: 'core',
               outcome: { status: 'success', message: 'Credential ID is valid' }
             },
             {
               id: 'cryptographic.proof.signature-valid',
-              check: 'proof.signature-valid',
               suite: 'proof',
               outcome: { status: 'success', message: 'Credential signature is valid' },
               fatal: true
             },
             {
               id: 'trust.registry.issuer-registered',
-              check: 'registry.issuer-registered',
               suite: 'registry',
               outcome: {
                 status: 'success' as const,
@@ -222,7 +213,6 @@ export const createMockVerifierCoreResult = (
               phase: 'cryptographic',
               suite: 'core',
               status: 'success',
-              verified: true,
               message: '1 of 1 checks passed',
               counts: { passed: 1, failed: 0, skipped: 0 }
             },
@@ -231,7 +221,7 @@ export const createMockVerifierCoreResult = (
               phase: 'cryptographic',
               suite: 'proof',
               status: 'failure',
-              verified: false,
+              fatalFailureAt: 'cryptographic.proof.signature-valid',
               message: '1 of 1 checks failed (0 passed)',
               counts: { passed: 0, failed: 1, skipped: 0 }
             }
@@ -239,13 +229,11 @@ export const createMockVerifierCoreResult = (
           results: [
             {
               id: 'cryptographic.core.id-valid',
-              check: 'core.id-valid',
               suite: 'core',
               outcome: { status: 'success', message: 'Credential ID is valid' }
             },
             {
               id: 'cryptographic.proof.signature-valid',
-              check: 'proof.signature-valid',
               suite: 'proof',
               outcome: {
                 status: 'failure',

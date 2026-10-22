@@ -231,16 +231,15 @@ declare global {
        * `verifyPresentation` / `verifyCredential` invocation for this
        * exchange. Workflows that don't call verifier-core ignore this
        * field; the schema accepts it universally so a single CLI flag
-       * (`--verbose` / `--timing`) works across workflows.
+       * (`--timing`) works across workflows.
        *
-       * - `verbose`: when true, verifier-core returns every check that
-       *   ran on `results[]` (otherwise only failures + explicit
-       *   skips). Per-suite `summary[]` is populated either way.
        * - `timing`: when true, every result carries `timing` rollups
        *   ({@link App.TaskTiming}).
+       *
+       * `results[]` always carries every check that ran; there is no
+       * `verbose` knob (verifier-core 2.0 removed it).
        */
       options?: {
-        verbose?: boolean
         timing?: boolean
       }
       /**

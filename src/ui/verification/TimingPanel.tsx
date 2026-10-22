@@ -8,7 +8,8 @@ import { Details } from '../Details.js'
  * top-level inclusive timing alongside per-credential and
  * per-suite rollups so an operator can spot slow phases at a
  * glance. Per-check sub-timings live inside the lazy-expanded
- * detail rows for the corresponding suite (verbose mode).
+ * detail rows for the corresponding suite (with "Show all checks"
+ * on, since passing checks carry timing too).
  */
 export function TimingPanel({ result }: { result: App.VerificationResult }) {
   return (

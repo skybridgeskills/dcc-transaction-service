@@ -9,20 +9,21 @@ import { failureDetail } from './helpers.js'
  * {@link FailureDetailList}.
  *
  * Honors `showDetails === false` (collapses to a one-line summary
- * with no expand affordance).
+ * with no expand affordance). With `showAll`, every suite that ran
+ * has rows to expand, so every row gets the affordance — intended.
  */
 export function PhaseRow({
   cr,
   summary,
   showDetails,
-  verbose
+  showAll
 }: {
   cr: App.CredentialVerificationResult
   summary: App.SuiteSummary
   showDetails: boolean
-  verbose: boolean
+  showAll: boolean
 }) {
-  const matches = failureDetail(cr, summary)
+  const matches = failureDetail(cr, summary, showAll)
 
   const headline = (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -45,7 +46,7 @@ export function PhaseRow({
   return (
     <div data-testid="phase-row" style={rowStyle}>
       <Details summary={headline}>
-        <FailureDetailList results={matches} verbose={verbose} />
+        <FailureDetailList results={matches} showAll={showAll} />
       </Details>
     </div>
   )

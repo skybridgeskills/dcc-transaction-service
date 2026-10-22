@@ -774,10 +774,11 @@ export const participateInVerifyExchange = async ({
   // Pass the RAW post-compat presentation. verifier-core's TS interface
   // declares `type: string` but accepts `string[]` at runtime per W3C spec.
   //
-  // `variables.options.{verbose,timing}` are surfaced verbatim on every
+  // `variables.options.timing` is surfaced verbatim on every
   // verifier-core call so an exchange creator (UI or CLI) can opt into
-  // the verbose / timing modes documented in
-  // `verifier-core/docs/api/verification-results.md`.
+  // the timing rollups documented in
+  // `verifier-core/docs/api/verification-results.md`. Every check that
+  // ran is always returned; there is no verbose mode to ask for.
   const verifierOptions = exchange.variables.options ?? {}
   const result = await getVerifier().verifyPresentation({
     presentation: presentation as unknown as Parameters<
@@ -785,9 +786,6 @@ export const participateInVerifyExchange = async ({
     >[0]['presentation'],
     challenge: exchange.variables.challenge,
     registries,
-    ...(verifierOptions.verbose !== undefined && {
-      verbose: verifierOptions.verbose
-    }),
     ...(verifierOptions.timing !== undefined && {
       timing: verifierOptions.timing
     })

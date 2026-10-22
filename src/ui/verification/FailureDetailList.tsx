@@ -4,22 +4,22 @@ import type { CSSProperties } from 'react'
  * Lazy-expand body for a {@link PhaseRow}: lists the per-check
  * `CheckResult`s that belong to the parent suite.
  *
- * Header changes from "Failures" to "All checks" in verbose mode
- * (where `results[]` includes passing checks too — the per-check
- * detail covers more than just failures).
+ * Header changes from "Failures" to "All checks" when the viewer
+ * turned on "Show all checks" (the list then includes passes and
+ * skips, not just failures).
  */
 export function FailureDetailList({
   results,
-  verbose
+  showAll
 }: {
   results: App.CheckResult[]
-  verbose: boolean
+  showAll: boolean
 }) {
   if (results.length === 0) return null
 
   return (
     <div data-testid="failure-detail-list">
-      <p style={headerStyle}>{verbose ? 'All checks' : 'Failures'}</p>
+      <p style={headerStyle}>{showAll ? 'All checks' : 'Failures'}</p>
       <ul style={listStyle}>
         {results.map((r, i) => (
           <li key={`${r.id}-${i}`} style={itemStyle}>

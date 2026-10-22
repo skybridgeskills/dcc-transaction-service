@@ -10,7 +10,8 @@
  *   their `phase` (`unknown` covers consumer-supplied untagged
  *   suites).
  * - {@link failureDetail} resolves the per-suite child checks for
- *   a row that the user expanded.
+ *   a row that the user expanded — failures by default, every check
+ *   when the viewer asks to see them all.
  * - {@link anyTiming} is the single condition the
  *   {@link TimingPanel} mounts on, so timing UI never appears
  *   accidentally when verifier-core ran without `timing: true`.
@@ -79,20 +80,36 @@ export const isPhaseAllSkipped = (
 /**
  * Return the `CheckResult`s on `cr.results` that belong to
  * `summary` — i.e. whose dotted `id` is `summary.id` itself or one
- * of its children.
+ * of its children — narrowed to what the row should show.
  *
  * Matches both the suite-row id (e.g. `cryptographic.proof`) and
  * any child check (`cryptographic.proof.signature-valid`). The
  * `summary.id + '.'` test alone would miss child-less rows
  * verifier-core emits for one-check suites.
+ *
+ * ⚠️ `results[]` carries every check that ran (passes, skips,
+ * "not run" rows after a halt), so the id match alone is not a
+ * failure list. Unless `showAll`, keep only failures and the
+ * `<suite>.applies` skip that says why a suite did not apply.
+ * `showAll` is the viewer's display choice; it never reaches the
+ * verifier.
  */
 export const failureDetail = (
   cr: App.CredentialVerificationResult,
-  summary: App.SuiteSummary
+  summary: App.SuiteSummary,
+  showAll = false
 ): App.CheckResult[] => {
   const exact = summary.id
   const prefix = `${summary.id}.`
-  return cr.results.filter((r) => r.id === exact || r.id.startsWith(prefix))
+  const rows = cr.results.filter(
+    (r) => r.id === exact || r.id.startsWith(prefix)
+  )
+  if (showAll) return rows
+  return rows.filter(
+    (r) =>
+      r.outcome.status === 'failure' ||
+      (r.outcome.status === 'skipped' && r.id.endsWith('.applies'))
+  )
 }
 
 /**

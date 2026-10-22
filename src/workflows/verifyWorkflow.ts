@@ -44,8 +44,9 @@ import { prepareVerifiableEntity } from '../compatibility/verifiable-entity/inde
 import { arrayOf } from '../utils.js'
 import { wireProfileForExchange } from '../protocol-profiles/for-exchange.js'
 import {
+  deriveDomain,
+  expectedDomain,
   vprAcceptedMethods,
-  vprDomain,
   vprInteract,
   vprInteractServices
 } from '../lib/vpr-wire.js'
@@ -141,6 +142,9 @@ export const createExchangeVerify = ({
       new Date(Date.now() + config.exchangeTtl * 1000).toISOString(),
     state: 'pending'
   }
+  // Stamped in the save creation already does; set after the spread, so a
+  // client-sent `domain` never survives.
+  exchange.variables.domain = deriveDomain(exchange, config)
   // BY-VALUE NEEDS `state` AT ENVELOPE-BUILD TIME, not at first request GET.
   //
   // The by-reference arm mints `state` lazily in the `.../openid4vp/request`
@@ -296,11 +300,7 @@ export const getVerifyVPR = (exchange: App.ExchangeDetailVerify) => {
       ])
     ),
     challenge: exchange.variables.challenge,
-    domain: vprDomain(
-      wire,
-      { exchangeHost: exchange.variables.exchangeHost, serviceEndpoint },
-      'service-endpoint'
-    ),
+    domain: expectedDomain(exchange),
     ...((wire?.vpr?.emitAcceptedCryptosuites ?? true)
       ? { acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES] }
       : {})
@@ -625,16 +625,35 @@ export const preparePresentationForVerify = ({
  * `{ redirectUrl }`) shape — clients observe the async pass purely
  * via subsequent GETs (which hit the GET-driven sweep).
  */
+/**
+ * The `domain` a verify presentation's proof is checked against.
+ *
+ * - A string: verifier-core enforces it on the presentation's authentication
+ *   proof. Missing or different fails the proof check.
+ * - `{ arrayContaining }`: OID4VP only, when the proof's `domain` is an ARRAY
+ *   that the caller has already confirmed contains `arrayContaining` (its
+ *   `client_id`, via `bindsAudience`). The Data Integrity spec allows an
+ *   array, but verifier-core compares `domain` as a single string and would
+ *   refuse it; the proof is verified on its challenge, and its signature still
+ *   covers the array.
+ *
+ * ⚠️ Required, with no default: every caller states the value the wallet was
+ * given, so a forgotten argument cannot quietly mean "unchecked".
+ */
+export type VerifyPresentationDomain = string | { arrayContaining: string }
+
 export const participateInVerifyExchange = async ({
   data,
   exchange,
   workflow: _workflow,
-  config
+  config,
+  domain
 }: {
   data: Record<string, unknown>
   exchange: App.ExchangeDetailVerify
   workflow: App.Workflow
   config: App.Config
+  domain: VerifyPresentationDomain
 }) => {
   const { presentation, compatLog, debug } = preparePresentationForVerify({
     data,
@@ -663,6 +682,7 @@ export const participateInVerifyExchange = async ({
       ReturnType<typeof getVerifier>['verifyPresentation']
     >[0]['presentation'],
     challenge: exchange.variables.challenge,
+    ...(typeof domain === 'string' && { domain }),
     registries,
     ...(verifierOptions.timing !== undefined && {
       timing: verifierOptions.timing

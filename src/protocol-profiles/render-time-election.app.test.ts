@@ -23,9 +23,11 @@ import { getExchangeData } from '../transactionManager.js'
 import { flushJournal, type JournalEntry } from '../journal/index.js'
 import {
   ELECTION_BOUND_AXIS_FIELDS,
-  OID4VP_AXIS_SCOPE
+  OID4VP_AXIS_SCOPE,
+  VPR_AXIS_SCOPE,
+  VPR_ELECTION_BOUND_AXIS_FIELDS
 } from './election.js'
-import { oid4vpProfileFieldsSchema } from './schema.js'
+import { oid4vpProfileFieldsSchema, vprProfileFieldsSchema } from './schema.js'
 
 const EXCHANGE_HOST = 'http://localhost:4005'
 
@@ -33,7 +35,12 @@ const EXCHANGE_HOST = 'http://localhost:4005'
 const DEFAULT_PROFILE = 'oid4vp-1.0-json-by-reference-dcql-redirect-uri'
 const PEX_PROFILE = 'oid4vp-1.0-json-by-reference-pex-redirect-uri'
 const BY_VALUE_PROFILE = 'oid4vp-1.0-by-value-dcql-redirect-uri'
-const VPR_PROFILE = 'vcapi-vpr-bare-origin-domain'
+/**
+ * An electable VPR-differential profile. ⚠️ Not the bare-origin one: that
+ * changes `domainForm`, which is mint-bound — see the refusals below.
+ */
+const VPR_PROFILE = 'vcapi-vpr-no-accepted-cryptosuites'
+const DOMAIN_FORM_PROFILE = 'vcapi-vpr-bare-origin-domain'
 
 let journalDirectory: string
 let journalPath: string
@@ -165,28 +172,65 @@ describe('render-time election · the parameter is inert on the default', () => 
 describe('render-time election · a pinned profile changes the bytes it states', () => {
   test('electing a VPR-differential profile changes the interaction URL method', async () => {
     const exchangeId = await createVerifyExchange()
-    const unpinned = JSON.parse((await fetchInteraction(exchangeId)).body) as {
-      protocols: { verifiablePresentationRequest: { domain: string } }
+    type Envelope = {
+      protocols: { verifiablePresentationRequest: Record<string, unknown> }
     }
+    const unpinned = JSON.parse(
+      (await fetchInteraction(exchangeId)).body
+    ) as Envelope
     const pinned = JSON.parse(
       (await fetchInteraction(exchangeId, VPR_PROFILE)).body
-    ) as {
-      protocols: { verifiablePresentationRequest: { domain: string } }
-    }
+    ) as Envelope
 
     // ⚠️ This interaction method is the ONLY way the VPR-differential profiles
     // are selectable: they change no OID4VP byte, so on the `openid4vp://`
     // interaction method they are the default construction.
-    expect(unpinned.protocols.verifiablePresentationRequest.domain).not.toBe(
-      pinned.protocols.verifiablePresentationRequest.domain
-    )
+    expect(
+      unpinned.protocols.verifiablePresentationRequest.acceptedCryptosuites
+    ).toBeDefined()
+    expect(
+      pinned.protocols.verifiablePresentationRequest.acceptedCryptosuites
+    ).toBeUndefined()
+    // ⚠️ And the `domain` does not move: it is the stamp, not the profile.
     expect(pinned.protocols.verifiablePresentationRequest.domain).toBe(
-      EXCHANGE_HOST
+      unpinned.protocols.verifiablePresentationRequest.domain
     )
   })
 })
 
 describe('render-time election · the refusals', () => {
+  /**
+   * ⚠️ `domainForm` is response-bound: claim, didAuth and VC-API verify check
+   * the VP proof's `domain` against the domain stamped at creation. Serving a
+   * request under another form would ask the wallet to sign a `domain` this
+   * service then refuses — a false negative recorded against a wallet.
+   */
+  test('electing a profile that would change the stamped domain is a 409 that names the axis', async () => {
+    const exchangeId = await createVerifyExchange()
+    const response = await fetchInteraction(exchangeId, DOMAIN_FORM_PROFILE)
+    expect(response.status).toBe(409)
+    expect(response.body).toContain('domainForm')
+    expect(response.body).toContain('Re-create the exchange under')
+    expect(response.body).toContain(DOMAIN_FORM_PROFILE)
+  })
+
+  test('the same profile named at creation stamps and serves its domain', async () => {
+    const exchangeId = await createVerifyExchange({
+      protocolProfileName: DOMAIN_FORM_PROFILE
+    })
+    const record = (await getExchangeData(
+      exchangeId,
+      'verify'
+    )) as App.ExchangeDetailVerify
+    expect(record.variables.domain).toBe(EXCHANGE_HOST)
+    const envelope = JSON.parse((await fetchInteraction(exchangeId)).body) as {
+      protocols: { verifiablePresentationRequest: { domain: string } }
+    }
+    expect(envelope.protocols.verifiablePresentationRequest.domain).toBe(
+      EXCHANGE_HOST
+    )
+  })
+
   test('an unknown profile name is a 400 that names the registered profiles', async () => {
     const exchangeId = await createVerifyExchange()
     const response = await fetchRequest(exchangeId, 'no-such-profile')
@@ -342,5 +386,18 @@ describe('render-time election · the axis classification is total', () => {
       .map(([field]) => field)
       .sort()
     expect(ELECTION_BOUND_AXIS_FIELDS.slice().sort()).toEqual(classified)
+  })
+
+  test('every VPR profile field is classified', () => {
+    const schemaFields = Object.keys(vprProfileFieldsSchema.shape).sort()
+    expect(Object.keys(VPR_AXIS_SCOPE).sort()).toEqual(schemaFields)
+  })
+
+  test('⚠️ every exchange-scoped VPR field is actually checked', () => {
+    const classified = Object.entries(VPR_AXIS_SCOPE)
+      .filter(([, scope]) => scope === 'exchange')
+      .map(([field]) => field)
+      .sort()
+    expect(VPR_ELECTION_BOUND_AXIS_FIELDS.slice().sort()).toEqual(classified)
   })
 })

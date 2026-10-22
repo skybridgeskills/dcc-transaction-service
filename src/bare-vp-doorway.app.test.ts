@@ -91,20 +91,26 @@ const createDidAuthExchange = async (): Promise<string> => {
   return new URL(iu).pathname.split('/').pop()!
 }
 
-/** The challenge the exchange minted, read back off its own record. */
-const challengeFor = async (
+/** The challenge and `domain` the exchange asks for, read off its own VPR. */
+const vprFor = async (
   workflowId: string,
   exchangeId: string
-): Promise<string> => {
+): Promise<{ challenge: string; domain: string }> => {
   const response = await app.request(
     `/workflows/${workflowId}/exchanges/${exchangeId}`,
     { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } }
   )
   const body = (await response.json()) as {
-    verifiablePresentationRequest: { challenge: string }
+    verifiablePresentationRequest: { challenge: string; domain: string }
   }
-  return body.verifiablePresentationRequest.challenge
+  return body.verifiablePresentationRequest
 }
+
+/** The challenge the exchange minted, read back off its own VPR. */
+const challengeFor = async (
+  workflowId: string,
+  exchangeId: string
+): Promise<string> => (await vprFor(workflowId, exchangeId)).challenge
 
 const post = (path: string, body: unknown) =>
   app.request(path, {
@@ -141,8 +147,8 @@ describe('bare-vp participate doorway', () => {
 
   test('leaves the strict route returning the VC-API envelope', async () => {
     const exchangeId = await createClaimExchange()
-    const challenge = await challengeFor('claim', exchangeId)
-    const didAuth = await getSignedDIDAuth(challenge)
+    const { challenge, domain } = await vprFor('claim', exchangeId)
+    const didAuth = await getSignedDIDAuth(challenge, undefined, domain)
 
     const response = await post(strictPath(exchangeId), didAuth)
     expect(response.status).toBe(200)
@@ -178,8 +184,8 @@ describe('bare-vp participate doorway', () => {
 
   test('journals submission too, on the same arm as the strict route', async () => {
     const exchangeId = await createClaimExchange()
-    const challenge = await challengeFor('claim', exchangeId)
-    const didAuth = await getSignedDIDAuth(challenge)
+    const { challenge, domain } = await vprFor('claim', exchangeId)
+    const didAuth = await getSignedDIDAuth(challenge, undefined, domain)
 
     expect((await post(doorwayPath(exchangeId), didAuth)).status).toBe(200)
 
@@ -206,6 +212,64 @@ describe('bare-vp participate doorway', () => {
     await flushJournal()
     const events = (await linesFor(exchangeId)).map((entry) => entry.event)
     expect(events).not.toContain('discovery-served')
+  })
+
+  /**
+   * ⚠️ **The doorway's one stated exception.** LCW's legacy claim flow — the
+   * client this doorway exists for — signs its DID-auth with the challenge and
+   * NO `domain`. The doorway accepts that, and journals it; a proof that DOES
+   * carry a `domain` must still match, and the strict route refuses a
+   * domain-less proof outright. See `participateHandler` in `hono.ts`.
+   */
+  describe('domain', () => {
+    const absentAcceptedLines = async (exchangeId: string) => {
+      await flushJournal()
+      return (await linesFor(exchangeId)).filter(
+        (entry) =>
+          entry.event === 'accommodation-served' &&
+          (entry.detail as { accommodation?: string }).accommodation ===
+            'bare-vp-domain-absent-accepted'
+      )
+    }
+
+    test('a proof with no domain is accepted on the doorway, and journalled', async () => {
+      const exchangeId = await createClaimExchange()
+      const challenge = await challengeFor('claim', exchangeId)
+      const didAuth = await getSignedDIDAuth(challenge)
+
+      expect((await post(doorwayPath(exchangeId), didAuth)).status).toBe(200)
+      expect(await absentAcceptedLines(exchangeId)).toHaveLength(1)
+    })
+
+    test('a proof with a wrong domain is refused on the doorway', async () => {
+      const exchangeId = await createClaimExchange()
+      const challenge = await challengeFor('claim', exchangeId)
+      const didAuth = await getSignedDIDAuth(
+        challenge,
+        undefined,
+        'https://elsewhere.example'
+      )
+
+      expect((await post(doorwayPath(exchangeId), didAuth)).status).toBe(401)
+      expect(await absentAcceptedLines(exchangeId)).toHaveLength(0)
+    })
+
+    test('a proof with the right domain is accepted on the doorway, with no exception journalled', async () => {
+      const exchangeId = await createClaimExchange()
+      const { challenge, domain } = await vprFor('claim', exchangeId)
+      const didAuth = await getSignedDIDAuth(challenge, undefined, domain)
+
+      expect((await post(doorwayPath(exchangeId), didAuth)).status).toBe(200)
+      expect(await absentAcceptedLines(exchangeId)).toHaveLength(0)
+    })
+
+    test('the same domain-less proof is refused on the strict route', async () => {
+      const exchangeId = await createClaimExchange()
+      const challenge = await challengeFor('claim', exchangeId)
+      const didAuth = await getSignedDIDAuth(challenge)
+
+      expect((await post(strictPath(exchangeId), didAuth)).status).toBe(401)
+    })
   })
 
   test('refuses a non-claim workflow', async () => {

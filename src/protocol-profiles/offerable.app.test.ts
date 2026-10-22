@@ -21,6 +21,16 @@ const VPR_PROFILES = [
   'vcapi-vpr-no-accepted-cryptosuites',
   'vcapi-vpr-bare-origin-domain-no-accepted-cryptosuites'
 ]
+/**
+ * The VPR profiles that change `domainForm`. ⚠️ Mint-bound on an exchange
+ * stamped with another form — the VP proof's `domain` is checked against the
+ * stamp — so never electable, and never offered, on a verify exchange.
+ */
+const DOMAIN_FORM_PROFILES = [
+  'vcapi-vpr-bare-origin-domain',
+  'vcapi-vpr-bare-origin-domain-no-accepted-cryptosuites'
+]
+const NO_CRYPTOSUITES_PROFILE = 'vcapi-vpr-no-accepted-cryptosuites'
 
 interface Preset {
   id: string
@@ -145,7 +155,7 @@ describe('offerable presets · the pin rides where it is fetched', () => {
     const exchangeId = await createVerifyExchange()
     const presets = await fetchPresets(exchangeId)
     const pinned = on(presets, 'iu').find(
-      (p) => p.protocolProfileName === 'vcapi-vpr-bare-origin-domain'
+      (p) => p.protocolProfileName === NO_CRYPTOSUITES_PROFILE
     )!
     const served = await app.request(
       new URL(pinned.payload).pathname + new URL(pinned.payload).search,
@@ -153,12 +163,12 @@ describe('offerable presets · the pin rides where it is fetched', () => {
     )
     expect(served.status).toBe(200)
     const envelope = (await served.json()) as {
-      protocols: { verifiablePresentationRequest: { domain: string } }
+      protocols: { verifiablePresentationRequest: Record<string, unknown> }
     }
     // The axis that profile states, served because the payload carried its pin.
-    expect(envelope.protocols.verifiablePresentationRequest.domain).toBe(
-      EXCHANGE_HOST
-    )
+    expect(
+      envelope.protocols.verifiablePresentationRequest.acceptedCryptosuites
+    ).toBeUndefined()
   })
 })
 
@@ -180,6 +190,14 @@ describe('offerable presets · the two filters', () => {
     expect(presets.map((p) => p.protocolProfileName)).not.toContain(PEX_PROFILE)
   })
 
+  test('⚠️ a profile that would change the stamped `domain` is not offered', async () => {
+    activeProfileName = DEFAULT_PROFILE
+    const names = (await fetchPresets(await createVerifyExchange())).map(
+      (p) => p.protocolProfileName
+    )
+    for (const name of DOMAIN_FORM_PROFILES) expect(names).not.toContain(name)
+  })
+
   test('⚠️ profiles with identical bytes on a method yield ONE preset there, and stay distinct elsewhere', async () => {
     activeProfileName = DEFAULT_PROFILE
     const presets = await fetchPresets(await createVerifyExchange())
@@ -192,11 +210,12 @@ describe('offerable presets · the two filters', () => {
     )
     expect(vprOnOid4vp).toEqual([])
 
-    // On the interaction URL they each change the VPR, so each is its own row.
+    // On the interaction URL each electable one changes the VPR, so each is its
+    // own row. The `domainForm` ones are mint-bound here, so not offered.
     const vprOnIu = on(presets, 'iu')
       .map((p) => p.protocolProfileName)
       .filter((n) => VPR_PROFILES.includes(n ?? ''))
-    expect(vprOnIu.sort()).toEqual(VPR_PROFILES.slice().sort())
+    expect(vprOnIu).toEqual([NO_CRYPTOSUITES_PROFILE])
   })
 
   test('⚠️ every payload on a method is distinct', async () => {
@@ -260,25 +279,29 @@ describe('offerable presets · the axis diff is generic', () => {
   test('⚠️ the diff is against the profile resolved for THIS exchange, not a hardcoded name', async () => {
     // A deployment whose default is a VPR-differential profile must see its
     // alternatives diffed against THAT, not against the shipped default.
-    activeProfileName = 'vcapi-vpr-bare-origin-domain'
+    activeProfileName = NO_CRYPTOSUITES_PROFILE
     const presets = await fetchPresets(await createVerifyExchange())
     const backToDefault = presets.find(
       (p) => p.protocolProfileName === DEFAULT_PROFILE
     )!
-    // Against the bare-origin profile, the default differs on `domainForm` — a
-    // diff that would be EMPTY if the baseline were hardcoded to the default.
-    expect(backToDefault.axes.map((a) => a.field)).toContain('domainForm')
+    // Against the no-cryptosuites profile, the default differs on
+    // `emitAcceptedCryptosuites` — a diff that would be EMPTY if the baseline
+    // were hardcoded to the default.
+    expect(backToDefault.axes.map((a) => a.field)).toContain(
+      'emitAcceptedCryptosuites'
+    )
     activeProfileName = DEFAULT_PROFILE
   })
 
   test('a preset states the axes its profile changes, in the schema’s own words', async () => {
     activeProfileName = DEFAULT_PROFILE
     const presets = await fetchPresets(await createVerifyExchange())
-    const bareOrigin = presets.find(
-      (p) => p.protocolProfileName === 'vcapi-vpr-bare-origin-domain'
+    const noCryptosuites = presets.find(
+      (p) => p.protocolProfileName === NO_CRYPTOSUITES_PROFILE
     )!
-    expect(bareOrigin.axes).toEqual([
-      { field: 'domainForm', value: 'exchange-host' }
+    expect(noCryptosuites.axes.map((a) => a.field)).toEqual([
+      'emitAcceptedCryptosuites',
+      'emitDidAuthenticationAcceptedCryptosuites'
     ])
   })
 })

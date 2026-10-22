@@ -26,6 +26,7 @@ import type {
   VprInteractServiceType,
   WorkflowWireProfile
 } from '../protocol-profiles/types.js'
+import { wireProfileForExchange } from '../protocol-profiles/for-exchange.js'
 
 /** One `interact.service` entry. `CredentialHandlerService` carries no endpoint. */
 export type VprInteractService =
@@ -80,6 +81,53 @@ export const vprDomain = (
   (wire?.vpr?.domainForm ?? historicalDefault) === 'exchange-host'
     ? exchangeHost
     : serviceEndpoint
+
+/** The exchange fields the `domain` is derived from. */
+type DomainSource = Pick<
+  App.ExchangeDetailBase,
+  'exchangeId' | 'tenantName' | 'variables' | 'workflowId'
+>
+
+/**
+ * Derive the `domain` a VPR for `exchange` emits under its active profile:
+ * the bare exchange host for claim and didAuth, the per-exchange service
+ * endpoint for verify, unless the profile's `domainForm` says otherwise.
+ *
+ * Used to STAMP `variables.domain` at creation, and to recover it for an
+ * exchange that has no stamp. Everything else reads {@link expectedDomain}.
+ */
+export const deriveDomain = (
+  exchange: DomainSource,
+  config?: App.Config
+): string =>
+  vprDomain(
+    wireProfileForExchange(exchange, config),
+    {
+      exchangeHost: exchange.variables.exchangeHost,
+      serviceEndpoint: `${exchange.variables.exchangeHost}/workflows/${exchange.workflowId}/exchanges/${exchange.exchangeId}`
+    },
+    exchange.workflowId === 'verify' ? 'service-endpoint' : 'exchange-host'
+  )
+
+/**
+ * The `domain` this exchange asks for, and checks a presentation against.
+ *
+ * ⚠️ **One resolver, read by every VPR builder and every verification
+ * path.** The domain a wallet signed and the domain it is checked against
+ * must never be computed in two places: a render-time election can change
+ * what `deriveDomain` would say, which is why the value is stamped at
+ * creation and the election that would change it is refused
+ * (`protocol-profiles/election.ts`).
+ *
+ * ⚠️ **The derivation branch exists only for exchanges created before the
+ * stamp did**, which derive it exactly as the VPR builders always have.
+ * Exchanges expire on their TTL, so once every pre-stamp exchange has
+ * expired this branch can be deleted.
+ */
+export const expectedDomain = (
+  exchange: DomainSource,
+  config?: App.Config
+): string => exchange.variables.domain ?? deriveDomain(exchange, config)
 
 /**
  * Spell one `acceptedMethods` entry.

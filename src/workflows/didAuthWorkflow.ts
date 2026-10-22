@@ -10,7 +10,8 @@ import { mintExchangeId } from '../lib/mint-exchange-id.js'
 import { journalExchangeEvent } from '../journal/index.js'
 import { wireProfileForExchange } from '../protocol-profiles/for-exchange.js'
 import {
-  vprDomain,
+  deriveDomain,
+  expectedDomain,
   vprInteract,
   vprInteractServices
 } from '../lib/vpr-wire.js'
@@ -45,6 +46,9 @@ export const createExchangeDidAuth = ({
       new Date(Date.now() + config.exchangeTtl * 1000).toISOString(),
     state: 'pending'
   }
+  // Stamped in the save creation already does; set after the spread, so a
+  // client-sent `domain` never survives.
+  exchange.variables.domain = deriveDomain(exchange, config)
   journalExchangeEvent(exchange, 'mint', {
     expires: exchange.expires,
     ...(data.exchangeIdPrefix
@@ -69,7 +73,8 @@ export const getDIDAuthVPR = (exchange: App.ExchangeDetailBase) => {
   // ⚠️ `domain` is the bare exchange host here and the full service endpoint in
   // the verify VPR. Also a live differential, also unexplained, also reproduced
   // rather than tidied — change it and a record written before the change and
-  // one written after it are not comparable.
+  // one written after it are not comparable. Read through `expectedDomain`:
+  // it is what the presented proof is checked against.
   const wire = wireProfileForExchange(exchange)
 
   return {
@@ -84,11 +89,7 @@ export const getDIDAuthVPR = (exchange: App.ExchangeDetailBase) => {
       ])
     ),
     challenge: exchange.variables.challenge,
-    domain: vprDomain(
-      wire,
-      { exchangeHost: exchange.variables.exchangeHost, serviceEndpoint },
-      'exchange-host'
-    ),
+    domain: expectedDomain(exchange),
     ...((wire?.vpr?.emitAcceptedCryptosuites ?? true)
       ? { acceptedCryptosuites: [...VERIFIABLE_CRYPTOSUITES] }
       : {})
@@ -112,6 +113,7 @@ export const participateInDidAuthExchange = async ({
   const didAuthResult = await verifyDIDAuth({
     presentation: data,
     challenge: exchange.variables.challenge,
+    domain: expectedDomain(exchange),
     debug
   })
 

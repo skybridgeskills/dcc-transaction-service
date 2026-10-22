@@ -20,7 +20,11 @@ import { flushJournal, type JournalEntry } from '../journal/index.js'
 
 const EXCHANGE_HOST = 'http://localhost:4005'
 const DEFAULT_PROFILE = 'oid4vp-1.0-json-by-reference-dcql-redirect-uri'
-const VPR_PROFILE = 'vcapi-vpr-bare-origin-domain'
+/**
+ * An electable VPR profile. ⚠️ Not a `domainForm` one: those change the stamped
+ * `domain` a verify exchange checks proofs against, so they are mint-bound here.
+ */
+const VPR_PROFILE = 'vcapi-vpr-no-accepted-cryptosuites'
 
 let journalDirectory: string
 let journalPath: string

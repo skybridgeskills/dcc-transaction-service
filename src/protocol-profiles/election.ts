@@ -27,7 +27,13 @@ import { resolveClientIdPrefix } from '../oid4vp/authorization-request.js'
 import { resolveDelivery, resolveQueryLanguage } from '../oid4vp/state.js'
 import { getProtocolProfile } from './registry.js'
 import { PROFILED } from './for-exchange.js'
-import type { Oid4vpProfileFields, ProfiledWorkflowId, ProtocolProfile } from './types.js'
+import { expectedDomain } from '../lib/vpr-wire.js'
+import type {
+  Oid4vpProfileFields,
+  ProfiledWorkflowId,
+  ProtocolProfile,
+  VprProfileFields
+} from './types.js'
 
 /**
  * The per-exchange knobs that outrank a profile, read from the schema's own
@@ -138,7 +144,7 @@ const ELECTION_BOUND_AXES: ElectionBoundAxis[] = [
   {
     field: 'clientIdPrefix',
     readBy:
-      "`oid4vp/response-handler.ts`, to bind the VP proof's `domain` to this exchange's `client_id` — verifier-core does not enforce that, so we must",
+      "`oid4vp/response-handler.ts`, to bind the VP proof's `domain` to this exchange's `client_id` — first as the protocol's own audience check, then through verifier-core",
     resolve: (exchange, config) => resolveClientIdPrefix(exchange, config),
     accepts: (served, expected) => served === expected
   }
@@ -168,6 +174,66 @@ const parsedLanguage = (stated: string): string =>
 /** The fields {@link ELECTION_BOUND_AXES} covers, for the totality guard. */
 export const ELECTION_BOUND_AXIS_FIELDS: Array<keyof Oid4vpProfileFields> =
   ELECTION_BOUND_AXES.map((a) => a.field)
+
+/**
+ * Every VPR axis, classified the same way as {@link OID4VP_AXIS_SCOPE}, and
+ * for every profiled workflow — claim and didAuth emit a VPR too.
+ *
+ * ⚠️ **`domainForm` is `exchange`** since the VP proof's `domain` is checked
+ * against the exchange's stamped `variables.domain`: a request served under a
+ * different form asks a wallet to sign a `domain` this service then refuses.
+ * The same reason `clientIdPrefix` is mint-bound on OID4VP.
+ *
+ * ⚠️ **TOTAL, and a test enforces it**, for the reason the OID4VP map is.
+ */
+export const VPR_AXIS_SCOPE = {
+  interactServices: 'request',
+  domainForm: 'exchange',
+  emitAcceptedCryptosuites: 'request',
+  emitDidAuthenticationAcceptedCryptosuites: 'request',
+  acceptedMethodsForm: 'request',
+  acceptedMethods: 'request'
+} as const satisfies Record<keyof VprProfileFields, 'request' | 'exchange'>
+
+/** One exchange-scoped VPR axis; see {@link ElectionBoundAxis}. */
+interface VprElectionBoundAxis {
+  field: keyof VprProfileFields
+  /** What `resolve` returns, named as the wire calls it — not the profile field. */
+  resolves: string
+  /** ⚠️ WHO reads this value after the request has been served. */
+  readBy: string
+  /** What this exchange responds under, from the resolver that leg calls. */
+  resolve: (
+    exchange: Pick<
+      App.ExchangeDetailBase,
+      'exchangeId' | 'tenantName' | 'variables' | 'workflowId'
+    >,
+    config: App.Config
+  ) => string
+  accepts: (served: string, expected: string) => boolean
+}
+
+/**
+ * The VPR axes an election is refused for — read, like the OID4VP ones,
+ * through the resolver the response leg calls.
+ */
+const VPR_ELECTION_BOUND_AXES: VprElectionBoundAxis[] = [
+  {
+    field: 'domainForm',
+    resolves: 'domain',
+    readBy:
+      "claim, didAuth and VC-API verify, which check the VP proof's `domain` against `expectedDomain` — the domain stamped on the exchange at creation",
+    // ⚠️ On the real exchange this is the stamp. On the elected copy the stamp
+    // is dropped (see `withElectedProfile`), so it is what the elected profile
+    // would emit — the comparison this refusal exists to make.
+    resolve: (exchange, config) => expectedDomain(exchange, config),
+    accepts: (served, expected) => served === expected
+  }
+]
+
+/** The fields {@link VPR_ELECTION_BOUND_AXES} covers, for the totality guard. */
+export const VPR_ELECTION_BOUND_AXIS_FIELDS: Array<keyof VprProfileFields> =
+  VPR_ELECTION_BOUND_AXES.map((a) => a.field)
 
 /**
  * Refuse a render-time election this service cannot honour in full.
@@ -274,6 +340,11 @@ export const assertElectable = (
   // ⚠️ Read through the resolvers the response leg itself calls, on the real
   // exchange and on the copy, so this check cannot drift from the behaviour it
   // is protecting. See {@link OID4VP_AXIS_SCOPE}.
+  // `serving` is what the elected copy would put on the wire, already phrased.
+  const refusal = (serving: string, expected: string, readBy: string) =>
+    new HTTPException(409, {
+      message: `Protocol profile "${protocolProfileName}" cannot be elected at render time on exchange ${exchange.exchangeId}: it would serve ${serving} while this exchange answers under \`${expected}\`. That value is read by ${readBy}, so it is mint-bound — the same rule that makes a by-value profile mint-bound. Re-create the exchange under "${protocolProfileName}".`
+    })
   if (exchange.workflowId === 'verify') {
     const verify = exchange as App.ExchangeDetailVerify
     const elected = withElectedProfile(verify, protocolProfileName)
@@ -281,9 +352,21 @@ export const assertElectable = (
       const expected = axis.resolve(verify, config)
       const served = axis.resolve(elected, config)
       if (!axis.accepts(served, expected)) {
-        throw new HTTPException(409, {
-          message: `Protocol profile "${protocolProfileName}" cannot be elected at render time on exchange ${exchange.exchangeId}: it would serve \`${axis.field}: ${served}\` while this exchange answers under \`${expected}\`. That value is read by ${axis.readBy}, so it is mint-bound — the same rule that makes a by-value profile mint-bound. Re-create the exchange under "${protocolProfileName}".`
-        })
+        throw refusal(`\`${axis.field}: ${served}\``, expected, axis.readBy)
+      }
+    }
+  }
+  if (PROFILED.includes(exchange.workflowId)) {
+    const elected = withElectedProfile(exchange, protocolProfileName)
+    for (const axis of VPR_ELECTION_BOUND_AXES) {
+      const expected = axis.resolve(exchange, config)
+      const served = axis.resolve(elected, config)
+      if (!axis.accepts(served, expected)) {
+        throw refusal(
+          `\`${axis.resolves}: ${served}\` (from the profile's \`${axis.field}\`)`,
+          expected,
+          axis.readBy
+        )
       }
     }
   }
@@ -298,15 +381,20 @@ export const assertElectable = (
  * build the copy without the refusals could serve an election this service has
  * already decided it cannot honour.
  */
-const withElectedProfile = <T extends App.ExchangeDetailBase>(
+const withElectedProfile = <T extends Pick<App.ExchangeDetailBase, 'variables'>>(
   exchange: T,
   protocolProfileName: string
 ): T => {
   const { oid4vp } = exchange.variables as { oid4vp?: Record<string, unknown> }
+  // ⚠️ The stamped `domain` is dropped too, for the same reason as the stamped
+  // OID4VP axes below: it is the most specific layer, so left on the copy it
+  // would silently override the elected profile's `domainForm`, and the
+  // `domainForm` refusal would compare the stamp with itself.
+  const { domain: _stampedDomain, ...variables } = exchange.variables
   return {
     ...exchange,
     variables: {
-      ...exchange.variables,
+      ...variables,
       protocolProfileName,
       ...(oid4vp
         ? {

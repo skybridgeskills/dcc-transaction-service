@@ -397,7 +397,7 @@ profile X*.
 | a **by-value** profile | 400 |
 | an exchange carrying an explicit knob | 409 |
 | an exchange that named its own `protocolProfileName` | 409 |
-| a profile differing on a **response-bound** axis (`delivery`, `queryLanguage`, `clientIdPrefix`) | 409 |
+| a profile differing on a **response-bound** axis (`delivery`, `queryLanguage`, `clientIdPrefix`; the VPR's `domainForm`) | 409 |
 
 ⚠️ **Fetchable-only and mint-bound are the same rule seen twice.** A by-reference
 construction has a URL that can *carry* an election; a by-value construction *is*
@@ -408,15 +408,25 @@ this exchange asked in, and binds the VP proof's `domain` to
 one would serve a request whose valid answer this service then rejects: a false
 negative recorded against a wallet.
 
+⚠️ **`domainForm` is response-bound for the same reason as `clientIdPrefix`.**
+Claim, didAuth and VC-API verify check the VP proof's `domain` against the
+`domain` stamped on the exchange when it was created (`variables.domain`, read
+through `expectedDomain`). A request served under a different form would ask
+the wallet to sign a `domain` that is then refused. The elected copy drops the
+stamped `domain` — as it drops the stamped OID4VP axes — so the check compares
+what the elected profile would emit with what the exchange answers under; when
+they differ the election is a 409. On a claim or didAuth exchange (bare-host
+default) electing a bare-origin profile changes nothing and is accepted.
+
 ⚠️ Only the **exchange** layer triggers the fourth refusal. A tenant default or
 `DEFAULT_PROTOCOL_PROFILE` is deployment configuration, not a statement about
 this exchange, so electing over those is what the feature is for. Naming the
 profile the exchange already asks for is **inert**, not refused.
 
-⚠️ **`OID4VP_AXIS_SCOPE` classifies every OID4VP field** as `request` or
-`exchange`, and tests enforce that the classification is total and that every
-`exchange`-scoped field is actually checked. A new field cannot be added without
-somebody ruling on which side it falls.
+⚠️ **`OID4VP_AXIS_SCOPE` and `VPR_AXIS_SCOPE` classify every OID4VP and VPR
+field** as `request` or `exchange`, and tests enforce that each classification is
+total and that every `exchange`-scoped field is actually checked. A new field
+cannot be added without somebody ruling on which side it falls.
 
 ⚠️ The knob refusal is **temporary** — M7 retires the knobs and it goes with
 them. The mint-time-profile refusal is the same intent in the newer vocabulary
@@ -446,7 +456,10 @@ belongs in the UI. Two filters:
    does mean the picker's OID4VP interaction method has nothing to show until a profile varies
    a request-scoped OID4VP axis again.
 
-A profile that cannot be elected is simply **not offered**, silently.
+A profile that cannot be elected is simply **not offered**, silently. ⚠️ That
+includes the two bare-origin VPR profiles on a **verify** exchange, whose stamped
+`domain` is the service endpoint: they would change the `domain`, so they are
+mint-bound there and only `vcapi-vpr-no-accepted-cryptosuites` is offered.
 
 ⚠️ **The picker is only as informative as `DEFAULT_PROTOCOL_PROFILE`.** With no
 layer naming a profile, the active preset's name is `null` and the axis diff is
@@ -661,6 +674,14 @@ Run any of them from the CLI by name, with no preset file of its own:
 ```bash
 pnpm transaction verify ob3 --protocol-profile vcapi-vpr-bare-origin-domain
 ```
+
+⚠️ **The two bare-origin profiles are usable when named at creation** — as
+above, or with `variables.protocolProfileName` — because the exchange then
+stamps the bare origin as its `domain`. As a **render-time election** over a
+verify exchange stamped with the service-endpoint form they are refused with
+409: the `domain` is response-bound (see "The refusals").
+`vcapi-vpr-no-accepted-cryptosuites` changes nothing a response is checked
+against and stays electable.
 
 The flag reaches **every** registered profile in this document and overrides a
 profile file's own `protocolProfileName`. An unregistered name is refused by the

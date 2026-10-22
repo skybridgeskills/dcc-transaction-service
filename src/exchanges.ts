@@ -3,7 +3,8 @@ import { sweepIfTimedOut } from './lib/verify-task/sweep-verify-task.js'
 import {
   createExchangeClaim,
   participateInClaimExchange,
-  validateExchangeClaim
+  validateExchangeClaim,
+  type ClaimDomainPolicy
 } from './workflows/claimWorkflow.js'
 import {
   createExchangeDidAuth,
@@ -18,6 +19,7 @@ import {
   validateExchangeVerify
 } from './workflows/verifyWorkflow.js'
 import { walletLinkFor } from './lib/wallets/index.js'
+import { expectedDomain } from './lib/vpr-wire.js'
 import {
   buildOpenIdCredentialOfferDeepLinkByReference,
   credentialOfferUriForExchange
@@ -190,12 +192,18 @@ export const participateInExchange = async ({
   data,
   config,
   workflow,
-  exchange
+  exchange,
+  domainPolicy = 'required'
 }: {
   data: Record<string, unknown> | null | undefined
   config: App.Config
   workflow: App.Workflow
   exchange: App.ExchangeDetailBase
+  /**
+   * How a claim's DID-auth proof is held to the exchange `domain`. ⚠️ Only the
+   * bare-VP doorway passes `'absent-accepted'`; see `ClaimDomainPolicy`.
+   */
+  domainPolicy?: ClaimDomainPolicy
 }) => {
   if (exchange.state === 'complete') {
     throw new HTTPException(400, {
@@ -223,14 +231,16 @@ export const participateInExchange = async ({
         data,
         exchange: exchange as App.ExchangeDetailClaim,
         workflow,
-        config
+        config,
+        domainPolicy
       })
     case 'verify':
       return participateInVerifyExchange({
         data,
         exchange: exchange as App.ExchangeDetailVerify,
         workflow,
-        config
+        config,
+        domain: expectedDomain(exchange)
       })
     default:
       throw new HTTPException(404, { message: 'Workflow not found' })

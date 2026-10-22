@@ -163,6 +163,30 @@ export const VerifyFailureMixed: Story = {
   }
 }
 
+/**
+ * Issuer trust when the exchange opted in with `requireTrustedIssuer`: the
+ * issuer matched no registry and one registry could not be checked, so the
+ * exchange is `invalid` and the card shows the trust line as an error. A second
+ * credential shows a registry match, named by the registry.
+ */
+export const VerifyIssuerTrustRequired: Story = {
+  name: 'Verify (issuer trust required)',
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: PRESETS,
+      states: 'invalid',
+      workflowId: 'verify',
+      variables: {
+        features: { details: true },
+        results: {
+          default: issuerTrustRequiredResult()
+        }
+      }
+    })
+  }
+}
+
 export const VerifyDetailsDisabled: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
@@ -294,7 +318,9 @@ function deriveSummaries(results: App.CheckResult[]): App.SuiteSummary[] {
       phase: 'cryptographic',
       suite,
       status,
-      verified: failed === 0,
+      ...(failed > 0 && {
+        fatalFailureAt: group.find((g) => g.outcome.status === 'failure')!.id
+      }),
       message:
         failed === 0
           ? `${passed} of ${group.length} checks passed`
@@ -305,29 +331,12 @@ function deriveSummaries(results: App.CheckResult[]): App.SuiteSummary[] {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 5 stories — exercise verifier-core 2.x summary/timing/verbose paths.
+// Phase 5 stories — exercise verifier-core 2.x summary/timing paths.
+//
+// Every check that ran is in the payload; "Show all checks" is a local
+// display toggle on the rendered results (open any verify story and tick it),
+// so there is no separate story for it.
 // ---------------------------------------------------------------------------
-
-export const VerifyVerbose: Story = {
-  name: 'Verify (verbose)',
-  args: {
-    exchangeClient: new FakeExchangeClient({
-      protocols: mockProtocolsVerify,
-      presets: PRESETS,
-      states: 'complete',
-      workflowId: 'verify',
-      variables: {
-        features: { details: true },
-        options: { verbose: true },
-        results: {
-          default: verificationResultFromPresentation(
-            createMockVerifierCoreResult(true, true)
-          )
-        }
-      }
-    })
-  }
-}
 
 export const VerifyWithTiming: Story = {
   name: 'Verify (with timing)',
@@ -437,6 +446,7 @@ function fatalShortCircuitResult(): App.VerificationResult {
   const cred = createMockCredential()
   const failingCheck: App.CheckResult = {
     id: 'cryptographic.proof.signature-valid',
+    suite: 'proof',
     outcome: {
       status: 'failure',
       problems: [
@@ -460,7 +470,6 @@ function fatalShortCircuitResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'failure',
-          verified: false,
           message: '1 of 3 checks failed (2 not run after fatal)',
           counts: { passed: 0, failed: 1, skipped: 0 },
           fatalFailureAt: 'cryptographic.proof.signature-valid'
@@ -481,6 +490,7 @@ function obSchemaWarningResult(): App.VerificationResult {
   const cred = createMockCredential()
   const warning: App.CheckResult = {
     id: 'semantic.openbadges-3.schema',
+    suite: 'openbadges-3',
     outcome: {
       status: 'failure',
       problems: [
@@ -505,7 +515,6 @@ function obSchemaWarningResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '2 of 2 checks passed',
           counts: { passed: 2, failed: 0, skipped: 0 }
         },
@@ -514,7 +523,6 @@ function obSchemaWarningResult(): App.VerificationResult {
           phase: 'semantic',
           suite: 'openbadges-3',
           status: 'mixed',
-          verified: false,
           message: '1 of 3 checks failed (2 passed)',
           counts: { passed: 2, failed: 1, skipped: 0 }
         }
@@ -543,7 +551,6 @@ function allSkippedRecognitionResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '2 of 2 checks passed',
           counts: { passed: 2, failed: 0, skipped: 0 }
         },
@@ -552,7 +559,6 @@ function allSkippedRecognitionResult(): App.VerificationResult {
           phase: 'recognition',
           suite: 'openbadges',
           status: 'skipped',
-          verified: true,
           message: '1 of 1 check skipped',
           counts: { passed: 0, failed: 0, skipped: 1 }
         },
@@ -561,7 +567,6 @@ function allSkippedRecognitionResult(): App.VerificationResult {
           phase: 'recognition',
           suite: 'vcalm',
           status: 'skipped',
-          verified: true,
           message: '1 of 1 check skipped',
           counts: { passed: 0, failed: 0, skipped: 1 }
         }
@@ -582,6 +587,7 @@ function mixedRegistryFailureResult(): App.VerificationResult {
   const presentationResults: App.CheckResult[] = [
     {
       id: 'cryptographic.proof.signature',
+      suite: 'proof',
       outcome: { status: 'success', message: 'Presentation signature verified.' },
       fatal: true
     }
@@ -593,11 +599,13 @@ function mixedRegistryFailureResult(): App.VerificationResult {
       results: [
         {
           id: 'cryptographic.proof.signature',
+          suite: 'proof',
           outcome: { status: 'success', message: 'Credential signature verified.' },
           fatal: true
         },
         {
           id: 'trust.registry.issuer',
+          suite: 'registry',
           outcome: {
             status: 'failure',
             problems: [
@@ -618,7 +626,6 @@ function mixedRegistryFailureResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '1 of 1 checks passed',
           counts: { passed: 1, failed: 0, skipped: 0 }
         },
@@ -627,7 +634,6 @@ function mixedRegistryFailureResult(): App.VerificationResult {
           phase: 'trust',
           suite: 'registry',
           status: 'failure',
-          verified: false,
           message: '1 of 1 checks failed',
           counts: { passed: 0, failed: 1, skipped: 0 }
         }
@@ -639,17 +645,107 @@ function mixedRegistryFailureResult(): App.VerificationResult {
     presentationResults,
     credentialResults,
     matchedCredentials: [],
+    issuerValidation: {
+      requireTrustedIssuer: false,
+      trustedIssuers: [],
+      consultedRegistries: ['DCC Sandbox Registry'],
+      credentials: [
+        {
+          index: 0,
+          issuer: 'did:key:z6MkhVTX9BF3NGYX6cc7jWpbNnR7cAjH8LUffabZP8Qu4ysC',
+          onAllowlist: false,
+          registryMatches: [],
+          uncheckedRegistries: [],
+          trusted: false
+        }
+      ]
+    },
     summary: [
       {
         id: 'cryptographic.proof',
         phase: 'cryptographic',
         suite: 'proof',
         status: 'success',
-        verified: true,
         message: '1 of 1 checks passed',
         counts: { passed: 1, failed: 0, skipped: 0 }
       }
     ]
+  }
+}
+
+function issuerTrustRequiredResult(): App.VerificationResult {
+  const base = verificationResultFromPresentation(
+    createMockVerifierCoreResult(true, true)
+  )
+  const listed = base.credentialResults[0]
+  // The unlisted credential's own registry row agrees with its trust line.
+  const unlisted: App.CredentialVerificationResult = {
+    ...listed,
+    results: listed.results.map((r) =>
+      r.id.startsWith('trust.registry.')
+        ? {
+            ...r,
+            outcome: {
+              status: 'failure' as const,
+              problems: [
+                {
+                  type: 'https://www.w3.org/TR/vc-data-model#ISSUER_NOT_REGISTERED',
+                  title: 'Issuer Not Registered',
+                  detail:
+                    'Issuer was not found in the 1 registry that could be checked; 1 could not be checked.'
+                }
+              ]
+            }
+          }
+        : r
+    ),
+    summary: listed.summary.map((s) =>
+      s.suite === 'registry'
+        ? {
+            ...s,
+            status: 'failure' as const,
+            message: '1 of 1 checks failed',
+            counts: { passed: 0, failed: 1, skipped: 0 }
+          }
+        : s
+    )
+  }
+  const second = {
+    ...listed,
+    verifiableCredential: createMockCredential({ name: 'Listed issuer' })
+  } as App.CredentialVerificationResult
+  return {
+    ...base,
+    credentialResults: [unlisted, second],
+    issuerValidation: {
+      requireTrustedIssuer: true,
+      trustedIssuers: [],
+      consultedRegistries: ['DCC Sandbox Registry', 'DCC Community Registry'],
+      credentials: [
+        {
+          index: 0,
+          issuer: 'did:key:z6MkhVTX9BF3NGYX6cc7jWpbNnR7cAjH8LUffabZP8Qu4ysC',
+          onAllowlist: false,
+          registryMatches: [],
+          uncheckedRegistries: ['DCC Community Registry'],
+          trusted: false
+        },
+        {
+          index: 1,
+          issuer: 'did:web:university.example',
+          onAllowlist: false,
+          registryMatches: [
+            {
+              registry: 'DCC Sandbox Registry',
+              entityName: 'Example University',
+              entityUrl: 'https://university.example'
+            }
+          ],
+          uncheckedRegistries: [],
+          trusted: true
+        }
+      ]
+    }
   }
 }
 

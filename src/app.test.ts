@@ -93,8 +93,8 @@ describe('api', function () {
         headers: { 'Content-Type': 'application/json' }
       })
       const initBody = (await initResponse.json()) as Record<string, unknown>
-      const challenge = (initBody.verifiablePresentationRequest as Record<string, unknown>).challenge as string
-      const didAuth = await getSignedDIDAuth(challenge)
+      const { challenge, domain } = initBody.verifiablePresentationRequest as App.VPR
+      const didAuth = await getSignedDIDAuth(challenge, undefined, domain)
 
       const exchangeResponse = await app.request(path, {
         method: 'POST',
@@ -320,8 +320,8 @@ describe('api', function () {
     })
 
     test('does the direct exchange', async function () {
-      const { path, challenge } = await doSetupWithDirectDeepLink(app)
-      const didAuth = await getSignedDIDAuth(challenge)
+      const { path, challenge, domain } = await doSetupWithDirectDeepLink(app)
+      const didAuth = await getSignedDIDAuth(challenge, undefined, domain)
       const exchangeResponse = await app.request(path, {
         method: 'POST',
         body: JSON.stringify(didAuth),
@@ -335,9 +335,9 @@ describe('api', function () {
     })
 
     test('returns error for bad didAuth', async function () {
-      const { path } = await doSetupWithDirectDeepLink(app)
+      const { path, domain } = await doSetupWithDirectDeepLink(app)
       // use a different challenge than was issued
-      const didAuth = await getSignedDIDAuth('badChallenge')
+      const didAuth = await getSignedDIDAuth('badChallenge', undefined, domain)
       const exchangeResponse = await app.request(path, {
         method: 'POST',
         body: JSON.stringify(didAuth),
@@ -377,7 +377,7 @@ describe('api', function () {
       // strip out the host because we are using supertest
       const continuationURIPath = new URL(continuationURI).pathname
       const randomId = `did:ex:${crypto.randomUUID()}`
-      const didAuth = await getSignedDIDAuth(challenge, randomId)
+      const didAuth = await getSignedDIDAuth(challenge, randomId, vpr.domain)
 
       const continuationResponse = await app.request(continuationURIPath, {
         method: 'POST',
@@ -420,7 +420,7 @@ describe('api', function () {
       const continuationURIPath = new URL(continuationURI).pathname
       // holder defaults to the signing key's controller, so the self-asserted
       // holder matches the proof signer (the binding the issuer enforces).
-      const didAuth = await getSignedDIDAuth(challenge)
+      const didAuth = await getSignedDIDAuth(challenge, undefined, vpr.domain)
 
       const continuationResponse = await app.request(continuationURIPath, {
         method: 'POST',
@@ -499,7 +499,7 @@ describe('single-use exchange enforcement', function () {
     const vpr = (await initResponse.json())
       ?.verifiablePresentationRequest as App.VPR
     const challenge = vpr.challenge
-    const didAuth = await getSignedDIDAuth(challenge)
+    const didAuth = await getSignedDIDAuth(challenge, undefined, vpr.domain)
 
     // First completion — should succeed
     const firstResponse = await app.request(path, {
@@ -531,7 +531,7 @@ describe('single-use exchange enforcement', function () {
     })
     const vpr = (await initResponse.json())
       ?.verifiablePresentationRequest as App.VPR
-    const didAuth = await getSignedDIDAuth(vpr.challenge)
+    const didAuth = await getSignedDIDAuth(vpr.challenge, undefined, vpr.domain)
 
     await app.request(path, {
       method: 'POST',
@@ -563,7 +563,7 @@ describe('single-use exchange enforcement', function () {
       ?.verifiablePresentationRequest as App.VPR
     // Sign with the test key but self-assert an unrelated holder DID.
     const spoofedHolder = `did:ex:${crypto.randomUUID()}`
-    const didAuth = await getSignedDIDAuth(vpr.challenge, spoofedHolder)
+    const didAuth = await getSignedDIDAuth(vpr.challenge, spoofedHolder, vpr.domain)
 
     await app.request(path, {
       method: 'POST',
@@ -596,7 +596,7 @@ describe('single-use exchange enforcement', function () {
     })
     const vpr = (await initResponse.json())
       ?.verifiablePresentationRequest as App.VPR
-    const didAuth = await getSignedDIDAuth(vpr.challenge)
+    const didAuth = await getSignedDIDAuth(vpr.challenge, undefined, vpr.domain)
 
     await app.request(path, {
       method: 'POST',
@@ -628,7 +628,7 @@ describe('single-use exchange enforcement', function () {
     })
     const vpr = (await initResponse.json())
       ?.verifiablePresentationRequest as App.VPR
-    const didAuth = await getSignedDIDAuth(vpr.challenge)
+    const didAuth = await getSignedDIDAuth(vpr.challenge, undefined, vpr.domain)
 
     const firstResponse = await app.request(path, {
       method: 'POST',
@@ -705,6 +705,6 @@ const doSetupWithDirectDeepLink = async (app: AppType) => {
     headers: { 'Content-Type': 'application/json' }
   })
   const initBody = (await initResponse.json()) as Record<string, unknown>
-  const challenge = (initBody.verifiablePresentationRequest as Record<string, unknown>).challenge as string
-  return { path, challenge }
+  const { challenge, domain } = initBody.verifiablePresentationRequest as App.VPR
+  return { path, challenge, domain }
 }

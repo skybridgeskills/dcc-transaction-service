@@ -31,10 +31,12 @@ export const initializeKeyAndSuite = async () => {
   suite = new Ed25519Signature2020({ key })
 }
 
-// Helper funtion for health check and unit tests
+// Helper funtion for health check and unit tests. `domain` is what the proof
+// signs; `undefined` signs none, as LCW's legacy claim flow does.
 export const getSignedDIDAuth = async (
   challenge: string,
-  customHolder: string | undefined = undefined
+  customHolder: string | undefined = undefined,
+  domain: string | undefined = undefined
 ) => {
   await initializeKeyAndSuite()
   const holder = customHolder ?? key?.controller
@@ -43,6 +45,7 @@ export const getSignedDIDAuth = async (
     presentation,
     suite,
     challenge,
+    ...(domain !== undefined && { domain }),
     documentLoader: signingDocumentLoader
   })
 }
@@ -50,7 +53,7 @@ export const getSignedDIDAuth = async (
 /**
  * `compatLog` carries the synthetic CheckResult entries emitted by the
  * compatibility-fix pipeline. With verifier-core 2.x the verifier's own
- * folded results live in the regular `presentationResults` /
+ * results live in the regular `presentationResults` /
  * `credentialResults` arrays and no longer need to be duplicated into a
  * debug-only side-channel; this field surfaces the small set of
  * compat-fix log entries (e.g. envelope wrapping, Ed25519Signature2020
@@ -58,7 +61,17 @@ export const getSignedDIDAuth = async (
  * is enabled.
  */
 export type DidAuthVerificationResult =
-  | { verified: true; holder?: string; compatLog?: App.CheckResult[] }
+  | {
+      verified: true
+      holder?: string
+      compatLog?: App.CheckResult[]
+      /**
+       * True when the proof carried no `domain` and was accepted under
+       * {@link DidAuthDomain}'s `absentAccepted` variant. The caller
+       * journals it: accommodated routes record themselves.
+       */
+      domainAbsentAccepted?: true
+    }
   | {
       verified: false
       problemDetails: ProblemDetail[]
@@ -83,6 +96,22 @@ const deriveHolderFromProof = (
   presentation: Record<string, unknown>,
   challenge: string
 ): string | undefined => {
+  const auth = authenticationProofOf(presentation, challenge)
+  if (!auth) return undefined
+  const vm = auth.verificationMethod
+  if (typeof vm !== 'string' || vm.length === 0) return undefined
+  const hashIndex = vm.indexOf('#')
+  return hashIndex === -1 ? vm : vm.slice(0, hashIndex)
+}
+
+/**
+ * The DID-auth proof on a presentation: the `authentication` proof, else the
+ * one carrying the challenge, else the first.
+ */
+const authenticationProofOf = (
+  presentation: Record<string, unknown>,
+  challenge: string
+): Record<string, unknown> | undefined => {
   const isObj = (p: unknown): p is Record<string, unknown> =>
     !!p && typeof p === 'object'
   const proof = (presentation as { proof?: unknown }).proof
@@ -91,12 +120,24 @@ const deriveHolderFromProof = (
     proofs.find((p) => isObj(p) && p.proofPurpose === 'authentication') ??
     proofs.find((p) => isObj(p) && p.challenge === challenge) ??
     proofs[0]
-  if (!isObj(auth)) return undefined
-  const vm = auth.verificationMethod
-  if (typeof vm !== 'string' || vm.length === 0) return undefined
-  const hashIndex = vm.indexOf('#')
-  return hashIndex === -1 ? vm : vm.slice(0, hashIndex)
+  return isObj(auth) ? auth : undefined
 }
+
+/**
+ * The `domain` a DID-auth presentation's proof is checked against.
+ *
+ * - A string: the proof must sign exactly this `domain`. Missing or
+ *   different is refused.
+ * - `{ absentAccepted: true, expected }`: the claim bare-VP doorway ONLY. A
+ *   proof with no `domain` is verified on its challenge alone; a proof that
+ *   carries a `domain` must equal `expected`, so a relayed proof is still
+ *   refused.
+ *
+ * ⚠️ **Required, with no default, and the exception is a named variant
+ * rather than an omitted value.** Every caller states the value the wallet
+ * was given; a forgotten argument must not quietly mean "unchecked".
+ */
+export type DidAuthDomain = string | { absentAccepted: true; expected: string }
 
 function problemDetailsFromChecks(
   results: ReadonlyArray<{ outcome: App.CheckResult['outcome'] }>
@@ -137,10 +178,12 @@ function problemDetailsFromChecks(
 export const verifyDIDAuth = async ({
   presentation,
   challenge,
+  domain,
   debug = false
 }: {
   presentation: unknown
   challenge: string
+  domain: DidAuthDomain
   debug?: boolean
 }): Promise<DidAuthVerificationResult> => {
   const compatLog: App.CheckResult[] = []
@@ -161,9 +204,18 @@ export const verifyDIDAuth = async ({
   // assert.ts JSDoc on JsonLdField mutation and signature canonicalization).
   assertValidVerifiablePresentationStructure(refinedPresentation)
 
+  // The doorway's exception applies only when the DID-auth proof carries no
+  // `domain` at all; one that carries any `domain` is held to the expected
+  // value, like every other route.
+  const domainAbsentAccepted =
+    typeof domain !== 'string' &&
+    authenticationProofOf(refinedPresentation, challenge)?.domain === undefined
+  const expected = typeof domain === 'string' ? domain : domain.expected
+
   const result = await getVerifier().verifyPresentation({
     presentation: refinedPresentation,
-    challenge
+    challenge,
+    ...(!domainAbsentAccepted && { domain: expected })
   })
 
   const verifierChecks = result.presentationResults
@@ -174,7 +226,8 @@ export const verifyDIDAuth = async ({
     return {
       verified: true,
       ...(holder ? { holder } : {}),
-      ...(exposed ? { compatLog: exposed } : {})
+      ...(exposed ? { compatLog: exposed } : {}),
+      ...(domainAbsentAccepted && { domainAbsentAccepted: true as const })
     }
   }
 

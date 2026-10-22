@@ -9,8 +9,6 @@ const VALID_WORKFLOWS = ['didAuth', 'claim', 'verify'] as const
 /**
  * Caller-friendly verifier-core options surfaced as CLI flags.
  *
- * - {@link verbose} (`-v` / `--verbose`) requests every check that
- *   ran on `results[]` instead of just failures + explicit skips.
  * - {@link timing} (`-t` / `--timing`) requests `TaskTiming`
  *   rollups on every check, suite, and call.
  *
@@ -19,9 +17,12 @@ const VALID_WORKFLOWS = ['didAuth', 'claim', 'verify'] as const
  * keeps the flag surface one thing a caller has to learn rather
  * than a per-workflow table, and a workflow that later gains a
  * verifier pass needs no new flag.
+ *
+ * There is no `--verbose`: verifier-core 2.0 always returns every
+ * check that ran, and the service refuses `options.verbose`. `-v` is
+ * deliberately left unassigned rather than reused for something else.
  */
 export interface VerifierCliOptions {
-  verbose?: boolean
   timing?: boolean
 }
 
@@ -54,8 +55,8 @@ export interface CliArgs {
  * an invalid workflow id (the caller treats `null` as "exit 1
  * after printUsage / explanation").
  *
- * Uses `node:util.parseArgs` so cluster-form short flags (`-vt`)
- * and `--verbose=…`-style assignments work without bespoke
+ * Uses `node:util.parseArgs` so short flags (`-t`) and
+ * `--protocol-profile=…`-style assignments work without bespoke
  * tokenizing.
  */
 export function parseArgs(argv: string[]): CliArgs | null {
@@ -73,7 +74,6 @@ export function parseArgs(argv: string[]): CliArgs | null {
       options: {
         open: { type: 'boolean', default: true },
         'no-open': { type: 'boolean', default: false },
-        verbose: { type: 'boolean', short: 'v', default: false },
         timing: { type: 'boolean', short: 't', default: false },
         'protocol-profile': { type: 'string' }
       },
@@ -101,7 +101,6 @@ export function parseArgs(argv: string[]): CliArgs | null {
   // Conditional spread keeps absent flags from later clobbering
   // profile-set `true` values during the merge in main().
   const options: VerifierCliOptions = {
-    ...(parsed.values.verbose === true && { verbose: true }),
     ...(parsed.values.timing === true && { timing: true })
   }
 
@@ -130,7 +129,6 @@ Usage: pnpm transaction <workflowId> [profileName] [options]
 
 Options:
   --no-open       Don't auto-open the interaction URL in the browser
-  -v, --verbose   Request unfolded verifier results (every check, not just failures)
   -t, --timing    Request timing data on every check, suite, and call
   --protocol-profile <name>
                   Registered protocol profile to run the exchange under, by
@@ -147,7 +145,7 @@ Examples:
   pnpm transaction didAuth
   pnpm transaction claim ob3
   pnpm transaction verify ob3 --no-open
-  pnpm transaction verify ob3 -vt
+  pnpm transaction verify ob3 -t
   pnpm transaction verify ob3 --protocol-profile vcapi-vpr-bare-origin-domain
 `)
 }
@@ -179,8 +177,8 @@ export async function loadProfile(
  *
  * CLI flags take precedence on a per-key basis, but {@link parseArgs}
  * only emits keys for flags that were actually passed — so a profile
- * setting (e.g. `options.verbose: true`) is preserved when the user
- * doesn't pass `-v`. Returns `undefined` instead of an empty object
+ * setting (e.g. `options.timing: true`) is preserved when the user
+ * doesn't pass `-t`. Returns `undefined` instead of an empty object
  * so the schema's `optional` semantics stay exact.
  */
 export function mergeVerifierOptions(

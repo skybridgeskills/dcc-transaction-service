@@ -46,13 +46,16 @@ describe('parseArgs', () => {
 })
 
 describe('parseArgs — verifier-core option flags', () => {
-  test('-v / --verbose sets options.verbose', () => {
-    expect(
-      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-v'])?.options
-    ).toEqual({ verbose: true })
-    expect(
-      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '--verbose'])?.options
-    ).toEqual({ verbose: true })
+  test('-v / --verbose are refused (removed with verifier-core 2.0)', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-v'])).toBeNull()
+      expect(
+        parseArgs(['node', 'cli.ts', 'verify', 'ob3', '--verbose'])
+      ).toBeNull()
+    } finally {
+      errSpy.mockRestore()
+    }
   })
 
   test('-t / --timing sets options.timing', () => {
@@ -64,32 +67,15 @@ describe('parseArgs — verifier-core option flags', () => {
     ).toEqual({ timing: true })
   })
 
-  test('-v -t and --verbose --timing both set both options', () => {
-    expect(
-      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-v', '-t'])?.options
-    ).toEqual({ verbose: true, timing: true })
-    expect(
-      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '--verbose', '--timing'])
-        ?.options
-    ).toEqual({ verbose: true, timing: true })
-  })
-
-  test('cluster-form -vt sets both options', () => {
-    expect(
-      parseArgs(['node', 'cli.ts', 'verify', 'ob3', '-vt'])?.options
-    ).toEqual({ verbose: true, timing: true })
-  })
-
   test('absent flags omit the corresponding key (no false in payload)', () => {
     const result = parseArgs(['node', 'cli.ts', 'verify', 'ob3'])
     expect(result?.options).toEqual({})
-    expect('verbose' in (result?.options ?? {})).toBe(false)
     expect('timing' in (result?.options ?? {})).toBe(false)
   })
 
   test('flags accepted on every workflow', () => {
-    expect(parseArgs(['node', 'cli.ts', 'didAuth', '-v'])?.options).toEqual({
-      verbose: true
+    expect(parseArgs(['node', 'cli.ts', 'didAuth', '-t'])?.options).toEqual({
+      timing: true
     })
     expect(
       parseArgs(['node', 'cli.ts', 'claim', 'ob3', '-t'])?.options
@@ -140,7 +126,7 @@ describe('parseArgs — --protocol-profile', () => {
         'cli.ts',
         'claim',
         'ob3',
-        '-vt',
+        '-t',
         '--protocol-profile',
         'vcapi-vpr-no-accepted-cryptosuites'
       ])
@@ -149,7 +135,7 @@ describe('parseArgs — --protocol-profile', () => {
       profileName: 'ob3',
       open: true,
       protocolProfileName: 'vcapi-vpr-no-accepted-cryptosuites',
-      options: { verbose: true, timing: true }
+      options: { timing: true }
     })
   })
 
@@ -173,21 +159,15 @@ describe('mergeVerifierOptions', () => {
   })
 
   test('preserves profile-set options when CLI omits them', () => {
-    expect(mergeVerifierOptions({ options: { verbose: true } }, {})).toEqual({
-      verbose: true
+    expect(mergeVerifierOptions({ options: { timing: true } }, {})).toEqual({
+      timing: true
     })
   })
 
-  test('CLI-set options layer on top of profile options', () => {
+  test('CLI -t with profile options.timing=true preserves true (no clobber)', () => {
     expect(
-      mergeVerifierOptions({ options: { verbose: true } }, { timing: true })
-    ).toEqual({ verbose: true, timing: true })
-  })
-
-  test('CLI -v with profile options.verbose=true preserves true (no clobber)', () => {
-    expect(
-      mergeVerifierOptions({ options: { verbose: true } }, { verbose: true })
-    ).toEqual({ verbose: true })
+      mergeVerifierOptions({ options: { timing: true } }, { timing: true })
+    ).toEqual({ timing: true })
   })
 })
 
@@ -202,10 +182,10 @@ describe('--help mentions the new flags', () => {
     logSpy.mockRestore()
   })
 
-  test('lists -v/--verbose and -t/--timing under Options', () => {
+  test('lists -t/--timing under Options, and no longer -v/--verbose', () => {
     parseArgs(['node', 'cli.ts', '--help'])
     const printed = logSpy.mock.calls.map((c) => String(c[0])).join('\n')
-    expect(printed).toMatch(/-v, --verbose/)
+    expect(printed).not.toMatch(/--verbose/)
     expect(printed).toMatch(/-t, --timing/)
   })
 

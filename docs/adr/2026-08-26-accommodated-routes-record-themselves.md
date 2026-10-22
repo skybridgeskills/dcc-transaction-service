@@ -173,3 +173,20 @@ record has to carry it.
   dialect or concession; elective or variant; how the strict route stays
   exercised; and what it costs to read a result on this arm. The register spells
   this out.
+
+## Update — 2026-10-21: the bare-VP doorway accepts a proof with no `domain`
+
+The original decision text above is unchanged. This records one exception the
+claim `bare-vp` doorway now makes to "the exchange is processed identically on
+both routes".
+
+Claim, didAuth and VC-API verify now check the VP proof's `domain` against the
+`domain` stamped on the exchange at creation, and refuse a proof that carries
+none. The Learner Credential Wallet's legacy claim flow — the only client of
+this doorway, and its only DID-bound claim path — signs no `domain`. So on the
+doorway only, a proof with **no** `domain` is accepted on its challenge, and a
+proof that **carries** a `domain` must still match. The rule of this ADR holds
+for the exception too: each acceptance is journalled as its own
+`accommodation-served` line, `accommodation: 'bare-vp-domain-absent-accepted'`,
+so the record shows which completions relied on it. See
+[`docs/accommodations.md`](../accommodations.md) § `bare-vp-participate-response`.

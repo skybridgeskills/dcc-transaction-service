@@ -365,6 +365,65 @@ describe('OID4VP · POST /openid4vp/response (direct_post)', () => {
     expect(body.error).toBe('invalid_presentation')
   })
 
+  /**
+   * ⚠️ verifier-core now enforces `domain` too, but compares it as a single
+   * string. A string `domain` is handed to it as `client_id`; an array that
+   * `bindsAudience` accepted (the Data Integrity spec allows one) is not, so a
+   * proof accepted before verifier-core checked `domain` is not refused now.
+   */
+  describe('the domain verifier-core is asked to enforce', () => {
+    const recordingVerifier = () => {
+      const seen: Array<Record<string, unknown>> = []
+      resetVerifier({
+        verifyPresentation: async (call) => {
+          seen.push(call as unknown as Record<string, unknown>)
+          return createMockVerifierCoreResult(true, true)
+        },
+        verifyCredential: async () => {
+          throw new Error('not used')
+        }
+      })
+      return seen
+    }
+
+    test('a string domain is passed as the client_id', async () => {
+      const seen = recordingVerifier()
+      const exchangeId = await createVerifyExchange()
+      const { state, nonce } = await primeRequest(exchangeId)
+      const vp = buildBoundVp(nonce, clientIdFor(exchangeId))
+
+      const response = await postJson(exchangeId, {
+        vp_token: { credential: [vp] },
+        state
+      })
+
+      expect(response.status).toBe(200)
+      expect(seen[0]).toMatchObject({ domain: clientIdFor(exchangeId) })
+    })
+
+    test('an array domain containing the client_id is accepted, verified challenge-only', async () => {
+      const seen = recordingVerifier()
+      const exchangeId = await createVerifyExchange()
+      const { state, nonce } = await primeRequest(exchangeId)
+      const vp = buildBoundVp(nonce, 'unused')
+      const bound = {
+        ...vp,
+        proof: {
+          ...vp.proof,
+          domain: ['https://other.example', clientIdFor(exchangeId)]
+        }
+      }
+
+      const response = await postJson(exchangeId, {
+        vp_token: { credential: [bound] },
+        state
+      })
+
+      expect(response.status).toBe(200)
+      expect('domain' in seen[0]!).toBe(false)
+    })
+  })
+
   test('rejects a malformed vp_token (invalid_request)', async () => {
     const exchangeId = await createVerifyExchange()
     const { state } = await primeRequest(exchangeId)

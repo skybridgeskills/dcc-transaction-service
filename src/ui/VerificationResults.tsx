@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import {
   CredentialCard,
   PresentationCard,
@@ -16,9 +16,11 @@ import {
  * present anywhere in `result`. Mounts the compat-log panel only
  * when the exchange was created with `variables.debug === true`.
  *
- * `variables.options.verbose` flips child components into "all
- * checks" detail mode (without it, detail lists show only failures
- * and explicit skips).
+ * "Show all checks" flips child components into "all checks" detail
+ * mode (without it, detail lists show only failures and explicit
+ * `.applies` skips). ⚠️ Display-only, local state: `results[]`
+ * always carries every check that ran, so nothing is re-fetched,
+ * persisted, or sent to the server when it changes.
  */
 export function VerificationResults({
   result,
@@ -30,19 +32,31 @@ export function VerificationResults({
   variables?: Pick<App.BaseVariables, 'options' | 'debug'>
 }) {
   const showDetails = features?.details !== false
-  const verbose = variables?.options?.verbose === true
+  const [showAll, setShowAll] = useState(false)
   const debug = variables?.debug === true
 
   return (
     <div>
       <PresentationCard result={result} />
+      {showDetails ? (
+        <label style={toggleStyle}>
+          <input
+            type="checkbox"
+            data-testid="show-all-checks"
+            checked={showAll}
+            onChange={(e) => setShowAll(e.target.checked)}
+          />{' '}
+          Show all checks
+        </label>
+      ) : null}
       {result.credentialResults.map((cr, i) => (
         <CredentialCard
           key={i}
           cr={cr}
           index={i}
           showDetails={showDetails}
-          verbose={verbose}
+          showAll={showAll}
+          issuerValidation={result.issuerValidation}
         />
       ))}
       {anyTiming(result) ? <TimingPanel result={result} /> : null}
@@ -73,8 +87,8 @@ function CompatLogPanel({ log }: { log: App.CheckResult[] }) {
       <p style={panelHeader}>Compatibility fixes applied</p>
       <ul style={listStyle}>
         {log.map((entry, i) => (
-          <li key={`${entry.id ?? entry.check}-${i}`} style={itemStyle}>
-            <code style={codeStyle}>{entry.id ?? entry.check}</code>
+          <li key={`${entry.id}-${i}`} style={itemStyle}>
+            <code style={codeStyle}>{entry.id}</code>
             {entry.outcome.status === 'success' ? (
               <span style={{ color: '#374151' }}> — {entry.outcome.message}</span>
             ) : null}
@@ -83,6 +97,16 @@ function CompatLogPanel({ log }: { log: App.CheckResult[] }) {
       </ul>
     </section>
   )
+}
+
+const toggleStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  marginTop: '12px',
+  fontSize: '0.8125rem',
+  color: '#374151',
+  cursor: 'pointer'
 }
 
 const panelHeader: CSSProperties = {

@@ -83,20 +83,21 @@ export const exchangeBatchSchema = z
  * for the exchange's lifetime. Set once at exchange creation and read
  * (with `false` defaults) at each verifier call site.
  *
- * - `verbose` — if true, verifier-core's per-call `verbose: true` is
- *   passed through, surfacing every check that ran (not just failures
- *   and explicit skips). Default `false`.
  * - `timing` — if true, verifier-core attaches `timing: TaskTiming`
  *   on every `CheckResult`, every `SuiteSummary`, and the result
  *   root. Default `false`.
  *
  * `.strict()` rejects unknown nested keys at parse time, so a typo
- * like `{ options: { verbos: true } }` fails validation rather than
+ * like `{ options: { timng: true } }` fails validation rather than
  * silently doing nothing.
+ *
+ * ⚠️ There is no `verbose`. verifier-core 2.0 removed it: `results[]`
+ * always carries every check that ran. A caller still sending
+ * `options.verbose` is refused by `.strict()` rather than silently
+ * ignored — do not re-add it as an accepted no-op.
  */
 export const verifierOptionsSchema = z
   .object({
-    verbose: z.boolean().optional(),
     timing: z.boolean().optional()
   })
   .strict()
@@ -121,7 +122,7 @@ export const baseVariablesSchema = z.object({
   debug: z.boolean().optional(),
 
   /**
-   * Verifier-call knobs (`verbose`, `timing`); see
+   * Verifier-call knobs (`timing`); see
    * {@link verifierOptionsSchema}. Resolved once per call site with
    * `false` defaults — both the synchronous verify pass and the
    * asynchronous Open Badges worker pass read from this same object so
@@ -137,6 +138,13 @@ export const baseVariablesSchema = z.object({
   vprCredentialType: z.array(z.string()).optional(),
   trustedIssuers: z.array(z.string()).optional(),
   trustedRegistries: z.array(z.string()).optional(),
+  /**
+   * Make issuer trust decide the outcome: an issuer neither on
+   * `trustedIssuers` nor listed by a consulted registry makes the exchange
+   * `invalid`. Default `false`, under which issuer trust is only a warning
+   * on `issuerValidation`. The only way trust affects state.
+   */
+  requireTrustedIssuer: z.boolean().optional(),
   vprClaims: z
     .array(
       z.object({

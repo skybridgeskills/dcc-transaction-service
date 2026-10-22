@@ -621,8 +621,9 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
     expect(nonceResp.status).toBe(200)
     const { c_nonce } = (await nonceResp.json()) as { c_nonce: string }
 
-    // 4. Sign a DI VP bound to c_nonce as the di_vp key proof
-    const vp = await getSignedDIDAuth(c_nonce)
+    // 4. Sign a DI VP bound to c_nonce as the di_vp key proof, with the
+    //    Credential Issuer Identifier as its `domain` (OID4VCI 1.0 App. F.2)
+    const vp = await getSignedDIDAuth(c_nonce, undefined, offer.credential_issuer)
 
     // 5. Credential Request
     const credResp = await app.request(
@@ -688,7 +689,11 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
           { method: 'POST' }
         )
       ).json()) as { c_nonce: string }
-      const vp = await getSignedDIDAuth(c_nonce)
+      const vp = await getSignedDIDAuth(
+        c_nonce,
+        undefined,
+        offer.credential_issuer
+      )
       return app.request(
         `/workflows/claim/exchanges/${exchangeId}/openid/credential`,
         {
@@ -747,7 +752,11 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
 
     // Signed by the test key, but claiming a holder DID the signer does not
     // control. Must be rejected rather than issuing to the unowned DID.
-    const vp = await getSignedDIDAuth(c_nonce, 'did:example:victim')
+    const vp = await getSignedDIDAuth(
+      c_nonce,
+      'did:example:victim',
+      offer.credential_issuer
+    )
     const resp = await app.request(
       `/workflows/claim/exchanges/${exchangeId}/openid/credential`,
       {
@@ -822,6 +831,80 @@ describe('OID4VCI · POST /openid/credential — full pre-authorized flow', () =
     expect(resp.status).toBe(400)
     const body = (await resp.json()) as { error: string }
     expect(body.error).toBe('invalid_nonce')
+  })
+
+  /**
+   * ⚠️ OID4VCI 1.0 Appendix F.2, `di_vp` Proof Type: "`domain`: REQUIRED. MUST
+   * be set to the Credential Issuer Identifier." Ours is the per-exchange
+   * service endpoint, NOT the bare host a claim exchange's VC-API VPR asks for.
+   */
+  describe('di_vp domain', () => {
+    const requestSignedWith = async (
+      domainFor: (credentialIssuer: string, exchangeHost: string) => string | undefined
+    ) => {
+      const { exchangeId } = await createClaimExchange()
+      const offer = credentialOfferSchema.parse(
+        await (
+          await app.request(
+            `/workflows/claim/exchanges/${exchangeId}/openid/credential-offer`
+          )
+        ).json()
+      )
+      const code = offer.grants[PRE_AUTHORIZED_GRANT]['pre-authorized_code']
+      const { access_token } = (await (
+        await app.request(`/workflows/claim/exchanges/${exchangeId}/openid/token`, {
+          method: 'POST',
+          body: new URLSearchParams({
+            grant_type: PRE_AUTHORIZED_GRANT,
+            'pre-authorized_code': code
+          }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        })
+      ).json()) as { access_token: string }
+      const { c_nonce } = (await (
+        await app.request(`/workflows/claim/exchanges/${exchangeId}/openid/nonce`, {
+          method: 'POST'
+        })
+      ).json()) as { c_nonce: string }
+      const exchangeHost = new URL(offer.credential_issuer).origin
+      const vp = await getSignedDIDAuth(
+        c_nonce,
+        undefined,
+        domainFor(offer.credential_issuer, exchangeHost)
+      )
+      return app.request(`/workflows/claim/exchanges/${exchangeId}/openid/credential`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          credential_configuration_id: 'OpenBadgeCredential',
+          proofs: { di_vp: [vp] }
+        })
+      })
+    }
+
+    test('the Credential Issuer Identifier as domain issues the credential', async () => {
+      const resp = await requestSignedWith((credentialIssuer) => credentialIssuer)
+      expect(resp.status).toBe(200)
+    })
+
+    test('no domain is invalid_proof, and says the domain is why', async () => {
+      const resp = await requestSignedWith(() => undefined)
+      expect(resp.status).toBe(400)
+      const body = (await resp.json()) as { error: string; error_description: string }
+      expect(body.error).toBe('invalid_proof')
+      expect(body.error_description).toContain('Credential Issuer Identifier')
+    })
+
+    test("the claim exchange's bare-host VC-API domain is invalid_proof", async () => {
+      const resp = await requestSignedWith((_issuer, exchangeHost) => exchangeHost)
+      expect(resp.status).toBe(400)
+      const body = (await resp.json()) as { error: string; error_description: string }
+      expect(body.error).toBe('invalid_proof')
+      expect(body.error_description).toContain('Credential Issuer Identifier')
+    })
   })
 
   test('returns 401 with no Bearer header', async () => {

@@ -214,6 +214,15 @@ declare global {
       exchangeHost: string
       metadata?: Record<string, unknown>
       challenge: string // Used to authenticate presentations
+      /**
+       * The `domain` every Verifiable Presentation Request for this exchange
+       * carries, and the one a presented VP's authentication proof must
+       * sign. Stamped by the service at creation (`deriveDomain` in
+       * `lib/vpr-wire.ts`); never a client input — a value a client sends
+       * is overwritten. Read it through `expectedDomain`, never directly:
+       * exchanges created before it existed have none.
+       */
+      domain?: string
       results?: Record<string, unknown>
       /**
        * UI and client feature flags (short keys, string or boolean values).

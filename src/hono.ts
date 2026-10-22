@@ -478,8 +478,18 @@ type ParticipateContext = Context<
  * `route` is the only difference between them, and — as with
  * {@link tokenEndpointHandler} — it exists to be written down rather than to
  * change behaviour. The exchange is processed identically, the persisted record
- * is byte-identical on both arms, and the ONLY divergence is the envelope of
- * the response and one journal line.
+ * is byte-identical on both arms, and the divergence is the envelope of the
+ * response, the journal lines, and ONE stated exception below.
+ *
+ * ⚠️ **The one exception: a DID-auth proof with no `domain`.** The strict route
+ * refuses it. The doorway accepts it on its challenge alone, and journals that
+ * it did (`accommodation-served`, `bare-vp-domain-absent-accepted`), because
+ * the client it serves — the Learner Credential Wallet's legacy claim flow, its
+ * only DID-bound claim path — signs no `domain` at all. A proof that DOES carry
+ * a `domain` must still match the exchange's, on both routes, which keeps the
+ * relay protection the `domain` exists for. The policy is set HERE, by the
+ * route, for the same reason as the unwrap below: no caller reaching the claim
+ * workflow another way can arrive with the exception.
  *
  * ⚠️ **The accommodated route writes `accommodation-served`, and no strict
  * event it stands in for.** It still writes `submission` — via
@@ -531,7 +541,8 @@ const participateHandler =
       workflow: c.var.workflow,
       exchange,
       arm: 'vc-api',
-      attribution: requestAttribution(c)
+      attribution: requestAttribution(c),
+      domainPolicy: route === 'bare-vp' ? 'absent-accepted' : 'required'
     })
 
     return c.json(

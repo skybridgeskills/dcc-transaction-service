@@ -16,7 +16,10 @@ import { extractWalletCryptosuitesFromPresentation } from '../lib/issuer-selecti
 import { extractHolderDid } from '../lib/data/verifiable-presentation/extract-holder-did.js'
 import { verifyDIDAuth } from '../didAuth.js'
 import { signClaimCredentialFromHolderDid } from '../workflows/claimWorkflow.js'
-import { deriveCredentialConfigurationId } from './credential-offer.js'
+import {
+  credentialIssuerUrlForExchange,
+  deriveCredentialConfigurationId
+} from './credential-offer.js'
 import {
   credentialRequestSchema,
   type CredentialErrorCode,
@@ -134,6 +137,31 @@ const extractVpChallenge = (
   return undefined
 }
 
+/** Every `domain` the VP's proofs carry (absent ones as `undefined`). */
+const proofDomainsOf = (vp: Record<string, unknown>): unknown[] => {
+  const proof = (vp as { proof?: unknown }).proof
+  const proofs = Array.isArray(proof) ? proof : proof ? [proof] : []
+  return proofs.map((p) => (p as { domain?: unknown } | null)?.domain)
+}
+
+/**
+ * Why a `di_vp` proof was refused, worded so a wallet developer can tell a
+ * `domain` problem from a bad signature. Both are `invalid_proof` on the wire.
+ */
+const diVpRefusal = (
+  vp: Record<string, unknown>,
+  credentialIssuer: string
+): string => {
+  const domains = proofDomainsOf(vp)
+  if (domains.every((d) => d === undefined)) {
+    return `di_vp proof must carry \`domain\` set to the Credential Issuer Identifier (${credentialIssuer}), per OID4VCI 1.0 Appendix F.2.`
+  }
+  if (!domains.includes(credentialIssuer)) {
+    return `di_vp proof \`domain\` must be the Credential Issuer Identifier (${credentialIssuer}), per OID4VCI 1.0 Appendix F.2.`
+  }
+  return 'DIDAuth verification failed.'
+}
+
 export const handleCredentialRequest = async ({
   accessToken,
   body,
@@ -244,13 +272,24 @@ export const handleCredentialRequest = async ({
   let working = consumed.value.exchange
 
   const debug = exchange.variables.debug ?? config.defaultExchangeDebug
+  // ⚠️ OID4VCI 1.0 Appendix F.2, `di_vp` Proof Type: "`domain`: REQUIRED.
+  // MUST be set to the Credential Issuer Identifier." Ours is per exchange,
+  // and it is the service-endpoint form — NOT the bare host a claim exchange
+  // stamps as its VC-API `variables.domain`. Read through the same function
+  // that serves it as `credential_issuer`, so the two cannot disagree.
+  const credentialIssuer = credentialIssuerUrlForExchange(exchange)
   const didAuthResult = await verifyDIDAuth({
     presentation: vp as Record<string, unknown>,
     challenge,
+    domain: credentialIssuer,
     debug
   })
   if (!didAuthResult.verified) {
-    return err(400, 'invalid_proof', 'DIDAuth verification failed.')
+    return err(
+      400,
+      'invalid_proof',
+      diVpRefusal(vp as Record<string, unknown>, credentialIssuer)
+    )
   }
 
   // Bind the credential to the entity that cryptographically signed the

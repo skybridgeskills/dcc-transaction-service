@@ -19,6 +19,7 @@ import { variablesFeaturesFromConfig } from '../lib/exchange-ui-features.js'
 import { mintExchangeId } from '../lib/mint-exchange-id.js'
 import { callUpstreamService } from '../lib/upstream-call.js'
 import { journalExchangeEvent } from '../journal/index.js'
+import { deriveDomain, expectedDomain } from '../lib/vpr-wire.js'
 
 export const exchangeCreateSchemaClaim = vcApiExchangeCreateSchema.extend({
   variables: baseVariablesSchema.extend({
@@ -104,6 +105,9 @@ export const createExchangeClaim = ({
       new Date(Date.now() + config.exchangeTtl * 1000).toISOString(),
     state: 'pending'
   }
+  // Stamped in the save creation already does; set after the spread, so a
+  // client-sent `domain` never survives.
+  exchange.variables.domain = deriveDomain(exchange, config)
   journalExchangeEvent(exchange, 'mint', {
     expires: exchange.expires,
     ...(data.exchangeIdPrefix
@@ -113,25 +117,54 @@ export const createExchangeClaim = ({
   return exchange
 }
 
+/**
+ * How a claim's DID-auth proof is held to the exchange's `domain`.
+ *
+ * - `'required'` — the proof must sign the stamped `domain`. Every route.
+ * - `'absent-accepted'` — the bare-VP doorway ONLY: a proof with no `domain`
+ *   is accepted on its challenge (and journalled); one with a wrong `domain`
+ *   is still refused. LCW's legacy claim flow, which that doorway serves,
+ *   signs no `domain` at all.
+ */
+export type ClaimDomainPolicy = 'required' | 'absent-accepted'
+
 export const participateInClaimExchange = async ({
   data,
   exchange,
   workflow,
-  config
+  config,
+  domainPolicy = 'required'
 }: {
   data: Record<string, unknown>
   exchange: App.ExchangeDetailClaim
   workflow: App.Workflow
   config: App.Config
+  /** ⚠️ Set to `'absent-accepted'` only by the bare-VP doorway. See {@link ClaimDomainPolicy}. */
+  domainPolicy?: ClaimDomainPolicy
 }) => {
   // This is the second step of the exchange, we will verify the DIDAuth and return the
   // previously stored data for the exchange.
   const debug = exchange.variables.debug ?? config.defaultExchangeDebug
+  const domain = expectedDomain(exchange)
   const didAuthResult = await verifyDIDAuth({
     presentation: data,
     challenge: exchange.variables.challenge,
+    domain:
+      domainPolicy === 'absent-accepted'
+        ? { absentAccepted: true, expected: domain }
+        : domain,
     debug
   })
+
+  // Accommodated routes record themselves: a submission accepted only
+  // because the doorway lets a domain-less proof through says so, so the
+  // record shows which completions relied on the exception.
+  if (didAuthResult.verified && didAuthResult.domainAbsentAccepted) {
+    journalExchangeEvent(exchange, 'accommodation-served', {
+      accommodation: 'bare-vp-domain-absent-accepted',
+      endpoint: 'participate'
+    })
+  }
 
   if (!didAuthResult.verified) {
     throw new HTTPException(401, {

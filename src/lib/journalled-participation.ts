@@ -37,6 +37,7 @@
  */
 import { HTTPException } from 'hono/http-exception'
 import { participateInExchange } from '../exchanges.js'
+import type { ClaimDomainPolicy } from '../workflows/claimWorkflow.js'
 import { journalExchangeEvent } from '../journal/index.js'
 
 /** The protocol arm a submission arrived on. */
@@ -55,7 +56,8 @@ export const participateAndJournal = async ({
   workflow,
   exchange,
   arm,
-  attribution
+  attribution,
+  domainPolicy
 }: {
   data: Record<string, unknown> | null | undefined
   config: App.Config
@@ -63,6 +65,8 @@ export const participateAndJournal = async ({
   exchange: App.ExchangeDetailBase
   arm: SubmissionArm
   attribution: Record<string, string>
+  /** Passed through to claim verification; see `ClaimDomainPolicy`. */
+  domainPolicy?: ClaimDomainPolicy
 }) => {
   // `hasBody` distinguishes the two things this route does. An empty body is
   // the initial step of an exchange (the wallet asking what we want), not a
@@ -83,7 +87,13 @@ export const participateAndJournal = async ({
   }
 
   try {
-    return await participateInExchange({ data, config, workflow, exchange })
+    return await participateInExchange({
+      data,
+      config,
+      workflow,
+      exchange,
+      domainPolicy
+    })
   } catch (error) {
     if (hasBody) journalRejection({ exchange, arm, error })
     throw error

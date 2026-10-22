@@ -27,7 +27,10 @@
  * §14.3 (`direct_post` security), §5.10 (error response).
  */
 import { HTTPException } from 'hono/http-exception'
-import { participateInVerifyExchange } from '../workflows/verifyWorkflow.js'
+import {
+  participateInVerifyExchange,
+  type VerifyPresentationDomain
+} from '../workflows/verifyWorkflow.js'
 import { saveExchange } from '../transactionManager.js'
 import { journalExchangeEvent } from '../journal/index.js'
 import { clientIdForExchange } from './authorization-request.js'
@@ -246,6 +249,11 @@ const proofsOf = (vp: Record<string, unknown>): Record<string, unknown>[] => {
  * True when some proof on the VP commits to `expectedClientId` as its
  * `domain` (a proof `domain` MAY be a single string or an array of
  * strings per the Data Integrity spec).
+ *
+ * ⚠️ Kept even though verifier-core now enforces `domain` too: this is what
+ * answers with the protocol's own `audience-binding-failed` rejection, and
+ * it is the only check that accepts the array form (see
+ * {@link domainForVerifier}).
  */
 const bindsAudience = (
   vp: Record<string, unknown>,
@@ -256,6 +264,25 @@ const bindsAudience = (
     if (Array.isArray(domain)) return domain.includes(expectedClientId)
     return domain === expectedClientId
   })
+
+/**
+ * The `domain` handed to verifier-core for a VP that {@link bindsAudience}
+ * accepted.
+ *
+ * ⚠️ verifier-core compares `domain` as a single string and cannot accept the
+ * array form the Data Integrity spec allows. So when every proof carrying
+ * `clientId` carries it as a string, verifier-core enforces it too; when the
+ * binding proof's `domain` is an array, the array was already checked above
+ * and verification runs on the challenge alone. No proof accepted before
+ * verifier-core checked `domain` is refused because it now does.
+ */
+const domainForVerifier = (
+  vp: Record<string, unknown>,
+  clientId: string
+): VerifyPresentationDomain =>
+  proofsOf(vp).some((p) => p.domain === clientId)
+    ? clientId
+    : { arrayContaining: clientId }
 
 /**
  * Coerce the wallet POST body (JSON or form-urlencoded) into the shape
@@ -499,7 +526,8 @@ export const handleOid4vpResponse = async ({
   const presentation = vp as Record<string, unknown>
 
   // 4. Audience binding: the VP proof MUST commit to our client_id as its
-  //    `domain` (verifier-core does not enforce this; we must).
+  //    `domain`. Checked here first so a mismatch is the protocol's own
+  //    rejection; verifier-core then enforces it again where it can.
   if (!bindsAudience(presentation, clientIdForExchange(working))) {
     return rejectPresentation(
       working,
@@ -518,7 +546,8 @@ export const handleOid4vpResponse = async ({
       data: presentation,
       exchange: working,
       workflow,
-      config
+      config,
+      domain: domainForVerifier(presentation, clientIdForExchange(working))
     })
 
     // 6. OID4VP direct_post success. Use snake_case `redirect_uri` per the

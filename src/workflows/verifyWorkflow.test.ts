@@ -571,7 +571,8 @@ describe('participateInVerifyExchange - VP validation', function () {
   const baseArgs = () => ({
     exchange: createMockExchange({ state: 'active' }),
     workflow: getWorkflow('verify'),
-    config: config.getConfig()
+    config: config.getConfig(),
+    domain: 'https://exchange.example/workflows/verify/exchanges/test'
   })
 
   test('rejects invalid VP structure with problemDetails', async function () {
@@ -1038,7 +1039,8 @@ describe('participateInVerifyExchange — sync/async branching', function () {
   const baseArgs = () => ({
     exchange: createMockExchange({ state: 'active' }),
     workflow: getWorkflow('verify'),
-    config: config.getConfig()
+    config: config.getConfig(),
+    domain: 'https://exchange.example/workflows/verify/exchanges/test'
   })
 
   beforeEach(() => {
@@ -1134,6 +1136,52 @@ describe('participateInVerifyExchange — sync/async branching', function () {
     expect(seen).toHaveLength(1)
     expect(seen[0]).toMatchObject({ timing: true })
     expect('verbose' in seen[0]).toBe(false)
+  })
+
+  test('forwards the expected domain to verifier-core', async () => {
+    const vc = nonObCredential()
+    const seen: Array<Record<string, unknown>> = []
+    resetVerifier({
+      verifyPresentation: async (call) => {
+        seen.push(call as unknown as Record<string, unknown>)
+        return buildPresentationResult([vc])
+      },
+      verifyCredential: async ({ credential }) =>
+        passingCredentialResult(credential)
+    })
+    const args = baseArgs()
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    expect(seen[0]).toMatchObject({ domain: args.domain })
+  })
+
+  /**
+   * ⚠️ OID4VP only: an array `domain` the handler's `bindsAudience` already
+   * accepted. verifier-core compares `domain` as a string and would refuse it,
+   * so the proof is verified on its challenge alone.
+   */
+  test('an arrayContaining domain is not handed to verifier-core', async () => {
+    const vc = nonObCredential()
+    const seen: Array<Record<string, unknown>> = []
+    resetVerifier({
+      verifyPresentation: async (call) => {
+        seen.push(call as unknown as Record<string, unknown>)
+        return buildPresentationResult([vc])
+      },
+      verifyCredential: async ({ credential }) =>
+        passingCredentialResult(credential)
+    })
+    const args = {
+      ...baseArgs(),
+      domain: { arrayContaining: 'x509_san_dns:verifier.example' }
+    }
+    await saveExchange(args.exchange)
+
+    await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
+
+    expect('domain' in seen[0]!).toBe(false)
   })
 
   test('omits verbose/timing keys when variables.options is unset', async () => {
@@ -1274,7 +1322,8 @@ describe('participateInVerifyExchange — end-to-end worker drain', () => {
   const baseArgs = () => ({
     exchange: createMockExchange({ state: 'active' }),
     workflow: getWorkflow('verify'),
-    config: config.getConfig()
+    config: config.getConfig(),
+    domain: 'https://exchange.example/workflows/verify/exchanges/test'
   })
 
   beforeEach(() => {

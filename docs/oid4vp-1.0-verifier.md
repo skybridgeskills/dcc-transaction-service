@@ -224,9 +224,19 @@ The VP proof MUST bind:
 
 The raw signed VP is passed byte-for-byte to `verifier-core` (it is never
 Zod-transformed), which validates the `challenge` cryptographically.
-`verifier-core` does **not** enforce the proof `domain`, so the response
-handler enforces the `domain`↔`client_id` audience binding itself before
-running verification.
+
+The `domain`↔`client_id` audience binding is checked twice:
+
+1. **By the response handler, first** (`bindsAudience`), so a mismatch is the
+   protocol's own `400 invalid_presentation` rejection rather than a failed
+   verification. A proof `domain` may be a string or, as the Data Integrity
+   spec allows, an array that contains the `client_id`.
+2. **By `verifier-core`**, which since 2.0 enforces an expected `domain` on the
+   presentation's authentication proof. ⚠️ It compares `domain` as a single
+   string, so `client_id` is handed to it only when the proof's `domain` is a
+   string. When it is an array that step 1 accepted, verification runs on the
+   challenge alone — the signature still covers the array — so no proof this
+   handler accepted before verifier-core checked `domain` is refused now.
 
 ## Wallet error responses
 
@@ -259,8 +269,9 @@ recognition of a distinct conformant message, not a shape-sniffing rescue of a m
   (replay guard). Stored inline under `variables.oid4vp`.
 - **`nonce`** — reuses the exchange's own `challenge` (no second nonce is
   minted); verified cryptographically against the VP proof.
-- **`domain`** — the response handler requires the VP proof `domain` to
-  equal `client_id`.
+- **`domain`** — the VP proof `domain` must equal `client_id` (or be an
+  array containing it). Checked by the response handler, then by
+  `verifier-core` for a string `domain`.
 - A `complete` exchange rejects further responses with `400`.
 
 ## Errors

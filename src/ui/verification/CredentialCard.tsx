@@ -11,20 +11,26 @@ import { groupByPhase, isPhaseAllSkipped, phaseOrder, type PhaseKey } from './he
  * `recognizedProfile` badge when verifier-core matched a
  * recognizer, then walks {@link phaseOrder} to render one
  * {@link PhaseRow} per `SuiteSummary` (skipping empty phases and phases where every suite is `skipped`).
+ *
+ * When `issuerValidation` covers this credential, one {@link TrustLine}
+ * under the header says whether its issuer is trusted, and by what.
  */
 export function CredentialCard({
   cr,
   index,
   showDetails,
-  showAll
+  showAll,
+  issuerValidation
 }: {
   cr: App.CredentialVerificationResult
   index: number
   showDetails: boolean
   showAll: boolean
+  issuerValidation?: App.IssuerValidation
 }) {
   const grouped = groupByPhase(cr)
   const title = credentialTitle(cr, index)
+  const trust = issuerValidation?.credentials.find((c) => c.index === index)
 
   return (
     <section data-testid="credential-card" style={cardStyle}>
@@ -37,6 +43,9 @@ export function CredentialCard({
           </span>
         ) : null}
       </header>
+      {issuerValidation && trust ? (
+        <TrustLine trust={trust} issuerValidation={issuerValidation} />
+      ) : null}
       {(phaseOrder as readonly PhaseKey[])
         .filter((p) => grouped[p].length > 0 && !isPhaseAllSkipped(grouped[p]))
         .map((p) => (
@@ -57,6 +66,70 @@ export function CredentialCard({
   )
 }
 
+/**
+ * One line of issuer trust for a credential.
+ *
+ * ⚠️ An untrusted issuer is a **warning** (amber), not an error: most
+ * issuers are in no registry this service can reach, and the human
+ * reading this decides what it means. It is only an error when the
+ * exchange set `requireTrustedIssuer`; the error styling carries that it
+ * decided the outcome, and the line says only that trust was required.
+ * A registry match shows the registry's own name for the issuer, which
+ * the credential cannot alter.
+ */
+function TrustLine({
+  trust,
+  issuerValidation
+}: {
+  trust: App.CredentialIssuerValidation
+  issuerValidation: App.IssuerValidation
+}) {
+  if (trust.onAllowlist) {
+    return (
+      <p data-testid="issuer-trust" style={trustNeutralStyle}>
+        Issuer on this exchange's allowlist
+      </p>
+    )
+  }
+  const match = trust.registryMatches[0]
+  if (match) {
+    return (
+      <p data-testid="issuer-trust" style={trustNeutralStyle}>
+        Listed by <strong>{match.registry}</strong>
+        {match.entityName ? (
+          <>
+            {' '}
+            as <strong>{match.entityName}</strong>
+          </>
+        ) : null}
+      </p>
+    )
+  }
+  const consulted = issuerValidation.consultedRegistries
+  const required = issuerValidation.requireTrustedIssuer
+  return (
+    <div
+      data-testid="issuer-trust"
+      role="status"
+      style={required ? trustRequiredStyle : trustWarningStyle}
+    >
+      <div>
+        {consulted.length > 0
+          ? `Issuer not found in ${consulted.join(', ')}`
+          : 'Issuer not on this exchange’s allowlist, and no registry was consulted'}
+      </div>
+      {trust.uncheckedRegistries.length > 0 ? (
+        <div>Could not check: {trust.uncheckedRegistries.join(', ')}</div>
+      ) : null}
+      {required ? (
+        <div style={{ fontWeight: 600 }}>
+          This exchange requires a trusted issuer.
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 const credentialTitle = (
   cr: App.CredentialVerificationResult,
   index: number
@@ -70,6 +143,29 @@ const credentialTitle = (
   if (typeof achName === 'string' && achName.length > 0) return achName
   if (typeof vc.id === 'string' && vc.id.length > 0) return vc.id
   return `Credential ${index + 1}`
+}
+
+const trustNeutralStyle: CSSProperties = {
+  margin: '0 0 8px',
+  fontSize: '0.8125rem',
+  color: '#374151'
+}
+
+const trustWarningStyle: CSSProperties = {
+  margin: '0 0 8px',
+  padding: '6px 10px',
+  borderRadius: '6px',
+  fontSize: '0.8125rem',
+  background: '#fffbeb',
+  border: '1px solid #fcd34d',
+  color: '#92400e'
+}
+
+const trustRequiredStyle: CSSProperties = {
+  ...trustWarningStyle,
+  background: '#fef2f2',
+  border: '1px solid #fca5a5',
+  color: '#991b1b'
 }
 
 const cardStyle: CSSProperties = {

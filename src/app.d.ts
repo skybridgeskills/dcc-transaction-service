@@ -595,13 +595,53 @@ declare global {
         missingClaims?: string[]
       }
 
-      /** Optional issuer validation details */
-      issuerValidation?: {
-        trustedIssuers: string[]
-        trustedRegistries: string[]
-        issuerFound: boolean
-        registryMatch: boolean
-      }
+      /**
+       * Issuer trust, per credential. Built by `deriveIssuerValidation`
+       * (`src/lib/verify-outcome.ts`) when the exchange set
+       * `trustedIssuers` or `requireTrustedIssuer`, or any credential's
+       * registry lookup ran.
+       *
+       * ⚠️ A warning unless the exchange opted in: an untrusted issuer
+       * changes exchange state only under `requireTrustedIssuer: true`.
+       */
+      issuerValidation?: IssuerValidation
+    }
+
+    /** What `verificationResult.issuerValidation` records for an exchange. */
+    interface IssuerValidation {
+      /** The exchange's `requireTrustedIssuer`, absent read as `false`. */
+      requireTrustedIssuer: boolean
+      /** The exchange's allowlist of issuer ids. */
+      trustedIssuers: string[]
+      /**
+       * Registry names consulted for this exchange: its own
+       * `trustedRegistries`, else the deployment default. Empty when no
+       * registry was consulted.
+       */
+      consultedRegistries: string[]
+      credentials: CredentialIssuerValidation[]
+    }
+
+    /** Issuer trust for one credential, `credentialResults[index]`. */
+    interface CredentialIssuerValidation {
+      index: number
+      /** The credential's issuer id; absent when the credential names none. */
+      issuer?: string
+      onAllowlist: boolean
+      /**
+       * Registries that list the issuer. `entityName` / `entityUrl` are what
+       * the registry says about the issuer — prefer them to the
+       * credential's own claims, which the issuer wrote.
+       */
+      registryMatches: Array<{
+        registry: string
+        entityName?: string
+        entityUrl?: string
+      }>
+      /** Consulted registries that could not be checked. */
+      uncheckedRegistries: string[]
+      /** `onAllowlist || registryMatches.length > 0`. */
+      trusted: boolean
     }
 
     /** Lifecycle status of the asynchronous verify-task pass for a verify exchange. */
@@ -661,6 +701,19 @@ declare global {
         vprCredentialType: string[]
         trustedIssuers: string[]
         trustedRegistries?: string[]
+        /**
+         * When true, an issuer that is neither on `trustedIssuers` nor
+         * matched by a consulted registry makes the exchange `invalid` —
+         * including when some registries could not be checked. Default
+         * `false`.
+         *
+         * ⚠️ The ONLY way issuer trust affects exchange state.
+         * `trustedRegistries` only chooses which registries are consulted
+         * and `trustedIssuers` is an allowlist; without this flag, an
+         * untrusted issuer is a warning on `issuerValidation`. Exchanges
+         * created before it existed have no value; absent means `false`.
+         */
+        requireTrustedIssuer?: boolean
         vprClaims: DcqlClaim[]
         /** Requested at exchange creation; copied onto `oid4vp.queryLanguage`. */
         /**

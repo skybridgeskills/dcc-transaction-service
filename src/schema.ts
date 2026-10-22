@@ -138,6 +138,13 @@ export const baseVariablesSchema = z.object({
   vprCredentialType: z.array(z.string()).optional(),
   trustedIssuers: z.array(z.string()).optional(),
   trustedRegistries: z.array(z.string()).optional(),
+  /**
+   * Make issuer trust decide the outcome: an issuer neither on
+   * `trustedIssuers` nor listed by a consulted registry makes the exchange
+   * `invalid`. Default `false`, under which issuer trust is only a warning
+   * on `issuerValidation`. The only way trust affects state.
+   */
+  requireTrustedIssuer: z.boolean().optional(),
   vprClaims: z
     .array(
       z.object({

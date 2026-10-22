@@ -192,13 +192,24 @@ export const createMockVerifierCoreResult = (
               fatal: true
             },
             {
-              id: 'trust.registry.issuer-registered',
+              id: 'trust.registry.issuer',
               suite: 'registry',
               outcome: {
                 status: 'success' as const,
-                message: 'Issuer found in DCC Sandbox Registry',
-                payload: { foundInRegistries: ['DCC Sandbox Registry'] }
-              }
+                message: 'Issuer found in registry: DCC Sandbox Registry',
+                payload: {
+                  matches: [
+                    {
+                      registry: {
+                        name: 'DCC Sandbox Registry',
+                        type: 'dcc-legacy' as const
+                      }
+                    }
+                  ],
+                  uncheckedRegistries: []
+                }
+              },
+              fatal: false
             }
           ]
         }

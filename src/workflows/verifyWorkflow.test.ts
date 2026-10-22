@@ -4,6 +4,7 @@ import type {
   CheckResult,
   CredentialVerificationResult,
   PresentationVerificationResult,
+  RegistryCheckPayload,
   Verifier
 } from '@digitalcredentials/verifier-core'
 import { getWorkflow } from '../workflows.js'
@@ -192,10 +193,39 @@ describe('applyVerificationResults', function () {
     expect(
       updatedExchange.variables.results!.default.issuerValidation
     ).toBeDefined()
-    expect(
-      updatedExchange.variables.results!.default.issuerValidation!
-        .issuerFound
-    ).toBe(true)
+    const iv = updatedExchange.variables.results!.default.issuerValidation!
+    expect(iv.credentials[0]).toMatchObject({
+      index: 0,
+      issuer: 'did:key:z6MkhVTX9BF3NGYX6cc7jWpbNnR7cAjH8LUffabZP8Qu4ysC',
+      onAllowlist: true,
+      trusted: true
+    })
+  })
+
+  test('requireTrustedIssuer defaults to false and round-trips', async function () {
+    const base = {
+      variables: {
+        tenantName: 'test',
+        vprContext: ['https://www.w3.org/ns/credentials/v2'],
+        vprCredentialType: ['VerifiableCredential'],
+        vprClaims: []
+      }
+    }
+    const omitted = createExchangeVerify({
+      data: validateExchangeVerify(base),
+      config: config.getConfig(),
+      workflow: getWorkflow('verify')
+    })
+    expect(omitted.variables.requireTrustedIssuer).toBe(false)
+
+    const set = createExchangeVerify({
+      data: validateExchangeVerify({
+        variables: { ...base.variables, requireTrustedIssuer: true }
+      }),
+      config: config.getConfig(),
+      workflow: getWorkflow('verify')
+    })
+    expect(set.variables.requireTrustedIssuer).toBe(true)
   })
 
   test('validates claims when specified', async function () {
@@ -1166,21 +1196,28 @@ describe('participateInVerifyExchange — sync/async branching', function () {
   })
 })
 
-describe('trusted-issuer registry-check filter', function () {
+describe('issuerValidation from the registry payload', function () {
   /**
-   * Phase 4 of `verifier-core-2-results-consumption` switched the
-   * registry-check filter from the deprecated `r.suite === 'registry'`
-   * test to `r.id?.startsWith('trust.registry.')`. These tests pin the
-   * id-based behavior so a regression to the legacy field is caught.
+   * verifier-core 2.0 reports registry matches as a `RegistryCheckPayload` on
+   * the `trust.registry.issuer` outcome. The stored record is built from that
+   * payload, never from the outcome's prose `message`.
    */
-  test('registry checks are recognized via dotted id, not legacy suite key', async () => {
+  test('a registry match is recorded with the registry\'s own name for the issuer', async () => {
     const exchange = createMockExchange({
       variables: {
         ...createMockExchange().variables,
-        trustedIssuers: ['did:key:zIssuerWithRegistryHit'],
         trustedRegistries: ['DCC Sandbox Registry']
       }
     })
+    const payload: RegistryCheckPayload = {
+      matches: [
+        {
+          registry: { name: 'DCC Sandbox Registry', type: 'dcc-legacy' },
+          entity: { name: 'Example University', url: 'https://example.edu' }
+        }
+      ],
+      uncheckedRegistries: []
+    }
     const result: PresentationVerificationResult = {
       verified: true,
       verifiablePresentation: {} as never,
@@ -1190,37 +1227,46 @@ describe('trusted-issuer registry-check filter', function () {
         {
           verified: true,
           verifiableCredential: {
-            issuer: 'did:key:zIssuerWithRegistryHit'
+            issuer: { id: 'did:key:zIssuerWithRegistryHit' }
           } as never,
-          summary: [
-            {
-              id: 'trust.registry',
-              phase: 'trust',
-              suite: 'registry',
-              status: 'success',
-              message: '1 of 1 checks passed',
-              counts: { passed: 1, failed: 0, skipped: 0 }
-            }
-          ],
+          summary: [],
           results: [
             {
-              id: 'trust.registry.issuer-registered',
+              id: 'trust.registry.issuer',
               suite: 'registry',
-              outcome: {
-                status: 'success',
-                message: 'Issuer found',
-                payload: { foundInRegistries: ['DCC Sandbox Registry'] }
-              } as never
+              outcome: { status: 'success', message: 'Issuer found', payload },
+              fatal: false
             }
           ]
         }
       ]
     }
 
-    const updated = await applyVerificationResults({ exchange, result })
+    const updated = await applyVerificationResults({
+      exchange,
+      result,
+      registries: [
+        { name: 'DCC Sandbox Registry', type: 'dcc-legacy', url: 'https://r.example' }
+      ]
+    })
 
     const iv = updated.variables.results!.default.issuerValidation!
-    expect(iv.issuerFound).toBe(true)
+    expect(iv.consultedRegistries).toEqual(['DCC Sandbox Registry'])
+    expect(iv.credentials[0]).toEqual({
+      index: 0,
+      issuer: 'did:key:zIssuerWithRegistryHit',
+      onAllowlist: false,
+      registryMatches: [
+        {
+          registry: 'DCC Sandbox Registry',
+          entityName: 'Example University',
+          entityUrl: 'https://example.edu'
+        }
+      ],
+      uncheckedRegistries: [],
+      trusted: true
+    })
+    expect(updated.state).toBe('complete')
   })
 })
 

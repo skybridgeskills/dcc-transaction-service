@@ -56,6 +56,7 @@ export function VerificationResults({
           index={i}
           showDetails={showDetails}
           showAll={showAll}
+          issuerValidation={result.issuerValidation}
         />
       ))}
       {anyTiming(result) ? <TimingPanel result={result} /> : null}

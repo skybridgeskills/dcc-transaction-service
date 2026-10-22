@@ -4,7 +4,10 @@ import {
   baseVariablesSchema,
   profileKnobConflicts
 } from '../schema.js'
-import { type PresentationVerificationResult } from '@digitalcredentials/verifier-core'
+import {
+  type EntityIdentityRegistry,
+  type PresentationVerificationResult
+} from '@digitalcredentials/verifier-core'
 import { isOpenBadgeCredential } from '@digitalcredentials/verifier-core/openbadges'
 import { z } from 'zod'
 import { newVerifyTask } from '../lib/verify-task/verify-task.js'
@@ -33,7 +36,7 @@ import {
 import { getVerifier } from '../lib/verifier.js'
 import {
   decideExchangeState,
-  isTrustRegistryCheck
+  deriveIssuerValidation
 } from '../lib/verify-outcome.js'
 import { applyFix } from '../compatibility/apply.js'
 import { prepareVcalmParticipationMessage } from '../compatibility/vcalm-participation-message/index.js'
@@ -59,6 +62,7 @@ export const exchangeCreateSchemaVerify = vcApiExchangeCreateSchema.extend({
     vprCredentialType: z.array(z.string()),
     trustedIssuers: z.array(z.string()).optional(),
     trustedRegistries: z.array(z.string()).optional(),
+    requireTrustedIssuer: z.boolean().optional(),
     vprClaims: z.array(
       z
         .object({
@@ -125,6 +129,7 @@ export const createExchangeVerify = ({
       vprCredentialType: data.variables.vprCredentialType,
       trustedIssuers: data.variables.trustedIssuers ?? [],
       trustedRegistries: data.variables.trustedRegistries ?? [],
+      requireTrustedIssuer: data.variables.requireTrustedIssuer ?? false,
       vprClaims: data.variables.vprClaims?.filter((c) => c !== undefined) ?? []
       // ⚠️ Do not re-spread the profile-superseded knobs here conditionally.
       // `...data.variables` above already carries them, so each conditional
@@ -374,56 +379,6 @@ const matchClaimsAgainstRequirements = (
 }
 
 /**
- * Validate trusted issuers against credential issuer.
- *
- * Searches the credential's verification results for registry suite checks
- * to determine if the issuer is in any trusted registries.
- */
-const validateTrustedIssuers = (
-  credential: Record<string, unknown>,
-  trustedIssuers: string[],
-  trustedRegistries: string[],
-  credentialResult: App.CredentialVerificationResult
-): { issuerFound: boolean; registryMatch: boolean } => {
-  const rawIssuer = credential.issuer
-  const issuer = (typeof rawIssuer === 'object' && rawIssuer !== null && 'id' in rawIssuer
-    ? (rawIssuer as Record<string, unknown>).id
-    : rawIssuer) as string
-  const issuerFound = trustedIssuers.includes(issuer)
-
-  // Find all registry suite checks in the results array
-  const registryChecks = credentialResult.results.filter(isTrustRegistryCheck)
-
-  // Check if issuer was found in any trusted registry
-  let registryMatch = false
-  for (const check of registryChecks) {
-    // Look for successful issuer registration checks
-    if (check.outcome.status === 'success') {
-      // Extract registry information from outcome if available
-      // The verifier-core may include foundInRegistries in the outcome
-      const outcome = check.outcome as {
-        status: 'success'
-        message: string
-        foundInRegistries?: string[]
-      }
-      if (outcome.foundInRegistries && outcome.foundInRegistries.length > 0) {
-        // Check if any of the found registries match our trusted registries
-        registryMatch = trustedRegistries.some((trusted) =>
-          outcome.foundInRegistries!.includes(trusted)
-        )
-        if (registryMatch) break
-      } else if (trustedRegistries.length === 0) {
-        // No specific trusted registries required, any successful registry check passes
-        registryMatch = true
-        break
-      }
-    }
-  }
-
-  return { issuerFound, registryMatch }
-}
-
-/**
  * Apply verification results to exchange and determine state.
  *
  * When `debug=true`, `compatLog` entries are persisted on
@@ -435,12 +390,19 @@ export const applyVerificationResults = async ({
   exchange,
   result,
   compatLog = [],
-  debug = false
+  debug = false,
+  registries = resolveTrustedRegistries(exchange.variables.trustedRegistries)
 }: {
   exchange: App.ExchangeDetailVerify
   result: import('@digitalcredentials/verifier-core').PresentationVerificationResult
   compatLog?: App.CheckResult[]
   debug?: boolean
+  /**
+   * The registries handed to verifier-core for this call; their names are
+   * `issuerValidation.consultedRegistries`. Defaults to what
+   * `resolveTrustedRegistries` gives for the exchange.
+   */
+  registries?: EntityIdentityRegistry[]
 }): Promise<App.ExchangeDetailVerify> => {
   const {
     verified,
@@ -495,38 +457,11 @@ export const applyVerificationResults = async ({
       .filter(Boolean)
   }
 
-  // Validate trusted issuers if specified
-  let issuerValidation: App.VerificationResult['issuerValidation'] | undefined
-  if (
-    exchange.variables.trustedIssuers.length > 0 ||
-    (exchange.variables.trustedRegistries &&
-      exchange.variables.trustedRegistries.length > 0)
-  ) {
-    let allIssuersValid = true
-
-    for (const credentialResult of credentialResults) {
-      if (credentialResult.verifiableCredential) {
-        const validation = validateTrustedIssuers(
-          credentialResult.verifiableCredential as Record<string, unknown>,
-          exchange.variables.trustedIssuers,
-          exchange.variables.trustedRegistries || [],
-          credentialResult
-        )
-
-        if (!validation.issuerFound && !validation.registryMatch) {
-          allIssuersValid = false
-          break
-        }
-      }
-    }
-
-    issuerValidation = {
-      trustedIssuers: exchange.variables.trustedIssuers,
-      trustedRegistries: exchange.variables.trustedRegistries || [],
-      issuerFound: allIssuersValid,
-      registryMatch: allIssuersValid
-    }
-  }
+  const issuerValidation = deriveIssuerValidation(
+    { credentialResults },
+    exchange,
+    registries
+  )
 
   // Build structured verification result using new verifier-core format.
   // Per-credential `summary`, `recognizedProfile`,
@@ -742,7 +677,8 @@ export const participateInVerifyExchange = async ({
       exchange,
       result,
       compatLog,
-      debug
+      debug,
+      registries
     })
     await saveExchange(finalized)
     return buildVerificationResponse(finalized)
@@ -756,6 +692,7 @@ export const participateInVerifyExchange = async ({
     result,
     compatLog,
     debug,
+    registries,
     openBadgesCredentialIndices: obIndices,
     deadlineMs: config.verifyTaskDeadlineMs,
     maxAttempts: config.verifyTaskMaxAttempts
@@ -812,12 +749,14 @@ export const withSyncResultsAndQueuedVerifyTask = async ({
   debug,
   openBadgesCredentialIndices,
   deadlineMs,
-  maxAttempts
+  maxAttempts,
+  registries
 }: {
   exchange: App.ExchangeDetailVerify
   result: PresentationVerificationResult
   compatLog?: App.CheckResult[]
   debug?: boolean
+  registries?: EntityIdentityRegistry[]
   openBadgesCredentialIndices: number[]
   deadlineMs: number
   maxAttempts: number
@@ -826,7 +765,8 @@ export const withSyncResultsAndQueuedVerifyTask = async ({
     exchange,
     result,
     compatLog,
-    debug
+    debug,
+    registries
   })
   return {
     ...finalized,

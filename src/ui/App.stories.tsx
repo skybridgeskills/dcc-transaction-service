@@ -163,6 +163,30 @@ export const VerifyFailureMixed: Story = {
   }
 }
 
+/**
+ * Issuer trust when the exchange opted in with `requireTrustedIssuer`: the
+ * issuer matched no registry and one registry could not be checked, so the
+ * exchange is `invalid` and the card shows the trust line as an error. A second
+ * credential shows a registry match, named by the registry.
+ */
+export const VerifyIssuerTrustRequired: Story = {
+  name: 'Verify (issuer trust required)',
+  args: {
+    exchangeClient: new FakeExchangeClient({
+      protocols: mockProtocolsVerify,
+      presets: PRESETS,
+      states: 'invalid',
+      workflowId: 'verify',
+      variables: {
+        features: { details: true },
+        results: {
+          default: issuerTrustRequiredResult()
+        }
+      }
+    })
+  }
+}
+
 export const VerifyDetailsDisabled: Story = {
   args: {
     exchangeClient: new FakeExchangeClient({
@@ -621,6 +645,21 @@ function mixedRegistryFailureResult(): App.VerificationResult {
     presentationResults,
     credentialResults,
     matchedCredentials: [],
+    issuerValidation: {
+      requireTrustedIssuer: false,
+      trustedIssuers: [],
+      consultedRegistries: ['DCC Sandbox Registry'],
+      credentials: [
+        {
+          index: 0,
+          issuer: 'did:key:z6MkhVTX9BF3NGYX6cc7jWpbNnR7cAjH8LUffabZP8Qu4ysC',
+          onAllowlist: false,
+          registryMatches: [],
+          uncheckedRegistries: [],
+          trusted: false
+        }
+      ]
+    },
     summary: [
       {
         id: 'cryptographic.proof',
@@ -631,6 +670,82 @@ function mixedRegistryFailureResult(): App.VerificationResult {
         counts: { passed: 1, failed: 0, skipped: 0 }
       }
     ]
+  }
+}
+
+function issuerTrustRequiredResult(): App.VerificationResult {
+  const base = verificationResultFromPresentation(
+    createMockVerifierCoreResult(true, true)
+  )
+  const listed = base.credentialResults[0]
+  // The unlisted credential's own registry row agrees with its trust line.
+  const unlisted: App.CredentialVerificationResult = {
+    ...listed,
+    results: listed.results.map((r) =>
+      r.id.startsWith('trust.registry.')
+        ? {
+            ...r,
+            outcome: {
+              status: 'failure' as const,
+              problems: [
+                {
+                  type: 'https://www.w3.org/TR/vc-data-model#ISSUER_NOT_REGISTERED',
+                  title: 'Issuer Not Registered',
+                  detail:
+                    'Issuer was not found in the 1 registry that could be checked; 1 could not be checked.'
+                }
+              ]
+            }
+          }
+        : r
+    ),
+    summary: listed.summary.map((s) =>
+      s.suite === 'registry'
+        ? {
+            ...s,
+            status: 'failure' as const,
+            message: '1 of 1 checks failed',
+            counts: { passed: 0, failed: 1, skipped: 0 }
+          }
+        : s
+    )
+  }
+  const second = {
+    ...listed,
+    verifiableCredential: createMockCredential({ name: 'Listed issuer' })
+  } as App.CredentialVerificationResult
+  return {
+    ...base,
+    credentialResults: [unlisted, second],
+    issuerValidation: {
+      requireTrustedIssuer: true,
+      trustedIssuers: [],
+      consultedRegistries: ['DCC Sandbox Registry', 'DCC Community Registry'],
+      credentials: [
+        {
+          index: 0,
+          issuer: 'did:key:z6MkhVTX9BF3NGYX6cc7jWpbNnR7cAjH8LUffabZP8Qu4ysC',
+          onAllowlist: false,
+          registryMatches: [],
+          uncheckedRegistries: ['DCC Community Registry'],
+          trusted: false
+        },
+        {
+          index: 1,
+          issuer: 'did:web:university.example',
+          onAllowlist: false,
+          registryMatches: [
+            {
+              registry: 'DCC Sandbox Registry',
+              entityName: 'Example University',
+              entityUrl: 'https://university.example'
+            }
+          ],
+          uncheckedRegistries: [],
+          trusted: true
+        }
+      ]
+    }
   }
 }
 

@@ -333,30 +333,32 @@ describe('processVerifyTask', () => {
   /**
    * ⚠️ The worker must not decide state by its own rule. This result has every
    * `verified` true, so "verified ? complete : invalid" says complete; the
-   * shared decision rejects it (trusted issuers set, a fatal registry failure).
-   * Getting `invalid` proves the worker went through `decideExchangeState`, the
-   * same function the sync path uses.
+   * exchange asked for a trusted issuer and the OB pass's registry lookup found
+   * none. Getting `invalid` proves the worker went through
+   * `decideExchangeState` — the trust policy reaches OB exchanges — and that it
+   * re-derived `issuerValidation` from the OB pass's own registry row.
    */
-  test('final state comes from decideExchangeState, not from verified alone', async () => {
-    const registryFailure: App.CheckResult = {
+  test('requireTrustedIssuer with an untrusted issuer ends invalid on the OB path', async () => {
+    const notRegistered: App.CheckResult = {
       id: 'trust.registry.issuer',
       suite: 'registry',
       outcome: {
         status: 'failure',
-        problems: [{ type: 'urn:test', title: 'not registered', detail: 'd' }]
+        problems: [{ type: 'urn:test', title: 'Issuer Not Registered', detail: 'd' }],
+        payload: { matches: [], uncheckedRegistries: [] }
       },
-      fatal: true
+      fatal: false
     }
     const { exchange, deps } = await setupWorker({
       perCredVerified: [true],
       preCommit: (e) => ({
         ...e,
-        variables: { ...e.variables, trustedIssuers: ['did:example:trusted'] }
+        variables: { ...e.variables, requireTrustedIssuer: true }
       }),
       verifyCredential: async (call) => ({
         verified: true,
         verifiableCredential: call.credential as VerifiableCredential,
-        results: [registryFailure],
+        results: [notRegistered],
         summary: []
       })
     })
@@ -365,11 +367,42 @@ describe('processVerifyTask', () => {
 
     expect(outcome).toBe('succeeded')
     const stored = await loadVerify(exchange.exchangeId)
-    expect(stored.variables.results?.default.verified).toBe(true)
-    expect(stored.state).toBe(
-      decideExchangeState(stored.variables.results!.default, stored)
-    )
+    const result = stored.variables.results!.default
+    expect(result.verified).toBe(true)
+    expect(result.issuerValidation?.credentials[0].trusted).toBe(false)
+    expect(stored.state).toBe(decideExchangeState(result, stored))
     expect(stored.state).toBe('invalid')
+  })
+
+  test('without requireTrustedIssuer the same OB result completes, with the warning', async () => {
+    const { exchange, deps } = await setupWorker({
+      perCredVerified: [true],
+      verifyCredential: async (call) => ({
+        verified: true,
+        verifiableCredential: call.credential as VerifiableCredential,
+        results: [
+          {
+            id: 'trust.registry.issuer',
+            suite: 'registry',
+            outcome: {
+              status: 'failure',
+              problems: [{ type: 'urn:test', title: 'Issuer Not Registered', detail: 'd' }],
+              payload: { matches: [], uncheckedRegistries: [] }
+            },
+            fatal: false
+          }
+        ],
+        summary: []
+      })
+    })
+
+    await processVerifyTask(exchange.exchangeId, deps)
+
+    const stored = await loadVerify(exchange.exchangeId)
+    expect(stored.variables.results!.default.issuerValidation?.credentials[0].trusted).toBe(
+      false
+    )
+    expect(stored.state).toBe('complete')
   })
 
   test('worker error → failed task; exchange state unchanged', async () => {

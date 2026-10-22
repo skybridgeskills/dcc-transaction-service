@@ -12,9 +12,107 @@
  * cycle.
  */
 
-/** True iff `r` is a verifier-core `trust.registry.*` check result. */
-export const isTrustRegistryCheck = (r: App.CheckResult): boolean =>
-  r.id.startsWith('trust.registry.')
+import type {
+  EntityIdentityRegistry,
+  RegistryCheckPayload
+} from '@digitalcredentials/verifier-core'
+
+/** Id of verifier-core's issuer registry lookup (`registry` suite, `trust` phase). */
+export const ISSUER_REGISTRY_CHECK_ID = 'trust.registry.issuer'
+
+/**
+ * Type guard for the {@link RegistryCheckPayload} verifier-core puts on the
+ * issuer registry check's outcome whenever the lookup ran. `payload` is
+ * typed `unknown`, and the outcome's `message` is prose — never parse it.
+ */
+const isRegistryCheckPayload = (
+  payload: unknown
+): payload is RegistryCheckPayload =>
+  typeof payload === 'object' &&
+  payload !== null &&
+  Array.isArray((payload as RegistryCheckPayload).matches) &&
+  Array.isArray((payload as RegistryCheckPayload).uncheckedRegistries)
+
+/** The credential's issuer id: `issuer` itself, or `issuer.id`. */
+const issuerIdOf = (credential: unknown): string | undefined => {
+  const issuer = (credential as { issuer?: unknown } | null)?.issuer
+  if (typeof issuer === 'string') return issuer
+  if (typeof issuer === 'object' && issuer !== null) {
+    const id = (issuer as { id?: unknown }).id
+    if (typeof id === 'string') return id
+  }
+  return undefined
+}
+
+/**
+ * Build the per-credential issuer trust record from a verification result.
+ *
+ * `registries` is what was handed to verifier-core for this exchange
+ * (`resolveTrustedRegistries`): `undefined` when the registry check was
+ * skipped. Its names are the `consultedRegistries`.
+ *
+ * Returns `undefined` — nothing to report — unless the exchange set
+ * `trustedIssuers` or `requireTrustedIssuer`, or some credential's registry
+ * lookup actually ran (so a deployment-default lookup still reaches callers
+ * as a warning).
+ *
+ * ⚠️ Rebuild it whenever `credentialResults` changes. The async Open Badges
+ * pass re-runs the registry check, so the worker derives it again from the
+ * replaced results rather than carrying the sync pass's record over.
+ */
+export const deriveIssuerValidation = (
+  result: Pick<App.VerificationResult, 'credentialResults'>,
+  exchange: App.ExchangeDetailVerify,
+  registries: EntityIdentityRegistry[] | undefined
+): App.IssuerValidation | undefined => {
+  const requireTrustedIssuer = exchange.variables.requireTrustedIssuer === true
+  const trustedIssuers = exchange.variables.trustedIssuers ?? []
+  const registryRows = result.credentialResults.map((cr) =>
+    cr.results.find((r) => r.id === ISSUER_REGISTRY_CHECK_ID)
+  )
+  const anyLookupRan = registryRows.some(
+    (r) => r !== undefined && r.outcome.status !== 'skipped'
+  )
+  if (trustedIssuers.length === 0 && !requireTrustedIssuer && !anyLookupRan) {
+    return undefined
+  }
+
+  const consultedRegistries = (registries ?? []).map((r) => r.name)
+
+  const credentials = result.credentialResults.map(
+    (cr, index): App.CredentialIssuerValidation => {
+      const issuer = issuerIdOf(cr.verifiableCredential)
+      const onAllowlist = issuer !== undefined && trustedIssuers.includes(issuer)
+      const outcome = registryRows[index]?.outcome
+      const payload =
+        outcome && outcome.status !== 'skipped' && isRegistryCheckPayload(outcome.payload)
+          ? outcome.payload
+          : undefined
+      const registryMatches = (payload?.matches ?? []).map((m) => ({
+        registry: m.registry.name,
+        ...(m.entity?.name !== undefined && { entityName: m.entity.name }),
+        ...(m.entity?.url !== undefined && { entityUrl: m.entity.url })
+      }))
+      // A failed lookup with no payload (verifier-core's `REGISTRY_ERROR`:
+      // the lookup threw) heard from no registry, so none was checked.
+      const uncheckedRegistries = payload
+        ? payload.uncheckedRegistries.map((r) => r.name)
+        : outcome?.status === 'failure'
+          ? consultedRegistries
+          : []
+      return {
+        index,
+        ...(issuer !== undefined && { issuer }),
+        onAllowlist,
+        registryMatches,
+        uncheckedRegistries,
+        trusted: onAllowlist || registryMatches.length > 0
+      }
+    }
+  )
+
+  return { requireTrustedIssuer, trustedIssuers, consultedRegistries, credentials }
+}
 
 /**
  * Whether a presentation's own checks passed: no fatal check failed.
@@ -50,6 +148,13 @@ export const recomputeVerified = (result: App.VerificationResult): boolean =>
  * from `verified` by its own rule, and policy in the sync path's outcome
  * logic silently skipped every exchange carrying an Open Badges credential.
  * Do not reintroduce a second decision on either path.
+ *
+ * ⚠️ **Issuer trust is a warning unless the exchange opts in.** Most issuers
+ * are in no registry this service can reach, so an issuer that is not on the
+ * allowlist and matched no registry is reported on `issuerValidation` and
+ * left for the caller to judge. Only `requireTrustedIssuer: true` makes it
+ * `invalid` — and then "could not check some registries" is not trust
+ * either. `trustedRegistries` never gates; it only chooses who is asked.
  */
 export const decideExchangeState = (
   result: App.VerificationResult,
@@ -61,22 +166,15 @@ export const decideExchangeState = (
   }
 
   // Check that all credentials passed verification
-  for (const credentialResult of result.credentialResults) {
-    if (!credentialResult.verified) {
+  if (!result.credentialResults.every((cr) => cr.verified)) {
+    return 'invalid'
+  }
+
+  if (exchange.variables.requireTrustedIssuer === true) {
+    // Opted in, so a missing record cannot pass as trusted.
+    const credentials = result.issuerValidation?.credentials
+    if (!credentials || credentials.some((c) => !c.trusted)) {
       return 'invalid'
-    }
-
-    // If trusted issuers are specified, verify the issuer check passed
-    if (exchange.variables.trustedIssuers.length > 0) {
-      const registryChecks =
-        credentialResult.results.filter(isTrustRegistryCheck)
-
-      // If any registry check failed fatally, the credential is invalid
-      for (const check of registryChecks) {
-        if (check.fatal && check.outcome.status === 'failure') {
-          return 'invalid'
-        }
-      }
     }
   }
 

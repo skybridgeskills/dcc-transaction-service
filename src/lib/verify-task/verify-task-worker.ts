@@ -32,7 +32,11 @@ import {
 import { getVerifier } from '../verifier.js'
 import { openbadgesSuitesFor as defaultOpenbadgesSuitesFor } from '../openbadges-suite-resolver.js'
 import { markFailed, markRunning, markSucceeded } from './verify-task.js'
-import { decideExchangeState, recomputeVerified } from '../verify-outcome.js'
+import {
+  decideExchangeState,
+  deriveIssuerValidation,
+  recomputeVerified
+} from '../verify-outcome.js'
 
 /** Dependencies for {@link processVerifyTask}. All are overridable for tests. */
 export interface ProcessVerifyTaskDeps {
@@ -103,9 +107,10 @@ export const processVerifyTask = async (
 
   let next = baseResults
   let workerError: Error | undefined
+  let registries: EntityIdentityRegistry[] | undefined
 
   try {
-    const registries = deps.resolveRegistries(exchange)
+    registries = deps.resolveRegistries(exchange)
     const verifierOptions = exchange.variables.options ?? {}
     for (const i of task.openBadgesCredentialIndices) {
       const cr = next.credentialResults[i]
@@ -129,6 +134,12 @@ export const processVerifyTask = async (
       message: workerError.message
     })
   }
+
+  // The OB pass re-ran the registry check, so trust is derived again from
+  // the replaced results — not carried over from the sync pass.
+  const issuerValidation = deriveIssuerValidation(next, exchange, registries)
+  const { issuerValidation: _stale, ...rest } = next
+  next = { ...rest, ...(issuerValidation && { issuerValidation }) }
 
   const settled: App.ExchangeDetailVerify = {
     ...exchange,
@@ -197,7 +208,8 @@ export const withVerifyTask = (
  * any input.
  *
  * `claimsValidation`, `issuerValidation`, `matchedCredentials` and every
- * other field are carried over untouched.
+ * other field are carried over untouched. ⚠️ `issuerValidation` is then
+ * stale — the caller re-derives it from the replaced results.
  *
  * If `index` is out of range, `current` is returned unchanged.
  */

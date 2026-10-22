@@ -73,8 +73,8 @@ function CompatLogPanel({ log }: { log: App.CheckResult[] }) {
       <p style={panelHeader}>Compatibility fixes applied</p>
       <ul style={listStyle}>
         {log.map((entry, i) => (
-          <li key={`${entry.id ?? entry.check}-${i}`} style={itemStyle}>
-            <code style={codeStyle}>{entry.id ?? entry.check}</code>
+          <li key={`${entry.id}-${i}`} style={itemStyle}>
+            <code style={codeStyle}>{entry.id}</code>
             {entry.outcome.status === 'success' ? (
               <span style={{ color: '#374151' }}> — {entry.outcome.message}</span>
             ) : null}

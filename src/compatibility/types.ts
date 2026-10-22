@@ -2,12 +2,9 @@
  * Return shape for every compatibility-fix function: the (possibly patched)
  * value plus zero or more `CheckResult` log entries describing what was done.
  *
- * Compat entries use {@link App.CheckResult}, the local result shape that
- * post-dates the verifier-core 2.x hard cut (required `id`, no `check` /
- * `suite` / `timestamp`). Verifier-core's older optional-`id`,
- * required-`check` / `suite` shape is bridged at the boundary in
- * `verifyWorkflow.ts`; the rest of the service deals only in
- * `App.CheckResult`.
+ * Compat entries use {@link App.CheckResult}, an alias of verifier-core's
+ * own `CheckResult`, so they sit beside verifier-core's rows with no
+ * conversion. They carry `suite: 'compat'` and a `compat.`-prefixed `id`.
  */
 export type CompatibilityResult<T> = {
   result: T
@@ -38,6 +35,7 @@ export const compatibilityCheckResult = (
   message: string
 ): App.CheckResult => ({
   id: `compat.${fixId.replace(/:/g, '.')}`,
+  suite: 'compat',
   outcome: { status: 'success', message },
   fatal: false
 })

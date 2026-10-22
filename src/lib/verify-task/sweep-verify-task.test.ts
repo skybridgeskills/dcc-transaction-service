@@ -306,6 +306,7 @@ describe('appendAllResult', () => {
   test('fabricates a default shell when results is undefined', () => {
     const check: App.CheckResult = {
       id: 'pipeline.timeout',
+      suite: 'pipeline',
       outcome: { status: 'success', message: 'ok' }
     }
     const r = appendAllResult(undefined, check)
@@ -316,6 +317,7 @@ describe('appendAllResult', () => {
   test('appends to existing presentationResults and forces verified=false', () => {
     const prior: App.CheckResult = {
       id: 'pipeline.s.c1',
+      suite: 'pipeline',
       outcome: { status: 'success', message: 'ok' }
     }
     const next: App.CheckResult = { ...prior, id: 'pipeline.s.c2' }

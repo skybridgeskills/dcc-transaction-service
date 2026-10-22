@@ -1,9 +1,9 @@
-FROM node:22-slim AS base
+FROM node:24-slim AS base
 WORKDIR /app
 
 FROM base AS deps
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git \
+  && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && corepack prepare --activate \

@@ -160,6 +160,7 @@ export const synthesizePipelineTimeoutCheckResult = (
     : `Open Badges verification did not finish within deadline after ${task.attempt} attempt(s).`
   return {
     id: 'pipeline.timeout',
+    suite: 'pipeline',
     outcome: {
       status: 'failure',
       problems: [

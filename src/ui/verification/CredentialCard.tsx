@@ -16,12 +16,12 @@ export function CredentialCard({
   cr,
   index,
   showDetails,
-  verbose
+  showAll
 }: {
   cr: App.CredentialVerificationResult
   index: number
   showDetails: boolean
-  verbose: boolean
+  showAll: boolean
 }) {
   const grouped = groupByPhase(cr)
   const title = credentialTitle(cr, index)
@@ -48,7 +48,7 @@ export function CredentialCard({
                 cr={cr}
                 summary={s}
                 showDetails={showDetails}
-                verbose={verbose}
+                showAll={showAll}
               />
             ))}
           </div>

@@ -26,7 +26,7 @@ export function TerminalView({
           features={features}
           variables={{
             options: variables?.options as
-              | { verbose?: boolean; timing?: boolean }
+              | { timing?: boolean }
               | undefined,
             debug: variables?.debug as boolean | undefined
           }}

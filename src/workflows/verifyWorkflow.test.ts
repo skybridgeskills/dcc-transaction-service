@@ -1083,7 +1083,7 @@ describe('participateInVerifyExchange — sync/async branching', function () {
     expect(stored.variables.verifyTask!.openBadgesCredentialIndices).toEqual([1])
   })
 
-  test('forwards variables.options.{verbose,timing} to verifier-core', async () => {
+  test('forwards variables.options.timing to verifier-core', async () => {
     const vc = nonObCredential()
     const seen: Array<Record<string, unknown>> = []
     const recordingVerifier: Verifier = {
@@ -1096,13 +1096,14 @@ describe('participateInVerifyExchange — sync/async branching', function () {
     }
     resetVerifier(recordingVerifier)
     const args = baseArgs()
-    args.exchange.variables.options = { verbose: true, timing: true }
+    args.exchange.variables.options = { timing: true }
     await saveExchange(args.exchange)
 
     await participateInVerifyExchange({ data: buildVpBody(vc), ...args })
 
     expect(seen).toHaveLength(1)
-    expect(seen[0]).toMatchObject({ verbose: true, timing: true })
+    expect(seen[0]).toMatchObject({ timing: true })
+    expect('verbose' in seen[0]).toBe(false)
   })
 
   test('omits verbose/timing keys when variables.options is unset', async () => {

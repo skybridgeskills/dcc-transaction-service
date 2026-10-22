@@ -112,9 +112,6 @@ export const processVerifyTask = async (
         credential: cr.verifiableCredential,
         additionalSuites: deps.openbadgesSuitesFor(cr.verifiableCredential),
         registries,
-        ...(verifierOptions.verbose !== undefined && {
-          verbose: verifierOptions.verbose
-        }),
         ...(verifierOptions.timing !== undefined && {
           timing: verifierOptions.timing
         })

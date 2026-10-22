@@ -294,7 +294,9 @@ function deriveSummaries(results: App.CheckResult[]): App.SuiteSummary[] {
       phase: 'cryptographic',
       suite,
       status,
-      verified: failed === 0,
+      ...(failed > 0 && {
+        fatalFailureAt: group.find((g) => g.outcome.status === 'failure')!.id
+      }),
       message:
         failed === 0
           ? `${passed} of ${group.length} checks passed`
@@ -305,29 +307,12 @@ function deriveSummaries(results: App.CheckResult[]): App.SuiteSummary[] {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 5 stories — exercise verifier-core 2.x summary/timing/verbose paths.
+// Phase 5 stories — exercise verifier-core 2.x summary/timing paths.
+//
+// Every check that ran is in the payload; "Show all checks" is a local
+// display toggle on the rendered results (open any verify story and tick it),
+// so there is no separate story for it.
 // ---------------------------------------------------------------------------
-
-export const VerifyVerbose: Story = {
-  name: 'Verify (verbose)',
-  args: {
-    exchangeClient: new FakeExchangeClient({
-      protocols: mockProtocolsVerify,
-      presets: PRESETS,
-      states: 'complete',
-      workflowId: 'verify',
-      variables: {
-        features: { details: true },
-        options: { verbose: true },
-        results: {
-          default: verificationResultFromPresentation(
-            createMockVerifierCoreResult(true, true)
-          )
-        }
-      }
-    })
-  }
-}
 
 export const VerifyWithTiming: Story = {
   name: 'Verify (with timing)',
@@ -437,6 +422,7 @@ function fatalShortCircuitResult(): App.VerificationResult {
   const cred = createMockCredential()
   const failingCheck: App.CheckResult = {
     id: 'cryptographic.proof.signature-valid',
+    suite: 'proof',
     outcome: {
       status: 'failure',
       problems: [
@@ -460,7 +446,6 @@ function fatalShortCircuitResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'failure',
-          verified: false,
           message: '1 of 3 checks failed (2 not run after fatal)',
           counts: { passed: 0, failed: 1, skipped: 0 },
           fatalFailureAt: 'cryptographic.proof.signature-valid'
@@ -481,6 +466,7 @@ function obSchemaWarningResult(): App.VerificationResult {
   const cred = createMockCredential()
   const warning: App.CheckResult = {
     id: 'semantic.openbadges-3.schema',
+    suite: 'openbadges-3',
     outcome: {
       status: 'failure',
       problems: [
@@ -505,7 +491,6 @@ function obSchemaWarningResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '2 of 2 checks passed',
           counts: { passed: 2, failed: 0, skipped: 0 }
         },
@@ -514,7 +499,6 @@ function obSchemaWarningResult(): App.VerificationResult {
           phase: 'semantic',
           suite: 'openbadges-3',
           status: 'mixed',
-          verified: false,
           message: '1 of 3 checks failed (2 passed)',
           counts: { passed: 2, failed: 1, skipped: 0 }
         }
@@ -543,7 +527,6 @@ function allSkippedRecognitionResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '2 of 2 checks passed',
           counts: { passed: 2, failed: 0, skipped: 0 }
         },
@@ -552,7 +535,6 @@ function allSkippedRecognitionResult(): App.VerificationResult {
           phase: 'recognition',
           suite: 'openbadges',
           status: 'skipped',
-          verified: true,
           message: '1 of 1 check skipped',
           counts: { passed: 0, failed: 0, skipped: 1 }
         },
@@ -561,7 +543,6 @@ function allSkippedRecognitionResult(): App.VerificationResult {
           phase: 'recognition',
           suite: 'vcalm',
           status: 'skipped',
-          verified: true,
           message: '1 of 1 check skipped',
           counts: { passed: 0, failed: 0, skipped: 1 }
         }
@@ -582,6 +563,7 @@ function mixedRegistryFailureResult(): App.VerificationResult {
   const presentationResults: App.CheckResult[] = [
     {
       id: 'cryptographic.proof.signature',
+      suite: 'proof',
       outcome: { status: 'success', message: 'Presentation signature verified.' },
       fatal: true
     }
@@ -593,11 +575,13 @@ function mixedRegistryFailureResult(): App.VerificationResult {
       results: [
         {
           id: 'cryptographic.proof.signature',
+          suite: 'proof',
           outcome: { status: 'success', message: 'Credential signature verified.' },
           fatal: true
         },
         {
           id: 'trust.registry.issuer',
+          suite: 'registry',
           outcome: {
             status: 'failure',
             problems: [
@@ -618,7 +602,6 @@ function mixedRegistryFailureResult(): App.VerificationResult {
           phase: 'cryptographic',
           suite: 'proof',
           status: 'success',
-          verified: true,
           message: '1 of 1 checks passed',
           counts: { passed: 1, failed: 0, skipped: 0 }
         },
@@ -627,7 +610,6 @@ function mixedRegistryFailureResult(): App.VerificationResult {
           phase: 'trust',
           suite: 'registry',
           status: 'failure',
-          verified: false,
           message: '1 of 1 checks failed',
           counts: { passed: 0, failed: 1, skipped: 0 }
         }
@@ -645,7 +627,6 @@ function mixedRegistryFailureResult(): App.VerificationResult {
         phase: 'cryptographic',
         suite: 'proof',
         status: 'success',
-        verified: true,
         message: '1 of 1 checks passed',
         counts: { passed: 1, failed: 0, skipped: 0 }
       }

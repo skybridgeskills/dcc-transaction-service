@@ -3,8 +3,9 @@
  * {@link verifierOptionsSchema}.
  *
  * Focus is on the per-exchange verifier knobs added in the
- * `verifier-core-2-results-consumption` plan: `variables.options.{verbose,
- * timing}`. These flags propagate to every verifier-core call site in the
+ * `verifier-core-2-results-consumption` plan: `variables.options.timing`.
+ * `verbose` was removed with verifier-core 2.0 and must be refused, not
+ * ignored. These flags propagate to every verifier-core call site in the
  * exchange's lifetime, so getting the parse contract right is load-bearing.
  */
 import { describe, expect, test } from 'vitest'
@@ -23,10 +24,10 @@ describe('verifierOptionsSchema', () => {
     expect(verifierOptionsSchema.parse({})).toEqual({})
   })
 
-  test('accepts verbose: true', () => {
-    expect(verifierOptionsSchema.parse({ verbose: true })).toEqual({
-      verbose: true
-    })
+  test('refuses verbose (removed with verifier-core 2.0)', () => {
+    expect(() =>
+      verifierOptionsSchema.parse({ verbose: true })
+    ).toThrowError(/unrecognized/i)
   })
 
   test('accepts timing: true', () => {
@@ -35,15 +36,9 @@ describe('verifierOptionsSchema', () => {
     })
   })
 
-  test('accepts both flags together', () => {
-    expect(
-      verifierOptionsSchema.parse({ verbose: true, timing: true })
-    ).toEqual({ verbose: true, timing: true })
-  })
-
-  test('rejects non-boolean verbose (.strict() guards typos at the type)', () => {
+  test('rejects non-boolean timing', () => {
     expect(() =>
-      verifierOptionsSchema.parse({ verbose: 'yes' })
+      verifierOptionsSchema.parse({ timing: 'yes' })
     ).toThrowError(/expected boolean/i)
   })
 
@@ -65,12 +60,13 @@ describe('baseVariablesSchema with options', () => {
     expect(out.tenantName).toBeUndefined()
   })
 
-  test('parses with options.verbose: true', () => {
-    const out = baseVariablesSchema.parse({
-      ...baseValid,
-      options: { verbose: true }
-    })
-    expect(out.options).toEqual({ verbose: true })
+  test('refuses options.verbose', () => {
+    expect(() =>
+      baseVariablesSchema.parse({
+        ...baseValid,
+        options: { verbose: true }
+      })
+    ).toThrowError(/unrecognized/i)
   })
 
   test('parses with options.timing: true', () => {
@@ -81,29 +77,21 @@ describe('baseVariablesSchema with options', () => {
     expect(out.options).toEqual({ timing: true })
   })
 
-  test('parses with both flags', () => {
-    const out = baseVariablesSchema.parse({
-      ...baseValid,
-      options: { verbose: true, timing: true }
-    })
-    expect(out.options).toEqual({ verbose: true, timing: true })
-  })
-
   test('top-level debug remains parseable alongside options', () => {
     const out = baseVariablesSchema.parse({
       ...baseValid,
       debug: true,
-      options: { verbose: true }
+      options: { timing: true }
     })
     expect(out.debug).toBe(true)
-    expect(out.options).toEqual({ verbose: true })
+    expect(out.options).toEqual({ timing: true })
   })
 
   test('rejects an unknown nested key inside options (.strict())', () => {
     expect(() =>
       baseVariablesSchema.parse({
         ...baseValid,
-        options: { verbose: true, unknown: 1 }
+        options: { timing: true, unknown: 1 }
       })
     ).toThrowError(/unrecognized/i)
   })

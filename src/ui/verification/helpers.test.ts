@@ -12,7 +12,6 @@ const buildSummary = (
 ): App.SuiteSummary => ({
   phase: 'cryptographic',
   status: 'success',
-  verified: true,
   message: '1 of 1 checks passed',
   counts: { passed: 1, failed: 0, skipped: 0 },
   ...partial
@@ -21,6 +20,7 @@ const buildSummary = (
 const buildCheck = (
   partial: Partial<App.CheckResult> & { id: string }
 ): App.CheckResult => ({
+  suite: 'test',
   outcome: { status: 'success', message: 'ok' },
   ...partial
 })
@@ -110,7 +110,7 @@ describe('failureDetail', () => {
         buildCheck({ id: 'cryptographic.core.id-valid' })
       ]
     }
-    const matches = failureDetail(cr, summary)
+    const matches = failureDetail(cr, summary, true)
     expect(matches).toHaveLength(2)
     expect(matches.map((r) => r.id)).toEqual([
       'cryptographic.proof',
@@ -127,6 +127,53 @@ describe('failureDetail', () => {
       summary: []
     }
     expect(failureDetail(cr, summary)).toEqual([])
+  })
+
+  /**
+   * `results[]` carries every check that ran (verifier-core 2.0), so the id
+   * match alone would put passes under a "Failures" header.
+   */
+  describe('narrowing by outcome', () => {
+    const summary = buildSummary({ id: 'semantic.ob', suite: 'ob' })
+    const cr: App.CredentialVerificationResult = {
+      verified: true,
+      verifiableCredential: {} as never,
+      results: [
+        buildCheck({ id: 'semantic.ob.pass' }),
+        buildCheck({
+          id: 'semantic.ob.fail',
+          outcome: {
+            status: 'failure',
+            problems: [{ type: 'urn:t', title: 't', detail: 'd' }]
+          }
+        }),
+        buildCheck({
+          id: 'semantic.ob.not-run',
+          outcome: { status: 'skipped', reason: 'not run' }
+        }),
+        buildCheck({
+          id: 'semantic.ob.ob.applies',
+          outcome: { status: 'skipped', reason: 'not an OB credential' }
+        })
+      ],
+      summary: []
+    }
+
+    test('by default, keeps failures and `.applies` skips only', () => {
+      expect(failureDetail(cr, summary).map((r) => r.id)).toEqual([
+        'semantic.ob.fail',
+        'semantic.ob.ob.applies'
+      ])
+    })
+
+    test('with showAll, keeps every check in the suite', () => {
+      expect(failureDetail(cr, summary, true).map((r) => r.id)).toEqual([
+        'semantic.ob.pass',
+        'semantic.ob.fail',
+        'semantic.ob.not-run',
+        'semantic.ob.ob.applies'
+      ])
+    })
   })
 })
 
@@ -197,7 +244,6 @@ describe('isPhaseAllSkipped', () => {
           id: 'a',
           suite: 'a',
           status: 'skipped',
-          verified: false,
           counts: { passed: 0, failed: 0, skipped: 1 }
         }),
         buildSummary({ id: 'b', suite: 'b' })
@@ -212,14 +258,12 @@ describe('isPhaseAllSkipped', () => {
           id: 'a',
           suite: 'a',
           status: 'skipped',
-          verified: false,
           counts: { passed: 0, failed: 0, skipped: 1 }
         }),
         buildSummary({
           id: 'b',
           suite: 'b',
           status: 'skipped',
-          verified: false,
           counts: { passed: 0, failed: 0, skipped: 1 }
         })
       ])

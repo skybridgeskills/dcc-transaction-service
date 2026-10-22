@@ -515,14 +515,14 @@ describe('processVerifyTask', () => {
     expect(stored.state).toBe('complete')
   })
 
-  test('forwards variables.options.{verbose,timing} to verifyCredential', async () => {
+  test('forwards variables.options.timing to verifyCredential', async () => {
     const { exchange, deps, verifyCalls } = await setupWorker({
       perCredVerified: [true],
       preCommit: (e) => ({
         ...e,
         variables: {
           ...e.variables,
-          options: { verbose: true, timing: true }
+          options: { timing: true }
         }
       })
     })
@@ -531,7 +531,8 @@ describe('processVerifyTask', () => {
 
     expect(outcome).toBe('succeeded')
     expect(verifyCalls).toHaveLength(1)
-    expect(verifyCalls[0]).toMatchObject({ verbose: true, timing: true })
+    expect(verifyCalls[0]).toMatchObject({ timing: true })
+    expect('verbose' in verifyCalls[0]).toBe(false)
   })
 
   test('omits verbose/timing keys when variables.options is unset', async () => {

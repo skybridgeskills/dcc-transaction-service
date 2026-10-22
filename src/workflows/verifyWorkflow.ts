@@ -31,6 +31,10 @@ import {
   resolveQueryLanguage
 } from '../oid4vp/state.js'
 import { getVerifier } from '../lib/verifier.js'
+import {
+  decideExchangeState,
+  isTrustRegistryCheck
+} from '../lib/verify-outcome.js'
 import { applyFix } from '../compatibility/apply.js'
 import { prepareVcalmParticipationMessage } from '../compatibility/vcalm-participation-message/index.js'
 import { prepareVerifiableEntity } from '../compatibility/verifiable-entity/index.js'
@@ -370,17 +374,6 @@ const matchClaimsAgainstRequirements = (
 }
 
 /**
- * True iff `r` is a verifier-core `trust.registry.*` check result.
- *
- * Centralized so both `validateTrustedIssuers` and
- * `determineExchangeOutcome` agree on the namespace, and so the
- * suite-key migration (`r.suite === 'registry'` → `r.id`) lives in
- * exactly one place.
- */
-const isTrustRegistryCheck = (r: App.CheckResult): boolean =>
-  r.id.startsWith('trust.registry.')
-
-/**
  * Validate trusted issuers against credential issuer.
  *
  * Searches the credential's verification results for registry suite checks
@@ -428,49 +421,6 @@ const validateTrustedIssuers = (
   }
 
   return { issuerFound, registryMatch }
-}
-
-/**
- * Determine overall exchange outcome based on verification results.
- *
- * With the new verifier-core format, this is simplified because:
- * - The `verified` boolean already accounts for fatal check failures
- * - Each credential has its own `verified` status
- *
- * We only need additional logic if there are trusted issuer requirements
- * that weren't enforced as fatal checks by verifier-core.
- */
-const determineExchangeOutcome = (
-  verified: boolean,
-  credentialResults: App.CredentialVerificationResult[],
-  exchange: App.ExchangeDetailVerify
-): 'complete' | 'invalid' => {
-  // If verifier-core says verification failed, it's invalid
-  if (!verified) {
-    return 'invalid'
-  }
-
-  // Check that all credentials passed verification
-  for (const credentialResult of credentialResults) {
-    if (!credentialResult.verified) {
-      return 'invalid'
-    }
-
-    // If trusted issuers are specified, verify the issuer check passed
-    if (exchange.variables.trustedIssuers.length > 0) {
-      const registryChecks =
-        credentialResult.results.filter(isTrustRegistryCheck)
-
-      // If any registry check failed fatally, the credential is invalid
-      for (const check of registryChecks) {
-        if (check.fatal && check.outcome.status === 'failure') {
-          return 'invalid'
-        }
-      }
-    }
-  }
-
-  return 'complete'
 }
 
 /**
@@ -578,13 +528,6 @@ export const applyVerificationResults = async ({
     }
   }
 
-  // Determine overall outcome
-  const overallOutcome = determineExchangeOutcome(
-    verified,
-    credentialResults,
-    exchange
-  )
-
   // Build structured verification result using new verifier-core format.
   // Per-credential `summary`, `recognizedProfile`,
   // `normalizedVerifiableCredential`, `timing`, and `partial` are
@@ -608,7 +551,7 @@ export const applyVerificationResults = async ({
   // Update exchange state and variables
   const updatedExchange: App.ExchangeDetailVerify = {
     ...exchange,
-    state: overallOutcome === 'complete' ? 'complete' : 'invalid',
+    state: decideExchangeState(verificationResult, exchange),
     variables: {
       ...exchange.variables,
       results: {

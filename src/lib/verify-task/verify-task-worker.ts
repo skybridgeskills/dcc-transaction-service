@@ -10,9 +10,10 @@
  *   3. Runs `verifier.verifyCredential` for each OB credential index in
  *      `task.openBadgesCredentialIndices`, applying the OB suites
  *      returned by {@link openbadgesSuitesFor}.
- *   4. Merges per-OB results into `variables.results.default` via
- *      {@link mergeOpenBadgesResultsAt} and recomputes the exchange
- *      `state` from the merged `verified` flag.
+ *   4. Replaces each OB credential's entry in `variables.results.default`
+ *      with the OB pass's own result via {@link replaceCredentialResultAt},
+ *      and decides the exchange `state` with `decideExchangeState` — the
+ *      same function the sync pass uses.
  *   5. Commits via `saveExchangeWithCAS`. A stale worker whose attempt
  *      was superseded by a sweep loses CAS silently.
  *
@@ -31,6 +32,7 @@ import {
 import { getVerifier } from '../verifier.js'
 import { openbadgesSuitesFor as defaultOpenbadgesSuitesFor } from '../openbadges-suite-resolver.js'
 import { markFailed, markRunning, markSucceeded } from './verify-task.js'
+import { decideExchangeState, recomputeVerified } from '../verify-outcome.js'
 
 /** Dependencies for {@link processVerifyTask}. All are overridable for tests. */
 export interface ProcessVerifyTaskDeps {
@@ -99,14 +101,14 @@ export const processVerifyTask = async (
     })
   }
 
-  let merged = baseResults
+  let next = baseResults
   let workerError: Error | undefined
 
   try {
     const registries = deps.resolveRegistries(exchange)
     const verifierOptions = exchange.variables.options ?? {}
     for (const i of task.openBadgesCredentialIndices) {
-      const cr = merged.credentialResults[i]
+      const cr = next.credentialResults[i]
       if (!cr?.verifiableCredential) continue
       const obResult = await deps.verifyCredential({
         credential: cr.verifiableCredential,
@@ -116,7 +118,7 @@ export const processVerifyTask = async (
           timing: verifierOptions.timing
         })
       })
-      merged = mergeOpenBadgesResultsAt(merged, i, obResult)
+      next = replaceCredentialResultAt(next, i, obResult)
     }
   } catch (e) {
     workerError = e instanceof Error ? e : new Error(String(e))
@@ -128,13 +130,12 @@ export const processVerifyTask = async (
     })
   }
 
-  const finalState: App.ExchangeState = merged.verified ? 'complete' : 'invalid'
   const settled: App.ExchangeDetailVerify = {
     ...exchange,
-    state: finalState,
+    state: decideExchangeState(next, exchange),
     variables: {
       ...exchange.variables,
-      results: { default: merged },
+      results: { default: next },
       verifyTask: markSucceeded(task)
     }
   }
@@ -147,43 +148,6 @@ export const processVerifyTask = async (
 }
 
 // ----- helpers (pure unless noted) ----------------------------------------
-
-/** Dedupe suite summaries by `id`; existing order wins; incoming skips ids already seen (including within `incoming`). */
-const mergeSummaries = (
-  existing: readonly App.SuiteSummary[],
-  incoming: readonly App.SuiteSummary[]
-): App.SuiteSummary[] => {
-  const seen = new Set(existing.map((s) => s.id))
-  const appended: App.SuiteSummary[] = []
-  for (const s of incoming) {
-    if (seen.has(s.id)) continue
-    seen.add(s.id)
-    appended.push(s)
-  }
-  return [...existing, ...appended]
-}
-
-const isRegistryCheck = (r: App.CheckResult): boolean =>
-  r.id.startsWith('trust.registry.')
-
-/**
- * Merge prior credential checks with an OB/async pass:
- * registry checks (`trust.registry.*`) from `incoming` replace any registry checks
- * in `existing`; other checks dedupe by `id` with `existing` taking precedence.
- */
-const mergeResults = (
-  existing: readonly App.CheckResult[],
-  incoming: readonly App.CheckResult[]
-): App.CheckResult[] => {
-  const existingNonRegistry = existing.filter((r) => !isRegistryCheck(r))
-  const incomingRegistry = incoming.filter((r) => isRegistryCheck(r))
-  const incomingNonRegistry = incoming.filter((r) => !isRegistryCheck(r))
-
-  const keptIds = new Set(existingNonRegistry.map((r) => r.id))
-  const appendedNonRegistry = incomingNonRegistry.filter((r) => !keptIds.has(r.id))
-
-  return [...existingNonRegistry, ...incomingRegistry, ...appendedNonRegistry]
-}
 
 const commitFailure = async (
   exchange: App.ExchangeDetailVerify,
@@ -219,54 +183,38 @@ export const withVerifyTask = (
 })
 
 /**
- * Replace `credentialResults[index]` in `merged` with a new entry that
- * merges the prior credential checks with `obResult.results`,
- * merges the per-suite `summary[]` (deduped by suite `id`; existing first),
- * recomputes the per-credential `verified` flag (logical AND), and
- * recomputes the top-level `verified` flag.
+ * Replace `credentialResults[index]` in `current` with `obResult`, the Open
+ * Badges pass's own result for that credential, and recompute the
+ * top-level `verified` from its parts.
  *
- * {@link mergeResults} applies to `results`: registry checks (`trust.registry.*`)
- * from the OB pass replace earlier registry checks; other checks dedupe by
- * {@link mergeSummaries} merges summaries without duplicate suite `id`s (existing wins;
- * repeats in `incoming` are skipped).
+ * ⚠️ Replace, don't merge. The OB pass calls `verifyCredential` with the
+ * default suites plus the OB suites, and verifier-core returns every check
+ * that ran, so `obResult` is a complete single-run verdict for that
+ * credential — a superset of what the sync pass recorded for it. Merging
+ * rows from two runs is how the old merge came to need its own dedupe rules.
  *
  * Pure: returns a new {@link App.VerificationResult}; does not mutate
  * any input.
  *
- * `claimsValidation`, `issuerValidation`, and `matchedCredentials` are
- * untouched — the OB suites do not contribute claims-matching or
- * trusted-issuer signal, so the sync pass's findings remain correct.
+ * `claimsValidation`, `issuerValidation`, `matchedCredentials` and every
+ * other field are carried over untouched.
  *
- * If `index` is out of range, `merged` is returned unchanged.
+ * If `index` is out of range, `current` is returned unchanged.
  */
-export const mergeOpenBadgesResultsAt = (
-  merged: App.VerificationResult,
+export const replaceCredentialResultAt = (
+  current: App.VerificationResult,
   index: number,
-  obResult: {
-    verified: boolean
-    results: readonly App.CheckResult[]
-    summary: App.SuiteSummary[]
-  }
+  obResult: App.CredentialVerificationResult
 ): App.VerificationResult => {
-  const prev = merged.credentialResults[index]
-  if (!prev) return merged
+  if (!current.credentialResults[index]) return current
 
-  const updatedCr: App.CredentialVerificationResult = {
-    ...prev,
-    verified: prev.verified && obResult.verified,
-    results: mergeResults(prev.results, obResult.results),
-    summary: mergeSummaries(prev.summary, obResult.summary)
+  const next: App.VerificationResult = {
+    ...current,
+    credentialResults: current.credentialResults.map((cr, i) =>
+      i === index ? obResult : cr
+    )
   }
-
-  const credentialResults = merged.credentialResults.map((cr, i) =>
-    i === index ? updatedCr : cr
-  )
-
-  return {
-    ...merged,
-    verified: merged.verified && obResult.verified,
-    credentialResults
-  }
+  return { ...next, verified: recomputeVerified(next) }
 }
 
 /**

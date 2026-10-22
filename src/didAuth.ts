@@ -53,7 +53,7 @@ export const getSignedDIDAuth = async (
 /**
  * `compatLog` carries the synthetic CheckResult entries emitted by the
  * compatibility-fix pipeline. With verifier-core 2.x the verifier's own
- * folded results live in the regular `presentationResults` /
+ * results live in the regular `presentationResults` /
  * `credentialResults` arrays and no longer need to be duplicated into a
  * debug-only side-channel; this field surfaces the small set of
  * compat-fix log entries (e.g. envelope wrapping, Ed25519Signature2020

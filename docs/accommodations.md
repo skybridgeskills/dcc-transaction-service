@@ -225,11 +225,29 @@ doorway. `bare-vp-doorway.app.test.ts` asserts both bodies against the same
 fixture and the same signed DID-auth, so the pair shows the arms differ only in
 the envelope.
 
+**One stated exception to "the arms differ only in the envelope": a DID-auth
+proof with no `domain`.** Every route checks the VP proof's `domain` against the
+`domain` stamped on the exchange, and the strict route refuses a proof that
+carries none. LCW's legacy flow cannot meet that — it signs with
+`vc.signPresentation({ presentation, suite, challenge, documentLoader })`, with
+no `domain` parameter at all, and the `lcw` link it starts from carries none. So
+the doorway accepts a proof with **no** `domain` on its challenge alone, and
+journals each such acceptance as a second `accommodation-served` line,
+`accommodation: 'bare-vp-domain-absent-accepted'`, written after the proof
+verified. ⚠️ A proof that **carries** a `domain` must still match, on the
+doorway as everywhere else — so a proof signed for another verifier and relayed
+here is refused, which keeps the protection the `domain` exists for. The policy
+is set by the doorway route (`participateHandler`) and nothing else can reach
+it. `bare-vp-doorway.app.test.ts` pins all four cases: absent accepted and
+journalled, wrong refused, right accepted with no exception journalled, and the
+same domain-less proof refused on the strict route.
+
 **What it costs to read a result here.** A completion on this doorway is not
 evidence that the client speaks VC-API participate — only that it speaks the
 bare form. Uptake is measurable: `accommodation-served` carrying
 `accommodation: 'bare-vp-participate-response'`, against a spec-shaped
-`submission` on the same exchange. ⚠️ The line is written **on arrival**, before
+`submission` on the same exchange; and a completion that also carries
+`bare-vp-domain-absent-accepted` came from a proof that signed no `domain`. ⚠️ The line is written **on arrival**, before
 the DID-auth is judged, so a client that came in this door and then failed the
 proof still leaves the record that it came in this door.
 

@@ -304,21 +304,18 @@ See [ADR 2026-08-11](./docs/adr/2026-08-11-exchange-id-prefix.md).
 
 ### Verification pipeline
 
-- **verifier-core 2.x result shape.** The verify workflow consumes the folded
-  result (`summary: SuiteSummary[]` plus `results: CheckResult[]` carrying only
-  failures and explicit skips by default). `summary` is a first-class required
-  field on `App.VerificationResult` and
-  `App.CredentialVerificationResult`, and the UI renders primarily from it,
-  lazy-expanding into `results[]` for failure detail.
+- **verifier-core 2.x result shape.** The verify workflow consumes
+  `summary: SuiteSummary[]` plus `results: CheckResult[]`, which carries every
+  check that ran. `summary` is a first-class required field on
+  `App.VerificationResult` and `App.CredentialVerificationResult`, and the UI
+  renders primarily from it, lazy-expanding into `results[]` for detail.
 - **`App.CheckResult.id` is required** and namespaced as
   `<phase>.<suite>.<localPart>` (or `compat.<fix-name>`), which is the canonical
   key for filtering and grouping on the consumer side. `compatLog` carries the
   synthetic compatibility-fix entries; verifier-core's own results come through
   the standard `presentationResults` / `credentialResults` shape.
-- **`variables.options.verbose`** returns every check that ran, passes included;
-  **`variables.options.timing`** populates `TaskTiming` at every level of the
-  result tree and mounts the UI's timing panel. Both are exposed on the CLI as
-  `-v` / `--verbose` and `-t` / `--timing`.
+- **`variables.options.timing`** populates `TaskTiming` at every level of the
+  result tree and mounts the UI's timing panel; on the CLI, `-t` / `--timing`.
 - **Asynchronous Open Badges pass.** The verify workflow splits into a
   synchronous default-suites pass and an asynchronous Open Badges pass driven by
   an in-process FIFO worker. `POST` returns `200` once the sync pass commits and
@@ -337,6 +334,71 @@ See [ADR 2026-08-11](./docs/adr/2026-08-11-exchange-id-prefix.md).
   `VERIFY_TASK_MAX_ATTEMPTS` (default `2`).
 
 See [`docs/verification-payload.md`](./docs/verification-payload.md).
+
+### verifier-core 2.0.0-beta.1, issuer trust and the VP `domain`
+
+The service now depends on the first published verifier-core 2.0 prerelease
+from npm instead of a git ref, and the changes callers can see are decided
+rather than patched over.
+
+- **Breaking: Node.js 24 is required** (`engines`, `.nvmrc`, the Docker base
+  image and CI), because verifier-core 2.0 requires it.
+- **Breaking: `variables.options.verbose` is removed.** verifier-core 2.0
+  always returns every check that ran, so the knob means nothing. The options
+  schema is `.strict()`, so a request still sending it is refused with `400`
+  rather than silently accepted; the CLI no longer accepts `-v` / `--verbose`.
+  The UI keeps a display-only "Show all checks" toggle.
+- **Breaking: a VP proof must carry the requested `domain`** on claim, didAuth
+  and VC-API verify; previously it was unchecked. The `domain` is stamped on the
+  exchange at creation (`variables.domain`, not a client input) and read by
+  every VPR builder and verification path; exchanges created before this
+  derive it as their VPR always did. ⚠️ **One exception:** the claim `bare-vp`
+  doorway still accepts a proof with **no** `domain` — the Learner Credential
+  Wallet's legacy claim flow signs none — and journals each such acceptance as
+  `accommodation-served` / `bare-vp-domain-absent-accepted`; a proof there that
+  carries a wrong `domain` is refused. OID4VP, which already bound `domain` to
+  `client_id`, now also has verifier-core enforce it when the proof's `domain`
+  is a string; an array `domain` containing `client_id` is still accepted.
+- **Breaking: OID4VCI `di_vp` key proofs must carry `domain` = the Credential
+  Issuer Identifier** (OID4VCI 1.0 Appendix F.2) — this exchange's
+  `credential_issuer`. Missing or different is `invalid_proof`, with an
+  `error_description` that says the `domain` is why. Previously unchecked.
+- **Breaking: electing a profile that would change the `domain` is refused
+  with `409`.** `domainForm` joins the response-bound axes, so the bare-origin
+  VPR profiles are no longer electable — or offered in the preset picker — on a
+  verify exchange stamped with the service-endpoint form. They still work when
+  named at exchange creation.
+- **Breaking: `issuerValidation` changes shape**, from
+  `{ trustedIssuers, trustedRegistries, issuerFound, registryMatch }` to
+  `{ requireTrustedIssuer, trustedIssuers, consultedRegistries, credentials[] }`,
+  one record per credential: the issuer, whether it is on the allowlist, the
+  registries that list it (with the registry's own name for it), and the
+  registries that could not be checked.
+- **Added: `requireTrustedIssuer`** (default `false`), the only way issuer
+  trust affects exchange state. Without it an issuer in no consulted registry
+  is a **warning**, shown on the credential in the UI; with it the exchange is
+  `invalid`, including when some registries could not be checked.
+  `trustedRegistries` only chooses which registries are asked.
+- **Changed: every check that ran is reported**, and new problem types are
+  passed through unchanged — see
+  [verifier-core's list](https://github.com/digitalcredentials/verifier-core/blob/v2.0.0-beta.1/README.md#problem-types).
+  An expired or not-yet-valid credential is reported as such, not as a bad
+  signature. Open Badges schema validation uses the schemas bundled in
+  verifier-core (nothing is fetched) and now also applies to endorsements.
+- **Changed: one state decision.** The sync pass and the async Open Badges
+  pass both decide exchange state through `decideExchangeState`, and the OB
+  pass replaces a credential's results instead of merging them in.
+- **Fixed: the async Open Badges pass would have crashed** on an undefined
+  suite: `openBadgesSuite` moved to
+  `@digitalcredentials/verifier-core/openbadges/schema`.
+- **Fixed: the OB pass decided exchange state by its own rule**, so outcome
+  policy never applied to exchanges carrying an OB credential.
+- **Fixed: trusted-registry matching read `foundInRegistries`**, a field no
+  verifier-core version emits, so a registry match could never be found.
+
+See [`docs/verification-payload.md`](./docs/verification-payload.md),
+[`docs/protocol-profiles.md`](./docs/protocol-profiles.md) and
+[`docs/accommodations.md`](./docs/accommodations.md).
 
 ### Test fixtures
 

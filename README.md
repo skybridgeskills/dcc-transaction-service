@@ -203,6 +203,13 @@ accommodation doorway, which answers with a bare verifiable presentation rather 
 (`bare-vp-participate-response`) for why, and for what a result gathered on that doorway does and
 does not tell you.
 
+⚠️ The DID Authentication must be signed over the VPR's `challenge` **and** its `domain`. The
+`domain` is stamped on the exchange when it is created (`variables.domain`), and a proof with no
+`domain` or another `domain` is refused on claim, didAuth and verify — with one exception: the
+claim `bare-vp` doorway accepts a proof with **no** `domain`, because the Learner Credential
+Wallet's legacy claim flow signs none, and records that it did. A wrong `domain` is refused there
+too. See [the accommodations register](docs/accommodations.md).
+
 - GET /workflows/:workflowId/exchanges/:exchangeId
 
 Returns the exchange data for the given exchangeId and transactionId. If authentication is required,
@@ -296,17 +303,27 @@ default suites (proof, status, registry, etc.) against the inbound
 Verifiable Presentation and persists the result. If any embedded
 credential is recognized as an Open Badges credential by
 `@digitalcredentials/verifier-core/openbadges`'s `isOpenBadgeCredential`,
-the heavier OB suite is dispatched to an in-process worker and the
+the OB suite is dispatched to an in-process worker and the
 exchange remains `state: 'active'` until the worker commits. Otherwise
-the exchange is finalized inline to `'complete'` or `'invalid'` exactly
-as before.
+the exchange is finalized inline to `'complete'` or `'invalid'`.
+
+The OB suite is `openBadgesSuite` from
+`@digitalcredentials/verifier-core/openbadges/schema`: semantic checks plus
+JSON Schema validation against the OBv3 schemas verifier-core bundles (nothing
+is fetched), applied to `OpenBadgeCredential` and `EndorsementCredential`. The
+worker re-verifies each OB credential with the default suites plus the OB
+suite, and that result **replaces** the credential's entry from the sync pass.
+
+⚠️ **Both passes end in the same state decision** — `decideExchangeState` in
+`src/lib/verify-outcome.ts` — so a rule there, such as issuer-trust gating,
+applies to every verify exchange whichever pass settles it.
 
 ### Sync vs async split
 
 | Phase | Where it runs                                                                                      | What it covers                                                                                                |
 | ----- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | Sync  | The HTTP request handler                                                                           | Default verifier-core suites: presentation proof, credential proof, registry membership, status list, schema. |
-| Async | A FIFO worker draining `enqueueVerifyTask` (one drainer per process, scheduled via `setImmediate`) | Open Badges suite (`openBadgesSuite`) per OB-recognized credential.                                           |
+| Async | A FIFO worker draining `enqueueVerifyTask` (one drainer per process, scheduled via `setImmediate`) | Default suites plus the Open Badges suite (`openBadgesSuite`) per OB-recognized credential; replaces its sync result. |
 
 A successful POST returns `200 OK` once the sync pass commits — even
 when an OB pass is still pending. **Downstream consumers MUST re-check
@@ -363,26 +380,40 @@ existing TTL.
   `openbadges-suite-resolver.ts` seam is where any future per-exchange
   knob (e.g. opt-in/out of specific OB checks) will land.
 
+### Issuer trust
+
+A verify exchange may set, at creation:
+
+| Variable               | Meaning                                                                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trustedIssuers`       | An allowlist of issuer ids.                                                                                                                                                              |
+| `trustedRegistries`    | Names of the registries to consult (else `DEFAULT_TRUSTED_REGISTRIES`). It only chooses who is asked; it never changes the outcome.                                                       |
+| `requireTrustedIssuer` | Default `false`. When `true`, an issuer that is neither on the allowlist nor listed by a consulted registry makes the exchange `invalid` — even when some registries could not be checked. |
+
+⚠️ Without `requireTrustedIssuer`, an untrusted issuer is a **warning**: it is
+recorded per credential on `issuerValidation` and shown on the credential in the
+UI, and the exchange state is unchanged. Most issuers are in no registry this
+service can reach, so the caller decides what an untrusted issuer means.
+
 ### Verification result payload
 
 The verify workflow stores results under
 `variables.results.default` using the
-[verifier-core 2.x folded result shape](./docs/verification-payload.md):
+[verifier-core 2.x result shape](./docs/verification-payload.md):
 
-- `summary[]` — per-(phase, suite) rollup, always populated. Primary
-  rendering surface for UIs.
-- `results[]` (and `presentationResults[]`) — folded check list,
-  carrying only failures and explicitly-emitted skips by default.
-  Lazy-expand from `summary[]` for failure detail.
-- Pass `variables.options.verbose: true` (CLI: `-v` / `--verbose`)
-  to receive every check that ran (passes included).
+- `summary[]` — per-(phase, suite) rollup. Primary rendering surface
+  for UIs.
+- `results[]` (and `presentationResults[]`) — every check that ran:
+  passes, skips, failures and "not run" rows. Lazy-expand from
+  `summary[]` for detail.
 - Pass `variables.options.timing: true` (CLI: `-t` / `--timing`) to
-  receive `TaskTiming` data on every level of the result tree.
+  receive `TaskTiming` data on every level of the result tree. There
+  is no `verbose` option; a request carrying one is refused with `400`.
+- Problem types are verifier-core's, passed through unchanged.
 
 See [`docs/verification-payload.md`](./docs/verification-payload.md)
-for the full payload contract, examples, and migration notes from
-the pre-v2 (`allResults` + per-`CheckResult` `check` / `suite` /
-`timestamp`) shape.
+for the full payload contract, the `issuerValidation` record, and
+migration notes from earlier shapes.
 
 ### Verify task env knobs
 
@@ -650,7 +681,7 @@ of v0.1.0 corresponds to a docker image tag of 0.1.0
 
 ## Development
 
-To install locally (for development):
+Requires Node.js 24 (see `.nvmrc`). To install locally (for development):
 
 ```
 git clone https://github.com/digitalcredentials/transaction-manager-service.git

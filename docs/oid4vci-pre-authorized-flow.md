@@ -140,7 +140,8 @@ one is pinned by the OID4VCI route tests alongside its strict alternative.
        POST /openid/credential
          Authorization: Bearer <access_token>
          Content-Type: application/json
-         { credential_configuration_id, proofs: { di_vp: [<DI VP bound to c_nonce>] } }
+         { credential_configuration_id, proofs: { di_vp: [<DI VP: challenge = c_nonce,
+                                                         domain = credential_issuer>] } }
        ◄──── { credentials: [{ credential: <signed VC> }] }
 ```
 
@@ -191,7 +192,10 @@ curl -fsS "$HOST/workflows/claim/exchanges/$EXCHANGE_ID/openid/token" \
 ACCESS_TOKEN=<extract from step 5>
 curl -fsS -X POST "$HOST/workflows/claim/exchanges/$EXCHANGE_ID/openid/nonce" | jq .
 
-# 7) Submit the Credential Request — di_vp[0] must be a Data Integrity VP bound to c_nonce.
+# 7) Submit the Credential Request — di_vp[0] must be a Data Integrity VP whose
+#    authentication proof signs `challenge` = the c_nonce from step 6 and
+#    `domain` = the `credential_issuer` from step 4's metadata
+#    ($HOST/workflows/claim/exchanges/$EXCHANGE_ID — NOT the bare $HOST).
 curl -fsS "$HOST/workflows/claim/exchanges/$EXCHANGE_ID/openid/credential" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
@@ -210,11 +214,23 @@ curl -fsS "$HOST/workflows/claim/exchanges/$EXCHANGE_ID/openid/credential" \
 | Malformed credential request body      | `400`  | `{ "error": "invalid_credential_request" }`|
 | Unknown `credential_configuration_id`  | `400`  | `{ "error": "unknown_credential_configuration" }` |
 | Missing or invalid `proofs.di_vp[0]`   | `400`  | `{ "error": "invalid_proof" }`             |
+| `di_vp` proof `domain` missing or not the Credential Issuer Identifier | `400` | `{ "error": "invalid_proof" }`, with an `error_description` naming the `domain` |
 | Wrong / replayed / expired `c_nonce`   | `400`  | `{ "error": "invalid_nonce" }`             |
 | Credential already issued (complete)   | `400`  | `{ "error": "credential_request_denied" }` |
 
 Token + nonce endpoints set `Cache-Control: no-store` per RFC 6749
 and OID4VCI 1.0 §7.2 respectively.
+
+## Key proof `domain`
+
+⚠️ OID4VCI 1.0 Appendix F.2 (`di_vp` Proof Type): "`domain`: REQUIRED. MUST be
+set to the Credential Issuer Identifier." This service's Credential Issuer
+Identifier is per exchange — the `credential_issuer` in that exchange's issuer
+metadata, `<exchangeHost>/workflows/claim/exchanges/<exchangeId>` — so the
+`di_vp` proof must sign exactly that as its `domain`. A proof with no `domain`,
+or with another value (including the bare host a claim exchange's VC-API VPR
+asks for), is refused with `invalid_proof`; the `error_description` says the
+`domain` is why, so a wallet developer can tell it from a bad signature.
 
 ## Holder binding
 

@@ -2,12 +2,15 @@
 
 This service stores the structured result of every verification under
 `variables.results.default` on a verify exchange. The shape is the
-folded [verifier-core 2.x](https://github.com/digitalcredentials/verifier-core)
-result, namespaced under `App.VerificationResult` in this codebase.
+[verifier-core 2.x](https://github.com/digitalcredentials/verifier-core)
+result, plus the service's own claims and issuer-trust records, namespaced
+under `App.VerificationResult` in this codebase. `App.CheckResult`,
+`App.CredentialVerificationResult` and `App.SuiteSummary` are aliases of
+verifier-core's types, not copies.
 
-This document specifies the payload, how the `verbose` and `timing`
-knobs change it, the compatibility-fix log channel, and the legacy
-fields that have been removed (with no shims).
+This document specifies the payload, how the `timing` knob changes it, the
+issuer-trust record, the compatibility-fix log channel, and the legacy fields
+that have been removed (with no shims).
 
 ---
 
@@ -15,18 +18,18 @@ fields that have been removed (with no shims).
 
 ```ts
 interface VerificationResult {
-  /** Overall pass/fail; `false` if any check returned a failure outcome. */
+  /** Overall pass/fail: `false` if any FATAL check failed, on the
+   *  presentation or on any credential. Non-fatal failures are warnings. */
   verified: boolean
 
-  /** Folded checks for the presentation envelope. Failures + explicit skips
-   *  by default; every check that ran when `verbose: true`. */
+  /** Every check that ran on the presentation envelope. */
   presentationResults: CheckResult[]
 
   /** One entry per embedded credential. */
   credentialResults: CredentialVerificationResult[]
 
-  /** Per-(phase, suite) rollup for presentation-level checks. Always
-   *  populated regardless of `verbose`. Primary rendering surface. */
+  /** Per-(phase, suite) rollup for presentation-level checks. Primary
+   *  rendering surface. */
   summary: SuiteSummary[]
 
   /** Credentials that satisfied `variables.vprClaims`. */
@@ -46,24 +49,30 @@ interface VerificationResult {
    *  `variables.debug === true`. See "Compatibility log" below. */
   compatLog?: CheckResult[]
 
-  /** Optional issuer / claims validation summaries. */
-  issuerValidation?: { trustedIssuers, trustedRegistries, issuerFound, registryMatch }
+  /** Issuer trust, per credential. See "Issuer trust" below. */
+  issuerValidation?: IssuerValidation
   claimsValidation?: { extractedClaims, requiredClaims, matched, missingClaims? }
 }
 ```
+
+`results[]` and `presentationResults[]` always carry **every check that ran**:
+passes, skips with their reasons, failures, and "not run" rows after a fatal
+check halted the rest. `summary[]` is the per-suite rollup of the same rows.
+There is no folded mode and no `verbose` knob.
 
 ### `CredentialVerificationResult`
 
 ```ts
 interface CredentialVerificationResult {
+  /** `false` exactly when a FATAL check on this credential failed. */
   verified: boolean
   verifiableCredential: VerifiableCredential
 
-  /** Per-(phase, suite) rollup for THIS credential. Always populated. */
+  /** Per-(phase, suite) rollup for THIS credential. */
   summary: SuiteSummary[]
 
-  /** Folded checks; failures + explicit skips by default, all checks
-   *  when `verbose: true`. Lazy-expand from `summary[]` for detail. */
+  /** Every check that ran on this credential. Lazy-expand from `summary[]`
+   *  for detail. */
   results: CheckResult[]
 
   /** Set by a recognizer (e.g. OBv3) when matched. */
@@ -87,36 +96,47 @@ interface SuiteSummary {
   phase: SuiteSummaryPhase
   /** Suite id, e.g. `proof`. */
   suite: string
-  /** Aggregate suite outcome. */
-  status: 'success' | 'failure' | 'skipped'
-  /** True iff no fatal failure within this suite. */
-  verified: boolean
+  /** Computed from the counts alone; says nothing about whether a failure
+   *  was fatal. A suite whose only failure is non-fatal is `failure` or
+   *  `mixed` inside a `verified: true` result — render it as a warning. */
+  status: 'success' | 'failure' | 'skipped' | 'mixed'
   /** Human-readable line, e.g. `"3 of 3 checks passed"`. */
   message: string
   counts: { passed: number; failed: number; skipped: number }
+  /** Id of the first check in this suite that failed fatally, if any. The
+   *  only per-suite verdict there is: reserve error styling for it. */
+  fatalFailureAt?: string
   timing?: TaskTiming
 }
 ```
+
+There is no per-suite `verified` (or `hasFailures`); the verdict is the
+top-level `verified`, and `fatalFailureAt` says which suite caused it.
 
 ### `CheckResult`
 
 ```ts
 interface CheckResult {
-  /** REQUIRED. Stable, dot-separated `<phase>.<suite>.<localPart>`
-   *  (e.g. `"cryptographic.proof.signature-valid"`). When `phase === suite`
+  /** Stable, dot-separated `<phase>.<suite>.<localPart>`
+   *  (e.g. `"cryptographic.proof.signature"`). When `phase === suite`
    *  the duplicate segment collapses (e.g. `"recognition.profile"`).
    *  For compatibility-fix entries, the id is `compat.<fix-name>`. */
   id: string
 
+  /** Suite id, e.g. `"proof"`; `"compat"` for compatibility-fix entries. */
+  suite: string
+
   outcome:
-    | { status: 'success'; message: string }
-    | { status: 'failure'; problems: ProblemDetail[] }
+    | { status: 'success'; message: string; payload?: unknown }
+    | { status: 'failure'; problems: ProblemDetail[]; payload?: unknown }
     | { status: 'skipped'; reason: string }
 
-  /** Whether this check is fatal in its suite. Fatal failures flip the
-   *  containing `verified` flag to `false`; non-fatal ones are
-   *  informational. */
+  /** Whether this check is fatal in its suite. A fatal failure makes the
+   *  containing `verified` false; a non-fatal one is a warning. */
   fatal?: boolean
+
+  /** Whether a fatal failure here halted later checks (absent: it did). */
+  halts?: boolean
 
   /** Per-check timing data; only present when the producing call ran
    *  with `timing: true`. */
@@ -124,30 +144,70 @@ interface CheckResult {
 }
 ```
 
-`ProblemDetail` is the verifier-core RFC 9457-style structure:
-`{ type: string; title: string; detail: string; instance?: string }`.
+`payload` is data meant for code — read it rather than parsing `message`.
+The issuer registry check (`trust.registry.issuer`) is the one this service
+reads; see "Issuer trust".
+
+### Problem types
+
+`ProblemDetail` is verifier-core's RFC 9457-style structure:
+`{ type: string; title: string; detail: string; instance?: string }`. This
+service passes every `ProblemDetail` through to the stored result, the API and
+the UI unchanged; it maps none of them. The list of problem types — including
+the 2.0 additions such as `CREDENTIAL_EXPIRED`, `CREDENTIAL_NOT_YET_VALID`,
+`DID_WEB_UNRESOLVED`, `REGISTRY_UNCHECKED` and the Open Badges
+`OB_DECLARED_SCHEMA_*` types — is verifier-core's, and is not copied here:
+see [verifier-core's problem types at `v2.0.0-beta.1`](https://github.com/digitalcredentials/verifier-core/blob/v2.0.0-beta.1/README.md#problem-types).
+
+An expired or not-yet-valid credential is reported with its own problem type
+rather than as a bad signature, and is still `verified: false`.
 
 ---
 
-## The `verbose` knob
+## Issuer trust (`issuerValidation`)
 
-Set `variables.options.verbose: true` (CLI: `-v` / `--verbose`) on
-the exchange request to receive every check that ran. Default is
-`false`, in which case `results` and `presentationResults` carry
-only entries whose outcome is `failure` or an explicit `skipped`
-emitted by a suite (`<suite-id>.applies` skip-markers).
+```ts
+interface IssuerValidation {
+  /** The exchange's `requireTrustedIssuer` (absent is `false`). */
+  requireTrustedIssuer: boolean
+  /** The exchange's allowlist of issuer ids. */
+  trustedIssuers: string[]
+  /** Registry names consulted: the exchange's `trustedRegistries`, else
+   *  the deployment default. Empty when none was consulted. */
+  consultedRegistries: string[]
+  credentials: Array<{
+    /** Index into `credentialResults`. */
+    index: number
+    /** The credential's issuer id; absent when it names none. */
+    issuer?: string
+    onAllowlist: boolean
+    /** Registries listing the issuer, with what the REGISTRY calls it. */
+    registryMatches: Array<{ registry: string; entityName?: string; entityUrl?: string }>
+    /** Consulted registries that could not be checked. */
+    uncheckedRegistries: string[]
+    /** `onAllowlist || registryMatches.length > 0` */
+    trusted: boolean
+  }>
+}
+```
 
-`summary[]` is unaffected by `verbose` — counts and per-suite
-status reflect every check regardless of folding.
+It is present when the exchange set `trustedIssuers` or `requireTrustedIssuer`,
+or when any credential's registry lookup ran (so a lookup against the
+deployment's default registries still reaches callers).
 
-| Mode | `summary[]` | `results[]` |
-| ---- | ----------- | ----------- |
-| `verbose: false` (default) | every (phase, suite) | failures + explicit skips only |
-| `verbose: true` | every (phase, suite) | every check that ran |
+⚠️ **An untrusted issuer is a warning unless the exchange opts in.** Most
+issuers are listed in no registry this service can reach, so by default an
+issuer that is not on the allowlist and matched no registry is reported here —
+and shown as a warning on the credential in the UI — and the exchange state is
+unchanged. Only `variables.requireTrustedIssuer: true` makes it `invalid`, and
+then "some registries could not be checked" is not trust either.
+`trustedRegistries` only chooses which registries are asked; it never gates.
 
-UI rendering recipe: walk `credentialResults[i].summary` (or the
-top-level `summary` for VP-level checks) and lazy-expand into
-`results[]` filtered by id prefix when the user clicks for detail.
+`registryMatches` and `uncheckedRegistries` come from the
+`RegistryCheckPayload` on the `trust.registry.issuer` outcome. A lookup that
+failed outright (verifier-core's `REGISTRY_ERROR`, which carries no payload)
+lists every consulted registry as unchecked. The async Open Badges pass
+re-runs the registry check, and the record is rebuilt from its results.
 
 ---
 
@@ -180,6 +240,19 @@ The UI's timing panel mounts iff any of these is present, so
 results produced without `timing: true` never render an empty
 timing UI.
 
+`variables.options` is `.strict()`: an unknown key — including the removed
+`verbose` — is refused with `400`.
+
+---
+
+## Rendering
+
+Walk `credentialResults[i].summary` (or the top-level `summary` for VP-level
+checks) and lazy-expand into `results[]` filtered by id prefix. The UI shows a
+suite's failures and its `<suite>.applies` skip by default, and every row when
+the viewer ticks "Show all checks" — a display choice held in the page, never
+sent to the service.
+
 ---
 
 ## Compatibility log (`compatLog`)
@@ -187,12 +260,15 @@ timing UI.
 Some pre-canonical credentials need light per-object normalization
 (envelope wrapping, `Ed25519Signature2020` context injection) before
 verifier-core can verify them. Each fix that runs emits a synthetic
-`CheckResult` into `compatLog` with id `compat.<fix-name>`:
+`CheckResult` into `compatLog` with id `compat.<fix-name>` and
+`suite: 'compat'`:
 
 ```jsonc
 {
   "id": "compat.vcalm-participation-message.wrap-bare-presentation",
-  "outcome": { "status": "success", "message": "Wrapped bare VP into VCALM message envelope." }
+  "suite": "compat",
+  "outcome": { "status": "success", "message": "Wrapped bare VP into VCALM message envelope." },
+  "fatal": false
 }
 ```
 
@@ -209,36 +285,34 @@ can identify compat entries by the `compat.` id prefix.
 
 ## CLI usage
 
-`pnpm transaction verify <profile>` accepts the `verbose` and
-`timing` flags universally; they map onto `variables.options.*`:
+`pnpm transaction verify <profile>` accepts the `timing` flag on every
+workflow; it maps onto `variables.options.timing`:
 
 ```bash
-pnpm transaction verify ob3            # default (folded results, no timing)
-pnpm transaction verify ob3 -v         # verbose: every check that ran
+pnpm transaction verify ob3            # every check that ran, no timing
 pnpm transaction verify ob3 -t         # timing: populate TaskTiming everywhere
-pnpm transaction verify ob3 -v -t      # both
-pnpm transaction verify ob3 --verbose --timing
+pnpm transaction verify ob3 --timing
 ```
 
-Both flags are accepted on every workflow command for symmetry, but
-they only affect the `verify` workflow today.
+The flag is accepted on every workflow command for symmetry, but only
+affects the `verify` workflow today. `-v` / `--verbose` were removed with
+verifier-core 2.0.
 
 ---
 
-## Migration from the pre-v2 shape
+## Migration from earlier shapes
 
-The pre-v2 verifier-core shape included several fields that have been
-removed in this service with no compatibility shims (a "hard cut" —
-`rg "allResults" src/` returns zero matches; `App.CheckResult.id`
-is required; the `check` / `suite` / `timestamp` fields are gone).
+Fields removed in this service with no compatibility shims:
 
 | Old field | Replacement |
 | --------- | ----------- |
-| `VerificationResult.allResults` | `presentationResults` + `credentialResults[i].results` (folded by default; opt into full list with `verbose: true`). For the small subset historically used as a debug side-channel, see `compatLog`. |
+| `VerificationResult.allResults` | `presentationResults` + `credentialResults[i].results`, which carry every check that ran. For the small subset historically used as a debug side-channel, see `compatLog`. |
+| `variables.options.verbose` / CLI `-v` | Removed; refused with `400`. Every check that ran is always returned. |
 | `CheckResult.check` (e.g. `"compatibility.add-one"`) | `CheckResult.id` (e.g. `"compat.add-one"`), required. |
-| `CheckResult.suite` (e.g. `"compatibility"`) | Encoded into the id's first segment (`compat.*`, `cryptographic.*`, `trust.*`, `recognition.*`, `semantic.*`). |
 | `CheckResult.timestamp` | Removed. Use `CheckResult.timing` (only present when `timing: true`) for wall-clock data. |
-| Per-`CheckResult` rendering loop | Walk `summary[]`; lazy-expand into `results[]` for failure detail. |
+| `SuiteSummary.verified` / `hasFailures` | Removed. Use the top-level `verified`, and `fatalFailureAt` for which suite failed fatally. |
+| `issuerValidation.{ trustedRegistries, issuerFound, registryMatch }` | The per-credential `issuerValidation.credentials[]` record above. |
+| Per-`CheckResult` rendering loop | Walk `summary[]`; lazy-expand into `results[]` for detail. |
 
 If you maintain a downstream consumer that read any of those legacy
 fields, update it to the new equivalents above before deploying.
